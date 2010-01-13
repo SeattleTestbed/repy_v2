@@ -1,0 +1,175 @@
+"""
+
+<Program Name>
+  server.repy
+
+
+<Started>
+  January 2009
+
+
+<Author>
+  Jenn Hanson
+
+
+<Purpose>
+  An implementation of the Seattle's webserver assignment.
+  The server processes HTTP request concurently from multiple clients. 
+  If a client does not send a request within 5 seconds of connecting, the server closes the connection to this client.
+
+  It returns a valid HTTP response with one of the following:
+  - listing of files in the current directory
+  - the contents of a specific html or text file in the current directory
+  - file not found error message if the request was valid but the file did not exist within the current directory
+  - bad request message if the HTTP request was not properly formed 
+
+  It has an optional command line arguement to specify the server port number 
+  to which clients can connect.  If no port number is specified it will run on 
+  port 12345.
+
+"""
+
+# constants
+MSG_SIZE = 1024	    # maximum size for the recv calls to clients and max size for the message length for sending data to the client
+
+
+
+
+def process_client(ip, port, client, thiscommhandle, listencommhandle):
+
+  """
+  <Purpose>
+     Processes a client connection by receiving an HTTP request, parsing it 
+     to determine its validity, and send a response before closing the connection.
+     If the client does not send a request within 5 seconds the connection will be closed. 
+  <Arguments>
+    ip: ip address
+    port: port number
+    client: connection to client
+    thiscommhandle:  a handler to the connection with the client
+    listencommhandle:  a handler to the listener
+  <Exceptions>
+    None.
+  <Side Effects>
+    Closes thiscommhandle.
+  <Returns>
+    None.
+
+  """
+
+  # The lock is acquired so that no other client can reset the timer or concurrently open a file.
+  mycontext['lock'].acquire()
+
+  # Set a 5 second timeout for the connection to be closed if the client doesn't send a request.
+  time_out = settimer(5.0, timed_out, [client])
+
+  try:
+    data = client.recv(MSG_SIZE)
+    canceltimer(time_out)
+    header = parse_msg(data)
+    reply = make_reply(header)
+    send_reply(reply, client)
+  except Exception, exp:
+    print 'client timed out', str(exp)
+  finally:
+    mycontext['lock'].release()
+    stopcomm(thiscommhandle)
+
+
+
+
+
+def parse_msg(msg):
+  """
+  <Purpose>
+    Parses the arguement msg to determine if it has a valid first line of an HTTP GET request. 
+  <Arguments>
+    msg: The string that represents an HTTP request.
+  <Exceptions>
+    None
+  <Side Effects>
+    None
+  <Returns>
+    Returns 400 if the message was ill formed.
+    Returns the possible URL from the first line as a string.
+
+  """
+
+
+  header = 400
+  if(msg.find('\n') > -1):
+
+    # split the entire message by newlines to get the first line
+    lines = msg.split('\n')
+
+    # remove carriage returns
+    firstLine = lines[0].replace("\r", "")
+    parsedData = firstLine.split(' ')
+
+    # Check that the first line contains only 3 "words": GET <url> HTTP<version>
+    if(len(parsedData) == 3 and parsedData[0] == 'GET' and (parsedData[2] == 'HTTP/1.1' or parsedData[2] =='HTTP/1.0')):
+      header = parsedData[1]
+  return header
+
+
+
+
+
+def make_reply(msg):
+  """
+  <Purpose>
+    Forms a HTTP response to send to the client based on the msg arguements.  
+    Forms either a 200 OK, 400 Bad Request, or 404 File Not Found response.
+  <Arguments>
+    msg: The string that either contains a potential url or 400 for bad request.
+  <Exceptions>
+    None
+  <Side Effects>
+    None
+  <Returns>
+    Returns a string that's a valid HTTP response for the client request.
+
+  """
+
+
+  if msg == 400:
+    response = 'HTTP/1.1 400 Bad Request\n\n<h1>400 Bad Request</h1>'
+  else:
+    # Create a message with the list of the files in the current directory
+    header = 'HTTP/1.1 200 Ok\n\n'
+    body = show_status()
+    response = header+body
+      
+  return response
+
+
+
+
+# Sends response arguement to a client via the client connection and then closes it.
+def send_reply(response, client):
+  count = 0
+  length_of_msg = len(response)
+
+  while(count < length_of_msg):
+    string_to_send = ''
+    max= count + MSG_SIZE
+
+    if(max >= length_of_msg):
+      string_to_send = response[count: ]
+    else:
+      string_to_send = response[count:max]
+
+    num_sent = client.send(string_to_send)
+    count += num_sent
+
+  client.close()
+
+
+
+
+# Closes client connection when called.
+def timed_out(client):
+  client.close()
+
+
+

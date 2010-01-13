@@ -1,0 +1,249 @@
+"""
+<Program Name>
+  z_test_state_machine_next.repy
+
+<Started>
+  February 8, 2009
+
+<Author>
+  Richard Jordan
+
+<Purpose>
+  To test that TcpStateMachine's next function changes states
+  correctly.
+
+  Passes quietly
+"""
+include state_machine.repy
+include test_packet_sender.repy
+
+########################
+#  Closed
+########################
+def test_closed_next_any():
+  mycontext['sm'].state = mycontext['sm'].STATE_CLOSED
+  mycontext['tps'].send("SYN")
+  mycontext['tps'].send("SYNACK")
+  mycontext['tps'].send("ACK")
+  mycontext['tps'].send("PSH")
+  mycontext['tps'].send("FIN")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_CLOSED
+
+########################
+#  Listen
+########################
+def test_listen_next_syn():
+  mycontext['sm'].state = mycontext['sm'].STATE_LISTEN
+  mycontext['tps'].send("SYN")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_SYN_RCVD
+
+def test_listen_next_else():
+  mycontext['sm'].state = mycontext['sm'].STATE_LISTEN
+  mycontext['tps'].send("SYNACK")
+  mycontext['tps'].send("ACK")
+  mycontext['tps'].send("PSH")
+  mycontext['tps'].send("FIN")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_LISTEN
+
+########################
+# SYN_SENT
+########################
+# loopback
+def test_syn_sent_next_syn():
+  mycontext['sm'].state = mycontext['sm'].STATE_SYN_SENT
+  mycontext['tps'].send("SYN")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_SYN_RCVD
+
+def test_syn_sent_next_synack():
+  mycontext['sm'].state = mycontext['sm'].STATE_SYN_SENT
+  mycontext['tps'].send("SYNACK")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_ESTAB
+
+def test_syn_sent_next_else():
+  mycontext['sm'].state = mycontext['sm'].STATE_SYN_SENT
+  mycontext['tps'].send("FIN")
+  mycontext['tps'].send("ACK")
+  mycontext['tps'].send("PSH")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_SYN_SENT
+
+########################
+# SYN_RECV
+########################
+def test_syn_rcvd_next_ack():
+  mycontext['sm'].state = mycontext['sm'].STATE_SYN_RCVD
+  mycontext['tps'].send("ACK")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_ESTAB
+
+def test_syn_rcvd_next_psh():
+  mycontext['sm'].state = mycontext['sm'].STATE_SYN_RCVD
+  mycontext['tps'].send("PSH")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_ESTAB
+
+def test_syn_rcvd_next_else():
+  mycontext['sm'].state = mycontext['sm'].STATE_SYN_RCVD
+  mycontext['tps'].send("SYN")
+  mycontext['tps'].send("SYNACK")
+  mycontext['tps'].send("FIN")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_SYN_RCVD
+
+#################
+# ESTAB
+#################
+def test_estab_next_fin():
+  mycontext['sm'].state = mycontext['sm'].STATE_ESTAB
+  mycontext['tps'].send("FIN")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_CLOSE_WAIT
+
+def test_estab_next_else():
+  mycontext['sm'].state = mycontext['sm'].STATE_ESTAB
+  mycontext['tps'].send("SYN")
+  mycontext['tps'].send("SYNACK")
+  mycontext['tps'].send("ACK")
+  mycontext['tps'].send("PSH")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_ESTAB
+
+################
+# FIN WAIT-1
+################
+def test_fin_wait_1_next_fin():
+  mycontext['sm'].state = mycontext['sm'].STATE_FIN_WAIT_1
+  mycontext['tps'].send("FIN")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_CLOSING
+
+def test_fin_wait_1_next_finack():
+  mycontext['sm'].state = mycontext['sm'].STATE_FIN_WAIT_1
+  mycontext['tps'].send("FINACK")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_TIME_WAIT
+
+def test_fin_wait_1_next_ack():
+  mycontext['sm'].state = mycontext['sm'].STATE_FIN_WAIT_1
+  mycontext['tps'].send("ACK")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_FIN_WAIT_2
+
+def test_fin_wait_1_next_else():
+  mycontext['sm'].state = mycontext['sm'].STATE_FIN_WAIT_1
+  mycontext['tps'].send("SYN")
+  mycontext['tps'].send("SYNACK")
+  mycontext['tps'].send("PSH")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_FIN_WAIT_1
+
+################
+# FIN WAIT-2
+################
+def test_fin_wait_2_next_fin():
+  mycontext['sm'].state = mycontext['sm'].STATE_FIN_WAIT_2
+  mycontext['tps'].send("FIN")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_TIME_WAIT
+
+def test_fin_wait_2_next_else():
+  mycontext['sm'].state = mycontext['sm'].STATE_FIN_WAIT_2
+  mycontext['tps'].send("SYN")
+  mycontext['tps'].send("SYNACK")
+  mycontext['tps'].send("PSH")
+  mycontext['tps'].send("ACK")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_FIN_WAIT_2
+
+################
+# CLOSING
+################
+def test_closing_next_ack():
+  mycontext['sm'].state = mycontext['sm'].STATE_CLOSING
+  mycontext['tps'].send("ACK")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_CLOSED
+
+def test_closing_next_else():
+  mycontext['sm'].state = mycontext['sm'].STATE_CLOSING
+  mycontext['tps'].send("SYN")
+  mycontext['tps'].send("FIN")
+  mycontext['tps'].send("SYNACK")
+  mycontext['tps'].send("PSH")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_CLOSING
+
+################
+# TIME WAIT
+################
+def test_time_wait_next_any():
+  mycontext['sm'].state = mycontext['sm'].STATE_TIME_WAIT
+  mycontext['tps'].send("SYN")
+  mycontext['tps'].send("FIN")
+  mycontext['tps'].send("SYNACK")
+  mycontext['tps'].send("PSH")
+  mycontext['tps'].send("ACK")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_TIME_WAIT
+
+################
+# CLOSE WAIT
+################
+def test_close_wait_next_any():
+  mycontext['sm'].state = mycontext['sm'].STATE_CLOSE_WAIT
+  mycontext['tps'].send("SYN")
+  mycontext['tps'].send("FIN")
+  mycontext['tps'].send("SYNACK")
+  mycontext['tps'].send("PSH")
+  mycontext['tps'].send("ACK")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_CLOSE_WAIT
+
+################
+# LAST ACK
+################
+def test_last_ack_next_ack():
+  mycontext['sm'].state = mycontext['sm'].STATE_LAST_ACK
+  mycontext['tps'].send("ACK")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_CLOSED
+
+def test_last_ack_next_else():
+  mycontext['sm'].state = mycontext['sm'].STATE_LAST_ACK
+  mycontext['tps'].send("SYN")
+  mycontext['tps'].send("FIN")
+  mycontext['tps'].send("SYNACK")
+  mycontext['tps'].send("PSH")
+  assert mycontext['sm'].state == mycontext['sm'].STATE_LAST_ACK
+
+
+
+####################
+# Test Helper Functions
+####################
+  
+# Deliver UDP messages to state machine
+def callback(ip, port, mess, ch):
+  packet = unpack(mess)
+  mycontext['sm'].next(packet)
+
+if callfunc == 'initialize':
+  IP = '127.0.0.1' #  getmyip()
+  PORT = 12346
+
+  # setup
+  ch = recvmess(IP, PORT, callback)
+  mycontext['sm'] = TcpStateMachine()
+  mycontext['tps'] = TestPacketSender(IP, PORT)
+  
+  # Run tests
+  test_closed_next_any()
+  test_listen_next_syn()
+  test_listen_next_else()
+  test_syn_sent_next_syn()
+  test_syn_sent_next_synack()
+  test_syn_sent_next_else()
+  test_syn_rcvd_next_ack()
+  test_syn_rcvd_next_psh()
+  test_syn_rcvd_next_else()
+  test_estab_next_fin()
+  test_estab_next_else()
+  test_fin_wait_1_next_fin()
+  test_fin_wait_1_next_finack()
+  test_fin_wait_1_next_ack()
+  test_fin_wait_1_next_else()
+  test_fin_wait_2_next_fin()
+  test_fin_wait_2_next_else()
+  test_closing_next_ack()
+  test_closing_next_else()
+  test_time_wait_next_any()
+  test_close_wait_next_any()
+  test_last_ack_next_ack()
+  test_last_ack_next_else()
+
+  # teardown
+  stopcomm(ch)
+  exitall()

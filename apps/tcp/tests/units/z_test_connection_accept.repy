@@ -1,0 +1,111 @@
+"""
+<Program Name>
+  z_test_connection_accept.repy
+
+<Started>
+  February 9, 2009
+
+<Author>
+  Richard Jordan
+
+<Purpose>
+  To test that Connection.accept() function works.
+
+  Passes quietly
+"""
+include connection.repy
+include dummies.repy
+
+if callfunc == "initialize":
+  IP = getmyip()
+  PORT = 12345
+
+def test_accept():
+  sock = Connection()
+  sock.localip = IP
+  sock.localport = PORT
+  sock.tcup = Connection()
+  sock.tcup.localip = IP
+  sock.tcup.localport = PORT
+  sock.tcup.server = TcpServer(None)
+  sock.tcup.conn = True
+
+  # Spawn new TCUP
+  conn, addr = sock.accept() 
+
+  # should put request address into remote addr
+  # and zero request
+  assert conn.localip == IP
+  assert conn.localport == PORT
+  assert conn.remoteip == IP
+  assert conn.remoteport == PORT
+  assert conn.client
+  assert conn.conn
+
+  # should be ready to listen again
+  assert sock.localip == IP
+  assert sock.localport == PORT
+  assert not sock.remoteip
+  assert not sock.remoteport 
+  assert not sock.client
+  assert not sock.conn
+  assert not sock.tcup
+  
+  
+def test_accept_not_bound():
+  conn = Connection()
+  try:
+    conn.accept()
+  except NotBoundError:
+    pass
+  else:
+    raise Exception("should raise not bound error")
+
+def test_accept_not_connected():
+  conn = Connection()
+  conn.localip = IP
+  conn.localport = PORT
+  try:
+    conn.accept()
+  except NotConnectedError:
+    pass
+  else:
+    raise Exception("should raise not connected")
+
+def test_accept_already_connected():
+  conn = Connection()
+  conn.localip = IP
+  conn.localport = PORT
+  # bound
+  conn.tcup = True
+  conn.remoteip = IP
+  conn.remoteport = PORT
+  conn.conn = True
+  # connected
+  try:
+    conn.accept()
+  except AlreadyConnectedError:
+    pass
+  else:
+    raise Exception("should raise already connected")
+
+
+
+####################
+# Test Helper Functions
+####################
+
+def main():
+  # setup
+  
+  # Run tests
+  test_accept() 
+  test_accept_not_bound()
+  test_accept_not_connected()
+  test_accept_already_connected()
+
+  # teardown
+  exitall()
+
+if callfunc == 'initialize':
+  main()

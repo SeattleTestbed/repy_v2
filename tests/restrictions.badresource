@@ -1,0 +1,7 @@
+resource cpu 10
+resource memory 1000000000  
+resource diskused 100000000 # 100 MB
+resource lograte 1000
+resource the_events 10  # should be events, not the_events...
+call log.write allow
+call log.writelines allow

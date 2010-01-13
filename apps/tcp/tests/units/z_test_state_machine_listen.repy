@@ -1,0 +1,53 @@
+"""
+<Program Name>
+  z_test_state_machine_listen.repy
+
+<Started>
+  February 8, 2009
+
+<Author>
+  Richard Jordan
+
+<Purpose>
+  To test that TcpStateMachine's listen() function works.
+
+  Passes quietly
+"""
+include state_machine.repy
+
+def test_closed_listen_listen():
+  mycontext['sm'].state = mycontext['sm'].STATE_CLOSED
+  mycontext['sm'].listen()
+  assert mycontext['sm'].state == mycontext['sm'].STATE_LISTEN
+
+def test_else_listen_already_connected():
+  try_listen(mycontext['sm'].STATE_LISTEN)
+  try_listen(mycontext['sm'].STATE_SYN_SENT)
+  try_listen(mycontext['sm'].STATE_SYN_RCVD)
+  try_listen(mycontext['sm'].STATE_ESTAB)
+
+####################
+# Test Helper Functions
+####################
+
+# Sets state to given state        
+# And makes sure error is raised.
+def try_listen(state):
+  mycontext['sm'].state = state
+  try:
+    mycontext['sm'].listen()
+  except AlreadyConnectedError:
+    pass
+  else:  
+    raise Exception("should have raised error")         
+  
+if callfunc == 'initialize':
+  # setup
+  mycontext['sm'] = TcpStateMachine()
+  
+  # Run tests
+  test_closed_listen_listen()
+  test_else_listen_already_connected()
+ 
+  # teardown
+  exitall()

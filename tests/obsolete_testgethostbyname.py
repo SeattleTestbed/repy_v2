@@ -1,0 +1,2 @@
+myname = gethostname()
+gethostbyname(myname)

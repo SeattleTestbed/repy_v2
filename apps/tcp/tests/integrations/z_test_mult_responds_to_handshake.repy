@@ -1,0 +1,60 @@
+"""
+<Program Name>
+  z_test_mult_responds_to_handshake.repy
+
+<Started>
+  February 7, 2009
+
+<Author>
+  Michael Moshofsky
+
+<Purpose>
+  To make sure the SYNAck comes more than once after a SYN
+  is recieved while the Connection class is listening.
+
+  Raises exception when less than two SYNAcks were not sent 
+  after a SYN is recieved. An Ack is never sent in reply
+  to the SYNAcks.
+
+"""
+
+
+
+include tcp.repy
+
+
+def listenForSYNAck(remoteIP, remoteport, message, commhandle):
+  packet = unpack(message)
+  if(is_synack(packet)):
+    mycontext['numberOfSYNAcks'] += 1
+  
+
+def server():
+  socket.listen()
+
+
+if callfunc == 'initialize':
+  IP = '127.0.0.1' #  getmyip()
+  PORT = 12345
+  SECOND_PORT = 12346
+
+  mycontext['numberOfSYNAcks'] = 0
+
+  socket = Connection()
+  socket.bind(IP, SECOND_PORT)
+
+  packetSYN = TcpPacket(PORT, SECOND_PORT, 1, 0, "SYN", WINDOW_SIZE, "syncing...").pack()
+
+  recvmess(IP, PORT, listenForSYNAck)
+
+  try:
+    # fork thread for server
+    settimer(0, server, ())
+    sendmess(IP, SECOND_PORT, packetSYN, IP, PORT)
+  except TimeoutError:
+    if (mycontext['numberOfSYNAcks'] < 2):
+      raise Exception("SYNAck was not resent after a SYN was recieved.")
+
+  exitall()
+
+

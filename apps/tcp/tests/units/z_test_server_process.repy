@@ -1,0 +1,293 @@
+""" 
+<Program Name>
+  z_test_server_process.repy
+
+<Started>
+  February 9, 2009
+
+<Author>
+  Richard Jordan
+
+<Purpose>
+  To test that Server.process() function works.
+
+  Passes quietly
+"""
+include constants.repy
+include server.repy
+include test_packet_factory.repy
+
+if callfunc == 'initialize':
+  IP = 'whatever'
+  PORT = 12345
+
+def test_pp_syn():
+  mycontext['packets'].clear()
+  SEQ_NUM = 1
+  serv = TcpServer(send_it)
+  pack = mycontext['tpf'].syn(SEQ_NUM)
+  serv.process(IP, pack)
+  assert not serv.buffer
+  assert not serv.packet_cache
+  assert not mycontext['packets']
+  assert serv.last_ack_sent == SEQ_NUM + 1
+  assert serv.requestip == IP
+  assert serv.requestport == PORT
+
+def test_pp_syn_alreadyconnected():
+  mycontext['packets'].clear()
+  SEQ_NUM = 1
+  serv = TcpServer(send_it)
+  serv.last_ack_sent = SEQ_NUM
+  pack = mycontext['tpf'].syn(SEQ_NUM)
+  try:
+    serv.process(IP, pack) 
+  except AlreadyConnectedError:
+    pass
+  else:
+    raise Exception("should have raised error")
+
+def test_pp_synack_new():
+  mycontext['packets'].clear()
+  SEQ_NUM = 1
+  ACKSEQ_NUM = 2
+  serv = TcpServer(send_it)
+  ACK_NUM = 5
+  pack = mycontext['tpf'].synack(SEQ_NUM, ACK_NUM)
+  serv.process(IP, pack)
+  assert ACKSEQ_NUM in mycontext['packets'].keys()
+  assert mycontext['packets'][ACKSEQ_NUM].seq_num == 0
+  assert not serv.buffer
+  assert not serv.packet_cache
+  assert serv.last_ack_sent == ACKSEQ_NUM
+
+def test_pp_synack_old():
+  mycontext['packets'].clear()
+  SEQ_NUM = 1
+  ACKSEQ_NUM = 2
+  serv = TcpServer(send_it)
+  serv.last_ack_sent = ACKSEQ_NUM
+  ACK_NUM = 5
+  pack = mycontext['tpf'].synack(SEQ_NUM, ACK_NUM)
+  serv.process(IP, pack)
+  assert ACKSEQ_NUM in mycontext['packets'].keys()
+  assert mycontext['packets'][ACKSEQ_NUM].seq_num == 0
+  assert not serv.buffer
+  assert not serv.packet_cache
+  assert serv.last_ack_sent == ACKSEQ_NUM
+
+# SYN num already established
+# send an invalid one now -- exploit
+def test_pp_synack_already_connected():
+  mycontext['packets'].clear()
+  SEQ_NUM = 1
+  BAD_SEQ_NUM = 2
+  serv = TcpServer(send_it)
+  serv.last_ack_sent = SEQ_NUM
+  ACK_NUM = 5
+  pack = mycontext['tpf'].synack(BAD_SEQ_NUM, ACK_NUM)
+  try:
+    serv.process(IP, pack)
+  except AlreadyConnectedError:
+    pass
+  else:
+    raise Exception("should raise error")
+
+def test_pp_psh_notconnected():
+  mycontext['packets'].clear()
+  SEQ_NUM = 1
+  SS = 2
+  serv = TcpServer(send_it)
+  pack = mycontext['tpf'].psh(SEQ_NUM, SS)
+  try:
+    serv.process(IP, pack)
+  except NotConnectedError:
+    pass
+  else:
+    raise Exception("should raise error")
+
+
+def test_pp_next_seq():
+  mycontext['packets'].clear()
+  SEQ_NUM = 0
+  SS = 2
+  WINDOW = 10
+  serv = TcpServer(send_it)
+  serv.last_ack_sent = SEQ_NUM
+  serv.recv_window_size = WINDOW
+  pack = mycontext['tpf'].psh(SEQ_NUM, SS)
+  serv.process(IP, pack)
+  assert serv.buffer == list(pack.payload)
+  assert not serv.packet_cache
+  assert (SEQ_NUM + SS) in mycontext['packets'].keys()
+  assert mycontext['packets'][(SEQ_NUM + SS)].is_ack()
+  assert serv.last_ack_sent == (SEQ_NUM + SS)
+  assert serv.recv_window_size == WINDOW - SS
+  assert mycontext['packets'][(SEQ_NUM + SS)].window == (WINDOW -SS)
+
+def test_pp_next_seq_edge_mod():
+  mycontext['packets'].clear()
+  SEQ_NUM = MAX_SEQ_NUM - 1
+  MSS = 2
+  serv = TcpServer(send_it)
+  serv.last_ack_sent = SEQ_NUM
+  pack = mycontext['tpf'].psh(SEQ_NUM, MSS)
+  serv.process(IP, pack)
+  assert serv.buffer == list(pack.payload)
+  assert not serv.packet_cache
+  assert (SEQ_NUM + MSS)%MAX_SEQ_NUM in mycontext['packets'].keys()
+  assert mycontext['packets'][(SEQ_NUM + MSS)%MAX_SEQ_NUM].is_ack()
+  assert serv.last_ack_sent == (SEQ_NUM + MSS)% MAX_SEQ_NUM
+
+def test_pp_before_window():
+  mycontext['packets'].clear()
+  SEQ_NUM = 1
+  MSS = 2
+  serv = TcpServer(send_it)
+  serv.last_ack_sent = SEQ_NUM
+  pack = mycontext['tpf'].psh(SEQ_NUM-1, MSS)
+  serv.process(IP, pack)
+  assert not serv.buffer
+  assert not serv.packet_cache
+  assert SEQ_NUM in mycontext['packets'].keys()
+  assert mycontext['packets'][SEQ_NUM].is_ack()
+  assert serv.last_ack_sent == SEQ_NUM
+
+def test_pp_in_window():
+  mycontext['packets'].clear()
+  SEQ_NUM = 0
+  WINDOW =10
+  SS = 2
+  serv = TcpServer(send_it)
+  serv.last_ack_sent = SEQ_NUM
+  serv.recv_window_size = WINDOW
+  pack = mycontext['tpf'].psh(SEQ_NUM + WINDOW-1, SS)
+  serv.process(IP, pack)
+  assert not serv.buffer
+  assert serv.packet_cache
+  assert serv.packet_cache[SEQ_NUM + WINDOW-1]
+  assert not mycontext['packets']
+  assert serv.last_ack_sent == SEQ_NUM
+  assert serv.recv_window_size == WINDOW
+
+# outside
+def test_pp_outside_window():
+  mycontext['packets'].clear()
+  SEQ_NUM = 0
+  WIN = 10
+  SS = 20
+  serv = TcpServer(send_it)
+  serv.last_ack_sent = SEQ_NUM
+  serv.recv_window_size = WIN
+  pack = mycontext['tpf'].psh(SEQ_NUM + SS , SS)
+  serv.process(IP, pack)
+  assert not serv.buffer
+  assert not serv.packet_cache
+  assert SEQ_NUM in mycontext['packets'].keys()
+  assert mycontext['packets'][SEQ_NUM].is_ack()
+  assert serv.last_ack_sent == SEQ_NUM
+
+# outside
+def test_pp_at_window():
+  mycontext['packets'].clear()
+  SEQ_NUM = 0
+  SS = 10
+  serv = TcpServer(send_it)
+  serv.last_ack_sent = SEQ_NUM
+  serv.recv_window_size = SS
+  pack = mycontext['tpf'].psh(SEQ_NUM + SS, SS)
+  serv.process(IP, pack)
+  assert not serv.buffer
+  assert not serv.packet_cache
+  assert SEQ_NUM in mycontext['packets'].keys()
+  assert mycontext['packets'][SEQ_NUM].is_ack()
+  assert serv.last_ack_sent == SEQ_NUM
+
+def test_pp_cumulative():
+  mycontext['packets'].clear()
+  SEQ_NUM = 0
+  WINDOW = 10
+  SS = 2
+  serv = TcpServer(send_it)
+  serv.last_ack_sent = SEQ_NUM
+  serv.recv_window_size = WINDOW
+  winpack = mycontext['tpf'].psh(SEQ_NUM + SS, SS)
+  serv.process(IP, winpack)
+  nexpack = mycontext['tpf'].psh(SEQ_NUM, SS)
+  serv.process(IP, nexpack)
+  assert serv.buffer == list(nexpack.payload + winpack.payload)
+  assert not serv.packet_cache
+  assert (SEQ_NUM + SS + SS) in mycontext['packets'].keys()
+  assert serv.last_ack_sent == (SEQ_NUM + SS + SS)
+  assert serv.recv_window_size == WINDOW-SS-SS
+
+def test_pp_fin():
+  mycontext['packets'].clear()
+  SEQ_NUM = 1
+  ACK_NUM = SEQ_NUM + 1
+  WINDOW = 10
+  serv = TcpServer(send_it)
+  assert not serv.fin_rcvd
+  serv.last_ack_sent = SEQ_NUM
+  serv.recv_window_size = WINDOW
+  pack = mycontext['tpf'].fin(SEQ_NUM)
+  assert serv.process(IP, pack)
+  assert not serv.packet_cache
+  assert mycontext['packets'][ACK_NUM].is_ack()
+  assert serv.last_ack_sent == ACK_NUM
+  assert serv.fin_rcvd
+
+def test_pp_fin_three_way():
+  mycontext['packets'].clear()
+  SEQ_NUM = 1
+  ACK_NUM = SEQ_NUM + 1
+  FIN_NUM = 33
+  WINDOW = 10
+  serv = TcpServer(send_it)
+  assert not serv.fin_rcvd
+  serv.set_fin_num(FIN_NUM)
+  serv.last_ack_sent = SEQ_NUM
+  serv.recv_window_size = WINDOW
+  pack = mycontext['tpf'].fin(SEQ_NUM)
+  assert serv.process(IP, pack)
+  assert not serv.packet_cache
+  assert mycontext['packets'][ACK_NUM].is_finack()
+  assert mycontext['packets'][ACK_NUM].ack_num == ACK_NUM
+  assert mycontext['packets'][ACK_NUM].seq_num == FIN_NUM
+  assert serv.last_ack_sent == ACK_NUM
+  assert serv.fin_rcvd
+
+####################
+# Test Helper Functions
+####################
+
+def send_it(message):
+  pack = unpack(message)
+  mycontext['packets'][pack.ack_num] = pack
+
+def main():
+  # setup
+  mycontext['tpf'] = TestPacketFactory(PORT)
+  mycontext['packets'] = {}
+
+  # Run tests
+  test_pp_syn()
+  test_pp_syn_alreadyconnected()
+  test_pp_synack_new()
+  test_pp_synack_old()
+  test_pp_synack_already_connected()
+  test_pp_next_seq()
+  test_pp_next_seq_edge_mod()
+  test_pp_before_window()
+  test_pp_in_window()
+  test_pp_outside_window()
+  test_pp_at_window()
+  test_pp_cumulative()
+  test_pp_fin()
+  test_pp_fin_three_way()
+
+  # teardown
+  exitall()
+
+if callfunc == 'initialize':
+  main()

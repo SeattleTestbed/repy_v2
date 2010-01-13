@@ -1,0 +1,5 @@
+resource cpu 10
+resource memory 1500000000  
+resource diskused 100000000 # 100 MB
+resource lograte 1000
+resauce events 10  # obviously a bad initial token

@@ -1,0 +1,59 @@
+""" 
+<Program Name>
+  z_test_server_listen.repy
+
+<Started>
+  February 11, 2009
+
+<Author>
+  Richard Jordan
+
+<Purpose>
+  To test that the function works.
+
+  Passes quietly
+"""
+include server.repy
+
+if callfunc == 'initialize':
+  PORT= 1234
+  IP = 'shsfa'
+
+def test_listen():
+  serv = TcpServer(nop)
+  packet = TcpPacket(PORT, PORT, 0, 0, "SYN", 0, "test")
+  settimer(0.01, serv.process, (IP, packet))
+  (ip, port) = serv.listen(.1)
+  assert not serv.requestip
+  assert not serv.requestport
+  assert IP == ip
+  assert PORT == port
+
+def test_listen_timeout():
+  serv = TcpServer(nop)
+  try:
+    serv.listen(.01)
+  except TimeoutError:
+    pass
+  else:
+    raise Exception("should raise timeout")
+ 
+####################
+# Test Helper Functions
+####################
+def nop():
+  pass
+
+
+def main():
+  # setup
+  
+  # Run tests
+  test_listen()
+  test_listen_timeout()
+
+  # teardown
+  exitall()
+
+if callfunc == 'initialize':
+  main()

@@ -1,0 +1,152 @@
+"""
+<Program>
+  start_tests.mix
+
+<Author>
+  Brent Couvrette
+
+<Started>
+  September 17, 2008
+
+<Description>
+  Python script that runs the standard python portions of the repy tests,
+  then deploys nmrun_tests.py via the node manager, which when run as an
+  experiment runs all of the repy tests.
+
+<Usage>
+  This command should be run from a directory that was created by a call to
+  prepartest.py -t.
+
+  python start_tests.py [-o] [-v] keyname nodeip
+
+  The -o option tells it to try to run the owner tests.  If the given key 
+  does not have owner access on any nodes at the given address, no tests
+  will be run.  Otherwise, just the tests that do not require owner privilages
+  will be run.
+
+  The -v option tells the test runner to be more verbose.  This just means
+  that it will immediately print out an error message if a test fails, in
+  addition to printing all errors out at the end, as opposed to just printing
+  them at the end.
+
+  keyname is the filename that was used when generating a key with seash
+  (Don't include the .publickey or .privatekey that is automatically appended)
+
+  nodeip is the IP address of the node that you wish to run the tests on.
+  Note that this host must be currently running a nodemanager that has 
+  appropriate vessels for the given key.
+"""
+
+import os
+import glob
+import sys
+import subprocess
+
+# exec_command taken from run_tests.py by Justin Cappos
+# modified to write stdout and stderr to the same place
+def exec_command(command):
+  #Windows does not like close_fds and we shouldn't need it so...
+  p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+  #get the output and close
+  theout = p.stdout.read()
+  p.stdout.close()
+
+  # everyone but FreeBSD uses stderr
+  if theout.strip() == 'Terminated':
+    theout = ''
+
+  return theout
+
+
+# runs the test with the given name with python, outputing its
+# stdout and stderr to [testname].out
+# When run in a vessel, the script will run twice, doubling the output
+# This doesn't happen in normal python, so to mimic that behavior we
+# double the output here
+def capture_test(testname):
+  # remove any existing output/errput files
+  if(os.path.isfile(testname+".out")):
+    os.remove(testname+".out")
+
+  # Get the combined output and errput from running the python script
+  testout = exec_command('python '+testname)
+	
+  # When run in a vessel, the script will run twice, doubling the output
+  # This doesn't happen in normal python, so to mimic that behavior we
+  # double the output here.  Repy also does not have the trailing newline
+  # after the second output, so we will remove that as well.
+  testout = testout + testout
+
+  # Write the test output to a file
+  outfile = file(testname+'.out', 'w')
+  outfile.write(testout)
+  outfile.close()
+
+
+helpstring = """
+python start_tests.py [-o] [-v] keyname nodeip
+Options:
+-o            Also run the tests that require owner permissions
+                (user permission tests are always run)
+-v            Turn on a more verbose output, where a failed test
+                immediately print's its error
+Arguments:
+keyname       The filename that was used when generating a key with seash
+                (Don't include the .publickey or .privatekey that is 
+                automatically appended)
+nodeip        The IP address of the node that you wish to run the tests on.
+                Note that this host must be currently running a nodemanager
+                that has appropriate vessels for the given key.
+"""
+
+# Prints the given error message and the help string, then exits
+def helpExit(errMsg):
+  print errMsg
+  print helpstring
+  sys.exit(1)
+
+# checks to make sure the argument list has at least 3 entries
+def checkArgLen():
+  if len(sys.argv) < 3:
+    helpExit('Invalid number of arguments')
+
+def main():
+  # By default we don't do owner tests
+  ownertest = ''
+  verbose = ''
+
+  checkArgLen()
+	
+  # -o means we will do owner tests
+  if sys.argv[1] == '-o':
+    ownertest = 'True'
+    sys.argv = sys.argv[1:]
+    checkArgLen()
+	
+  # -v next means we will be more verbose
+  if sys.argv[1] == '-v':
+    print 'Activating verbosity...'
+    verbose = 'True'
+    sys.argv = sys.argv[1:]
+    checkArgLen()
+
+  # At this point keyname and nodeip should be the first and
+  # second arguments respectively.
+  keyname = sys.argv[1]
+  nodeip = sys.argv[2]
+
+  if not (os.path.exists(keyname+".publickey") and os.path.exists(keyname+".privatekey")):
+    helpExit("Both keyname.publickey and keyname.privatekey must exist")
+
+  print 'Generating normal python outputs...'
+  # for each test that should be the same as normal python... run it!
+  for testfile in glob.glob("rs_*.py") + glob.glob("s_*.py"):
+    capture_test(testfile)
+
+  print 'Starting repy test runner...'
+  testexp = subprocess.call(['python', 'repy.py', 'restrictions.start_test_experiment',  'start_test_experiment.py', keyname, nodeip, ownertest, verbose])
+		
+
+if __name__ == '__main__':
+  main()

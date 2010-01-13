@@ -1,0 +1,20 @@
+"""
+Make sure register doesn't work on stopped controllers
+"""
+
+include controller.repy
+
+class Stub:
+  def __init__(self, port):
+    self.port = port
+    
+if callfunc == 'intialize':
+  c = Controller()
+  
+  try:
+    o = Stub(12345)
+    c.register(o)
+  except ControllerStoppedError:
+    pass
+  else:
+    print "Controller.register allowed before being started"

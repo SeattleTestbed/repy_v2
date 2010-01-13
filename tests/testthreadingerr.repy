@@ -1,0 +1,9 @@
+# Test just allocates threads endlessly until it gets a ThreadErr
+#
+
+def noop():
+  while True:
+    sleep(.25)
+
+while True:
+  settimer(0.0, noop, ())

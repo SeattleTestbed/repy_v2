@@ -1,0 +1,95 @@
+resource cpu .90
+resource memory 15000000   # 15 Million bytes
+resource diskused 400000000 # 400 MB
+resource events 10
+resource filewrite 10000
+resource fileread 10000
+resource filesopened 1000
+resource insockets 5
+resource outsockets 5
+resource netsend 10000
+resource netrecv 10000
+resource loopsend 1000000
+resource looprecv 1000000
+resource lograte 30000
+resource random 100
+resource messport 12345
+resource messport 34612
+resource messport 11111
+resource messport 12222
+resource messport 13333
+resource messport 14444
+resource messport 15555
+resource messport 16666
+resource messport 17777
+resource messport 18888
+resource messport 19999
+resource connport 11111
+resource connport 12222
+resource connport 13333
+resource connport 14444
+resource connport 15555
+resource connport 16666
+resource connport 17777
+resource connport 18888
+resource connport 19999
+resource connport 12345
+resource messport 1224
+resource connport 1224
+resource messport 2888
+resource connport 2888
+resource messport 9625
+resource connport 9625
+resource messport 10348
+resource connport 10348
+resource messport 39303
+resource connport 39303
+resource messport 48126
+resource connport 48126
+resource messport 52862
+resource connport 52862
+resource messport 57344
+resource connport 57344
+resource messport 64310
+resource connport 64310
+
+call gethostbyname_ex allow
+call sendmess allow
+call stopcomm allow 			# it doesn't make sense to restrict
+call recvmess allow
+call openconn allow
+call waitforconn allow
+call socket.close allow 		# let's not restrict
+call socket.send allow 			# let's not restrict
+call socket.recv allow 			# let's not restrict
+# open and file.__init__ both have built in restrictions...
+call open arg 0 is junk_test.out allow 	# can write to junk_test.out
+call open allow
+call open arg 1 is r allow 		# allow an explicit read
+call open noargs is 1 allow 		# allow an implicit read 
+call file.__init__ arg 0 is junk_test.out allow # can write to junk_test.out
+call file.__init__ allow
+call file.__init__ arg 1 is r allow 	# allow an explicit read
+call file.__init__ noargs is 1 allow 	# allow an implicit read 
+call file.close allow 			# shouldn't restrict
+call file.flush allow 			# they are free to use
+call file.next allow 			# free to use as well...
+call file.read allow 			# allow read
+call file.readline allow 		# shouldn't restrict
+call file.readlines allow 		# shouldn't restrict
+call file.seek allow 			# seek doesn't restrict
+call file.write allow 			# shouldn't restrict (open restricts)
+call file.writelines allow 		# shouldn't restrict (open restricts)
+call sleep allow			# harmless
+call settimer allow			# we can't really do anything smart
+call canceltimer allow			# should be okay
+call exitall allow			# should be harmless 
+
+call log.write allow
+call log.writelines allow
+call getmyip allow			# They can get the external IP address
+call listdir allow			# They can list the files they created
+call removefile allow			# They can remove the files they create
+call randomfloat allow			# can get random numbers
+call getruntime allow			# can get the elapsed time
+call getlock allow			# can get a mutex

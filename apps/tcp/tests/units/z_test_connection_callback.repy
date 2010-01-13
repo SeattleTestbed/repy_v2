@@ -1,0 +1,106 @@
+"""
+<Program Name>
+  z_test_connection_callback.repy
+
+<Started>
+  February 12, 2009
+
+<Author>
+  Richard Jordan
+
+<Purpose>
+  To test that the function works.
+
+  Passes quietly
+"""
+include connection.repy
+include dummies.repy
+
+if callfunc == "initialize":
+  IP_GOOD = "real ip"
+  IP_BAD = "other ip"
+  PORT_GOOD = 12345
+  PORT_BAD = 56
+  LOCAL_PORT = 1
+
+def test_callback():
+  mycontext['sm_c'] = 0
+  conn = Connection()
+  conn.server = TcpServer(conn)
+  conn.client = TcpClient(conn)
+  conn.conn = True
+  conn.remoteip = IP_GOOD
+  conn.remoteport = PORT_GOOD
+  conn.localport = LOCAL_PORT
+  conn.state_machine.next = mynext
+  pack = TcpPacket(PORT_GOOD, LOCAL_PORT, 0, 0, "DD", 0, "").pack()
+  conn.callback(IP_GOOD, PORT_GOOD, pack, None)
+  assert mycontext['sm_c'] 
+
+def test_callback_ip_mismatch():
+  mycontext['sm_c'] = 0
+  conn = Connection()
+  conn.server = TcpServer(conn)
+  conn.client = TcpClient(conn)
+  conn.conn = True
+  conn.remoteip = IP_GOOD
+  conn.remoteport = PORT_GOOD
+  conn.localport = LOCAL_PORT
+  conn.state_machine.next = mynext
+  pack = TcpPacket(PORT_GOOD, LOCAL_PORT, 0, 0, "DD", 0, "").pack()
+  conn.callback(IP_BAD, PORT_GOOD, pack, None)
+  assert not mycontext['sm_c'] 
+
+def test_callback_remoteport_mismatch():
+  mycontext['sm_c'] = 0
+  conn = Connection()
+  conn.server = TcpServer(conn)
+  conn.client = TcpClient(conn)
+  conn.conn = True
+  conn.remoteip = IP_GOOD
+  conn.remoteport = PORT_GOOD
+  conn.localport = LOCAL_PORT
+  conn.state_machine.next = mynext
+  pack = TcpPacket(PORT_BAD, LOCAL_PORT, 0, 0, "DD", 0, "").pack()
+  conn.callback(IP_GOOD, 0, pack, None)
+  assert not mycontext['sm_c'] 
+
+def test_callback_localport_mismatch():
+  conn = Connection()
+  conn.server = TcpServer(conn)
+  conn.client = TcpClient(conn)
+  conn.conn = True
+  conn.remoteip = IP_GOOD
+  conn.remoteport = PORT_GOOD
+  conn.localport = LOCAL_PORT
+  pack = TcpPacket(PORT_GOOD, PORT_BAD, 0, 0, "DD", 0, "").pack()
+  try:
+    conn.callback(IP_GOOD, 0, pack, None)
+  except:
+    pass
+  else:
+    raise Exception("should have raised")
+
+####################
+# Test Helper Functions
+####################
+
+def mynext(*args):
+  mycontext['sm_c'] = True
+  return -1
+
+def main():
+  # setup
+  mycontext['sm_c'] = False
+  
+  # Run tests
+  test_callback()
+  test_callback_ip_mismatch()
+  test_callback_remoteport_mismatch()
+  test_callback_localport_mismatch()
+
+  # teardown
+  exitall()
+
+if callfunc == 'initialize':
+  main()

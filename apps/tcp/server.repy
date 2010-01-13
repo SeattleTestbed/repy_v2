@@ -1,0 +1,387 @@
+"""
+<Start Date>
+  Feb 10th, 2009
+
+<Description>
+  Used by connection to handle passive side.
+
+<Usage>
+  Object:
+    Server() - get new server
+
+  Public Methods:
+    server.listen(timeout) - listen for SYN
+    server.recv(maxLen) - delete and return data from buffer
+
+    Callback:
+      server.process(ip, packet) - do what's needed on receipt of payload
+
+    Getters:
+      server.get_ack_num() - return ack num
+      server.get_recv_window() - return window
+
+<Example Use>
+  # Receive message from remote TCP socket
+  include server.repy
+ 
+  # UDP callback
+  def callback(ip, port, mess, ch):
+    packet = unpack(mess)
+    serv.process_payload(ip, packet)
+
+  recvmess(getmyip(), 12345, callback)
+  serv = TcpServer()
+
+  sendmess("hi", getmyip(), 12345)
+  message = serv.recv(2)
+"""
+include constants.repy
+include errors.repy
+include packet.repy
+include sleep_lock.repy
+include utilities.repy
+
+class TcpServer:
+  """
+  <Purpose>
+    A connection has two personalities:
+      an active-sender-client and
+      a passive-receiver-server.
+
+    This class is the passive-receiver-server.
+    
+  <Side Effects>
+    Call Repy's getlock()
+  """
+
+  def __init__(self, send_function):
+    """
+    <Purpose>
+      Initialize variables.
+    
+    <Arguments>
+      send_function - function to send ACK's through
+    
+    <Exceptions>
+      None.
+    
+    <Side Effects>
+      Call Repy's getlock().
+     
+    <Returns>
+      New server object.
+    """
+    self.send_function = send_function
+    
+    self.buffer = [] # Receiver buffer of payloads
+    self.packet_cache = {} # holds received, out-of-order packets
+
+    # Sliding window accounting
+    self.last_ack_sent = None # begin window
+    self.recv_window_size = AD_WINDOW_SIZE # size of window
+
+    # lock on buffer control
+    self.lock = getlock()
+    self.sleep_lock = SleepLock()
+
+    # syn
+    self.requestip = None  # set by listen
+    self.requestport = None  # set by listen
+
+    # fin
+    self.fin_rcvd = False # Set to True at FIN
+    self.fin_num = None	# for three way FINACK
+
+  def recv(self, maxLen):
+    """
+    <Purpose>
+      Retrieve buffered messages.
+
+    <Side Effects>
+      Restores possible recv window.
+    """
+    self.lock.acquire()
+    message = self.buffer[0:maxLen]
+    self.recv_window_size += len(message)
+    
+    # remove from buffer
+    del self.buffer[0:maxLen]
+
+    self.lock.release()
+
+    return ''.join(message)
+
+
+  #######################
+  # Handshakers
+  #########################
+
+  def listen(self, timeout):
+    """
+    <Purpose>
+      wait for SYN, process_payload gets SYN and sets us up
+
+    <Exceptions>
+      raise TimeoutError("timed out listening")
+    """
+    self.lock.acquire()
+    if not self.requestip or not self.requestport:
+      self.sleep_lock.acquire()
+      self.sleep_lock.sleep(timeout)
+      self.lock.release()
+
+      # block until released
+      self.sleep_lock.acquire()
+      self.sleep_lock.release()
+ 
+      self.lock.acquire()
+      if not self.requestip or not self.requestport:
+        self.lock.release()
+        raise TimeoutError("timed out listening")
+
+    addr = (self.requestip, self.requestport)
+    # reset
+    self.requestip = None
+    self.requestport = None
+    self.lock.release()
+
+    return addr
+
+  #######################
+  # Callback
+  #######################
+
+  def process(self, ip, packet):
+    """
+    <Purpose>
+      Called to handle packets.
+      Sends back ACK's, saves payloads, or ignores.
+      Set up handshakes also.
+
+    <Arguments>
+      ip
+          The ip it came from.    
+
+      packet 
+          The packet to process.  Packet type is either:
+	    * SYN - stop listening
+ 	    * SYNACK - send back ack
+            * PSH - payload to feed into buffer, cache, or ignore
+
+    <Exceptions>
+      raise AlreadyConnectedError("cannot handle connection request")
+      raise NotConnectedError("no client yet")
+    
+    <Side Effects>
+      Adds to self.buffer.
+      Uses self.lock
+
+    <Returns>
+      True if valid ACK, False otherwise.
+    """
+    self.lock.acquire()
+    valid = False
+
+    if packet.is_syn():
+      self.process_syn(ip, packet)
+    elif packet.is_synack():
+      self.process_synack(ip, packet)
+    elif packet.is_payload():
+      self.process_payload(ip, packet)
+    elif packet.is_fin():
+      valid = self.process_payload(ip, packet)
+    else:
+      raise UnknownStateError("should be one of SYN, SYNACK, PSH")
+
+    self.lock.release()
+    return valid
+
+
+
+  #######################
+  # Getters
+  ######################
+
+  def get_recv_window(self):
+    """
+    <Purpose>
+      atomic getter for window to pass to Client
+
+    <Returns>
+      recv window size
+    """
+    self.lock.acquire()
+    win = self.recv_window_size
+    self.lock.release()
+    return win
+
+  def get_ack_num(self):
+    """
+    <Purpose>
+      atomic getter for ack num to pass to Client
+      used for SYNACK to check if ACK is right num
+    
+    <Returns>
+      the ack num received of SYN
+    """
+    self.lock.acquire()
+    ack = self.last_ack_sent
+    self.lock.release()
+    return ack
+
+
+  def set_fin_num(self, num):
+    """
+    <Purpose>
+      atomic setter for fin num from Client
+      used for FINACK to send corrent seq
+    
+    <Argument>
+      the seq num to send of the FINACK
+    """
+    self.lock.acquire()
+    self.fin_num = num
+    self.lock.release()
+
+  def is_closed(self):
+    """
+    <Purpose>
+      wait for FIN, process_payload gets FIN and sets us up
+
+    <Exceptions>
+      raise TimeoutError("timed out closing")
+    """
+    return self.fin_rcvd
+
+  #############
+  # Private
+  ################
+
+  def process_syn(self, ip, packet):
+    """
+    <Purpose>
+      Handle a SYN request.
+
+    <Exceptions>
+      raise AlreadyConnectedError("cannot handle connection request")
+    
+    <Side Effects>
+      Sets last_ack_sent to ACK of SYN and wakes up self from listening.
+      Stores the request's ip and port.
+    """
+    if not self.last_ack_sent is None:
+      raise AlreadyConnectedError("cannot handle connection request")
+
+    self.requestip = ip
+    self.requestport = packet.srcport
+    self.last_ack_sent = mod_add(packet.seq_num, 1)
+    self.sleep_lock.wakeup()
+
+  def process_synack(self, ip, packet):
+    """
+    <Purpose>
+      Send back ACK or re-ACK.  Or if the SYN doesn't match raise an exception.
+    """
+    # New SYACK
+    if self.last_ack_sent is None:
+      self.last_ack_sent = mod_add(packet.seq_num, 1)
+      self.send_function(TcpPacket(packet.destport, packet.srcport, 0, self.last_ack_sent, \
+                 "ACK", self.recv_window_size, "ack of synack...").pack())
+
+    # Old one, resend ack
+    elif not self.last_ack_sent is None and mod_add(packet.seq_num, 1) == self.last_ack_sent:
+      self.send_function(TcpPacket(packet.destport, packet.srcport, 0, self.last_ack_sent, \
+                 "ACK", self.recv_window_size, "re-ack of synack...").pack())
+
+    # whoa, you can't change the SYN seq_num now?  You already sent a different one before.
+    elif not self.last_ack_sent is None and self.last_ack_sent != packet.seq_num:
+      raise AlreadyConnectedError("cannot change syn sequence now -- already set")
+    
+    else: # no other cases
+      pass
+
+
+  def process_payload(self, ip, packet):
+    """
+    <Purpose>
+      Called to handle packets such that packet.is_payload().
+      Sends back ACK's, saves payloads, or ignores.
+
+      Throws exception if not a payload or no connection.
+      Then, if payload is next, fills buffer with payload.
+      Else, if payload is in window, caches packet.
+      Otherwise, re-acks packet.
+    
+      Also, handles FIN packets.
+
+    <Arguments>
+      ip
+          The ip it came from.    
+
+      packet 
+          The packet to process
+
+    <Exceptions>
+      NotConnectedError if there is not a connection yet 
+        to recv a packet.
+      UnknownStateError if the packet is not a payload
+    
+    <Side Effects>
+      Adds to self.buffer.
+      Uses self.lock
+
+    <Returns>
+      True if valid ACK, False otherwise.
+    """
+    if self.last_ack_sent is None:
+      raise NotConnectedError("no connection yet")
+
+    if not packet.payload and not packet.is_fin():
+      return False
+
+    # Is it the payload we want?
+    if self.last_ack_sent == packet.seq_num:
+      #  -- Cumulative Acking
+      # See how many we have in our window. 
+      # We can skip all these acks.
+      seq_num = packet.seq_num
+      self.packet_cache[packet.seq_num] = packet
+      while seq_num in self.packet_cache.keys():
+        packet = self.packet_cache[seq_num]
+        if packet.is_payload():
+          self.buffer += packet.payload
+          self.recv_window_size -= len(packet.payload)
+          new_seq_num = mod_add(packet.seq_num, len(packet.payload))
+        else: # FIN add one byte
+	  new_seq_num = mod_add(packet.seq_num, 1) 
+	  self.fin_rcvd = True
+	  self.sleep_lock.wakeup()
+        del self.packet_cache[seq_num]
+        seq_num = new_seq_num
+
+      # Ask for the next missing one
+      self.last_ack_sent = seq_num
+      if packet.is_fin() and not self.fin_num is None: # FINACK
+        self.send_function(TcpPacket(packet.destport, packet.srcport, self.fin_num, self.last_ack_sent, \
+                 "FINACK", self.recv_window_size, "ack...").pack())    
+	self.fin_num = None # Reset it?
+      else:
+        self.send_function(TcpPacket(packet.destport, packet.srcport, 0, self.last_ack_sent, \
+                 "ACK", self.recv_window_size, "ack...").pack())
+      return True
+
+    # Maybe we can cache it.  Is it inside our window?
+    elif mod_sep(self.last_ack_sent, packet.seq_num) < self.recv_window_size:
+      # don't have it yet?
+      if not packet.seq_num in self.packet_cache.keys():
+        # save it quietly
+        self.packet_cache[packet.seq_num] = packet
+      else: # ignore the already cached seq
+        pass
+
+    # Send back an ack again for the payload we really want.
+    else: 
+      self.send_function(TcpPacket(packet.destport, packet.srcport, 0, self.last_ack_sent, "ACK", self.recv_window_size, \
+                "resending ack...").pack())
+
+    return False

@@ -1,0 +1,911 @@
+
+'''
+- header at top of file : docstring
+- header for each function (you already have the descriptions) : docstring
+- more space between functions, 3-4 space lines
+'''
+
+#begin include timeout_socket.repy
+"""
+<Description>
+  A socket that guarentees the receipt of a message.   Raises TimeoutError if it does not
+  receive any message before a given timeout.
+  If actually receives the message, returns the message and continues.
+
+<Usage>
+  Text-replacable for Repy Sockets:
+    timeout_openconn(desthost, destport, localip=None, localport=None, timeout = 5)
+    timeout_waitforconn(localip, localport, function)
+
+  Object:
+    sockobj.send(data)
+    sockobj.recv(bytes)
+    sockobj.close()
+
+<Date>
+  Sun Mar  1 10:27:35 PST 2009
+
+<Example>
+  # hello world
+  include sockettimer.repy
+
+  def callback(ip, port, timeout_sockobj, commhandle, listenhandle):
+    hw_message = timeout_sockobj.recv(1047)
+
+    # cleanup
+    stopcomm(commhandle)
+    stopcomm(listenhandle)
+    timeout_sockobj.close()
+
+    print hw_message # => "hello world!"
+  
+  def server():
+    sockobj = timeout_waitforconn(getmyip(), 12345, callback)
+
+  def client():
+    sockobj = timeout_openconn(getmyip(), 12345)
+    sockobj.send("hello world!")
+
+  def main():
+    server()
+    client()
+    exitall()
+
+  if callfunc == 'initialize':
+    main() 
+"""
+
+class SocketTimeoutError(Exception):
+  """The socket timed out before receiving a response"""
+
+def timeout_openconn(desthost, destport, localip=None, localport=None, timeout = 5):
+  """
+  <Purpose> 
+    Wrapper for Repy like socket interface
+
+  <Args>
+    Same as Repy openconn
+
+  <Exception>
+    Timeout exception if the dest address doesnt respond.
+
+  <Returns>
+    socket obj on success
+  """
+
+  tsock = TimeoutSocket()
+  tsock.settimeout(timeout)
+  if localip and localport:
+    tsock.bind((localip, localport))
+  tsock.connect((desthost, destport))
+  return tsock
+
+def timeout_waitforconn(localip, localport, function):
+  """
+  <Purpose> 
+    Wrapper for Repy like socket interface
+
+  <Args>
+    Same as Repy waitforconn
+
+  <Side Effects>
+    Sets up event listener which calls function on messages.
+
+  <Returns>
+    Handle to listener.
+  """
+
+  tsock = TimeoutSocket()
+  tsock.bind((localip, localport))
+  tsock.setcallback(function)
+  return tsock.listen()
+
+class TimeoutSocket:
+  """
+  <Purpose>
+    Provide an socket object like the Repy usual one.
+
+  <Side Effects>
+    Uses a getlock() to watch for a timeout
+    Uses waitforconn and openconn to simulate socket
+  """
+
+  ################
+  # Constructors
+  ################
+
+  def __init__(self):
+    """ Constructor for socket """
+#    self.lock = getlock() # general lock BUG: Do we need to lock everything?
+    self.timeout_lock = getlock() # special lock for Timeout condition
+    self.timeout = 5 # seconds to wait
+
+    # user vars   
+    self.local_address = None # ip, port
+    self.remote_address = None # ip, port
+    self.callback = None # the user's function to call
+
+    # repy socket vars
+    self.sockobj = None #  the Repy socket
+    self.commhandle = None # the current comm
+    self.listencommhandle = None # the listener comm
+
+  ################
+  # Mutator methods
+  #################
+
+  def settimeout(self, value):
+    """ Setter for timeout"""
+    self.timeout = value
+
+  def setcallback(self, function):
+    """ Setter for callback function"""
+    self.callback = function
+
+  ####################
+  # Public Methods
+  ####################
+
+  def bind(self, local_address = None):
+    """
+    <Purpose>
+      Set local address
+
+    <Args>
+      Tuple of (ip, port) local.
+    """
+    self.local_address = local_address
+
+  def listen(self):
+    """
+    <Purpose>
+      Listen for peer
+    
+    <Side Effects>
+      Calls Repy waitforconn()
+    """
+    return self._waitforconn()
+
+  def connect(self, remote_address):
+    """
+    <Purpose>
+      Connect to peer.
+
+    <Args>
+      Tuple of (ip, port) remote.
+   
+    <Side Effects>
+      Calls Repy openconn.
+    """
+    self.remote_address = remote_address
+    self._openconn()
+
+  def recv(self, maxLen): # timeout as optional arg ???
+    """
+    <Purpose>
+      If it fails to finish within the timeout, I close the socket and raise a
+      TimeoutError exception. I.e. if there's no message, we call it an error
+      and raise it.
+      
+    <Arguments>
+      maxLen - bytes to recv
+
+    <Exception>
+      Raises TimeoutError exception if the recv times out
+      without receiving a message.
+
+    <Side Effects>
+      Closes the connection if times out.
+
+    <Returns>
+      The message.
+    """
+    return self._recv_or_close(maxLen)
+
+  def send(self, data):
+    """
+    <Purpose>
+      Just like normal Repy socket.  Sends messages.
+      
+    <Arguments>
+      data - the string message
+
+    <Exception>
+      Same as Repy socket.
+ 
+    <Returns>
+      The bytes sent.
+    """
+    return self._send(data)
+
+  def close(self):
+    self.local_address = None # ip, port
+    self.remote_address = None # ip, port
+    self.callback = None # the user's function to call
+
+    self.sockobj.close()
+    self.sockobj = None #  the Repy socket
+    stopcomm(self.commhandle)
+    self.commhandle = None # the current comm
+    stopcomm(self.listencommhandle)
+    self.listencommhandle = None # the listener comm
+
+
+  ########################
+  # Private
+  #########################
+
+  def _openconn(self):
+    """Handle current state variables and call Repy openconn."""
+
+    destip, destport = self.remote_address
+    if self.local_address:
+      srcip, srcport = self.local_address
+      self.sockobj = openconn(destip, destport, srcip, srcport, self.timeout)
+    else:
+      self.sockobj = openconn(destip, destport)
+
+  def _waitforconn(self):
+    """Setup way between Repy waitforconn event"""
+    localip, localport = self.local_address
+    self.listencommhandle = waitforconn(localip, localport, self._callback)
+    return self.listencommhandle
+
+  def _callback(self, ip, port, sockobj, ch, lh):
+    """Pass on through to user callback"""
+    self.sockobj = sockobj
+    self.listencommhandle = lh # same as the 1st from wait for comm, right?
+    self.commhandle = ch # should we care?
+    
+    print "sockettimeout|remote_address:", self.remote_address
+    if not self.remote_address:
+      pass
+      #raise Exception("what! peer does not match?")
+
+    self.callback(ip, port, self, ch, lh)
+
+  def _send(self, data):
+    """Send data"""
+    return self.sockobj.send(data)
+
+  def _recv(self, maxLen):
+    """Recv data of length maxLen"""
+    return self.sockobj.recv(maxLen)
+
+  def _recv_or_close(self, amount):
+    """Raise the Timeout Error if no receipt.  Keep track by timeout_lock."""
+    timerhandle = settimer(self.timeout, self._clobbersocket, ())
+    try:
+      retdata = self._recv(amount)
+    except Exception, e:
+      # if it's not the timeout, reraise...
+      if self.timeout_lock.acquire(False):
+        raise
+      raise SocketTimeoutError
+    
+    # I acquired the lock, I should stop the timer because I succeeded...
+    if self.timeout_lock.acquire(False):
+      # even if this isn't in time, the lock prevents a race condition 
+      # this is merely an optimization to prevent the timer from ever firing...
+      canceltimer(timerhandle)
+      self.timeout_lock.release() # Alper's bug 3/10/09
+      return retdata
+    else:
+      raise SocketTimeoutError
+
+  def _clobbersocket(self):
+
+    # alpers - don't close the socket if we timeout!  It might be just an error
+    return
+
+    """If I can acquire the lock without blocking, then close the socket to abort"""
+    if self.timeout_lock.acquire(False):
+      self.close()
+
+
+############################
+# Deprecated functions
+##############################
+
+# private function...
+def sockettimeout_clobbersocket(sockobj,mylock):
+  # if I can acquire the lock without blocking, then close the socket to abort
+  if mylock.acquire(False):
+    sockobj.close()
+
+# if it fails to finish within the timeout, I close the socket and raise a
+# SocketTimeout exception...
+def sockettimeout_recv_or_close(sockobj, amount, timeout):
+  # A lock I'll use for this attempt
+  mylock = getlock()
+  timerhandle = settimer(timeout,clobbersocket, (sockobj, mylock))
+  try:
+    retdata = sockobj.recv(amount)
+  except Exception, e:
+    # if it's not the timeout, reraise...
+    if mylock.acquire(False):
+      raise
+    raise SocketTimeout
+    
+  # I acquired the lock, I should stop the timer because I succeeded...
+  if mylock.acquire(False):
+    # even if this isn't in time, the lock prevents a race condition 
+    # this is merely an optimization to prevent the timer from ever firing...
+    canceltimer(timerhandle)
+    return retdata
+  else:
+    raise SocketTimeout
+
+
+#end include timeout_socket.repy
+
+# MapReduce for python/repy!
+#
+
+#begin include mapper.repy
+# MapReduce for python/repy!
+#
+
+def map_func(key, value):
+    toRet = []
+
+    print "Mapping, got key '%s', value '%s'" % (key, value)
+
+    for routeinfo in value.split():
+        route_cost = routeinfo.partition(",")
+        output = (route_cost[0], key + "," + route_cost[2])
+        toRet.append(output)
+
+        # also do the reverse
+        output = (key, routeinfo)
+        toRet.append(output)
+
+    print "Mapping, returning:", toRet
+
+    return toRet
+#end include mapper.repy
+
+#begin include reducer.repy
+# MapReduce for python/repy!
+#
+
+def reduce_func(key, values):
+    toRet = {}
+    ret = []
+    
+    all_connecting_routes = []
+    route_costs = {}
+    for value in values:
+        for routeinfo in value.split():
+            route_cost = routeinfo.partition(",")
+            route = route_cost[0]
+            cost = route_cost[2]
+
+            all_connecting_routes.append(route)            
+            if not route in route_costs or \
+                  (route in route_costs and route_costs[route] > cost):
+               
+                route_costs[route] = int(cost)
+        
+    # cheaters way to elimate duplicates
+    all_connecting_routes = set(all_connecting_routes)
+
+    print "current route key:", key
+    print "route_costs:", route_costs
+    print "all_connecting_routes", all_connecting_routes
+
+    # now we have a list of all routes for this one route
+    for current_route in all_connecting_routes:
+        for route in all_connecting_routes:
+            if route == current_route:
+                continue
+            else:
+                route_cost = route_costs[route] + 1
+                route_tuple = route + "," + str(route_cost)
+                ret.append((current_route, route_tuple))
+
+    print "all_connecting_routes", all_connecting_routes
+
+    # make sure we include old data
+    for route in all_connecting_routes:
+        route_cost = route_costs[route]
+        route_tuple = route + "," + str(route_cost)
+        print "adding (%s,%s) to ret:" % (key, route_tuple)
+        ret.append((key, route_tuple))
+
+        # also do the inverse
+        route_tuple = key + "," + str(route_cost)
+        print "adding (%s,%s) to ret:" % (route, route_tuple)
+        ret.append((route, route_tuple))
+
+
+    print "ret:", ret
+
+    for route_route_cost in ret:
+        print "trying to add key '%s' and value '%s' to dict" % (route_route_cost[0], route_route_cost[1])
+        if route_route_cost[0] in toRet:
+            toRet[route_route_cost[0]] += " " + route_route_cost[1]
+        else:
+            toRet[route_route_cost[0]] = route_route_cost[1]
+
+    print "ret-dict:", toRet
+    print; print
+
+    return toRet
+#end include reducer.repy
+
+#begin include hasher.repy
+#
+
+def hash_func(data):
+    return ord(data[0])/8
+#end include hasher.repy
+
+def get_data(ip, port, socketobj, thiscommhandle, listencommhandle):
+    """ Listens for connections on a well-defined port, imports data files """
+
+    # get a list of all of our neighbors!
+    mycontext['primary'] = recv_message(socketobj)
+    print "Primary init thread: got primary loc: ", mycontext['primary']
+
+    # we need to know how many peers we have..
+    mycontext['num_peers'] = int(socketobj.recv(4))
+    print "Primary init thread: got num_peers: ", mycontext['num_peers']
+
+    mycontext['peers'] = []
+    for i in range(mycontext['num_peers']):
+        mycontext['peers'].append(recv_message(socketobj))
+
+    # parse and save data file:
+    buf = recv_message(socketobj)
+    print "Primary init thread: got file data"
+    dataobj = open("map_data.dat", "w")
+    dataobj.write(buf)
+    dataobj.close()
+
+    # make sure each replica has the same order!
+    # this line isn't needed --> mycontext['peers'].sort()
+    print "Primary init thread: got my peers: ", mycontext['peers']
+
+    # which peer am I?  save this for future reference..
+    address_str = mycontext['myip'] + ":" + str(mycontext['myport']-1)
+    mycontext['my_peer_index'] = mycontext['peers'].index(address_str)        
+    print "Primary init thread: my_peer_index is", mycontext['my_peer_index']
+
+    # start the peer_sockets variable
+    mycontext['peer_sockets'] = [""] * mycontext['num_peers']
+        
+    # save the primary socket for heartbeats
+    mycontext['primary_socket'] = socketobj
+
+    # try ACKing
+    socketobj.send("i")
+
+    # destroy the listen socket as we're done initializing
+    mycontext['state'] = 'Initialized'
+    stopcomm(listencommhandle)
+
+
+    
+# respond to any queries from the primary
+def heartbeat_response():
+    msg = ""
+    while True:
+        try:
+            msg = recv_message(mycontext['primary_socket'], timeout=5)
+        except SocketTimeoutError:
+            print "Primary control thread: timed out waiting for heartbeat"
+        else:
+            if "control" in msg:
+                pass
+            elif msg == "heartbeat":
+                state = mycontext['state']
+                print "Primary control thread: sent state %s to primary" % state
+                send_message(mycontext['primary_socket'], state)
+
+                if state == "ReducerDone":
+                    print "Primary control thread: sending datadict:", mycontext['reduce_result']
+                    send_message_dict(mycontext['primary_socket'], 
+                                      mycontext['reduce_result'])
+                    mycontext['state'] = "Done"
+                    break
+
+
+
+def init_replica_sockets():
+    # we only want to make one socket for each link, so let's be smart about it
+    # and only make new connections to equal or higher indexed peers..
+
+    print "entered init_replica_sockets"
+
+    # put a fake socket into mycontext['peer_sockets'] for self
+    mycontext['peer_sockets'][mycontext['my_peer_index']] = "self"
+
+    # if we're the last peer, just skip this.  we'll listen for all sockets.
+    if mycontext['my_peer_index'] + 1 >= len(mycontext['peers']):
+        print "Main thread: quit early, I'm last in list."
+        return
+
+    print "Main thread: continuing init_replica_sockets()"
+    # + 1 is added to skip creating self-socket
+    peer_subset = mycontext['peers'][mycontext['my_peer_index'] + 1:]
+    for peer in peer_subset:
+        addr_parts = peer.partition(":")
+        peer_index = mycontext['peers'].index(peer)
+
+        print "Main thread: attempting to connect to peer %d, (addr: %s:%d)" % (peer_index, addr_parts[0], int(addr_parts[2])+1)
+        socketobj = timeout_openconn(addr_parts[0], int(addr_parts[2])+1,
+                                     mycontext['myip'], 12347)
+        socketobj.send("hello")
+
+        mycontext['connection_lock'].acquire()
+        mycontext['peer_sockets'][peer_index] = socketobj
+        mycontext['peer_conn_left'] -= 1
+        mycontext['connection_lock'].release()
+
+        print "succesfully communicated with", peer
+
+
+
+# listens for incoming tcp connections, establishes a port
+def recv_init_replica_conn(ip, port, sockobj, thiscommhandle, listencommhandle):
+    data = sockobj.recv(5)
+    
+    print "Peer init thread: receiving peer_init message from %s, %s" % (ip, port)
+
+    if not data == "hello":
+        exit_prog("Received an unintelligible message from a peer %s:%d, %s" %
+                  (ip, port, data))
+    else:
+        # save socket obj for later
+        incoming_index = mycontext['peers'].index(ip+":12344")
+
+        mycontext['connection_lock'].acquire()
+        mycontext['peer_sockets'][incoming_index] = sockobj
+
+        # decrement our connection counter
+        mycontext['peer_conn_left'] -= 1
+        mycontext['connection_lock'].release()
+
+        print "Peer init thread: successfully received init message from", ip+":"+str(port)
+
+
+# listens for incoming map data (this is run asynchronously)
+def recv_peer_map_data():
+    peer_socket_recvd = []    
+
+    print "Peer datarecv thread: peer_sockets:", mycontext['peer_sockets']
+
+    while len(peer_socket_recvd) != mycontext['num_peers']:
+
+        # cycle through all the sockets, trying to receive
+        for socket in mycontext['peer_sockets']:
+
+            #print "Peer datarecv thread: trying to receive on socket", socket
+            #print "Peer datarecv thread: received from", peer_socket_recvd
+
+            # pass over the socket if we've received data already
+            if socket in peer_socket_recvd:
+                continue
+
+            # pass over our own socket
+            if socket == "self":
+                continue
+            
+            # add socket if we've added data to ourself in partition
+            if socket == "selfrecvd":
+                peer_socket_recvd.append(socket)
+                continue
+
+            # try to receive
+            recv_data = {}
+            try:
+                print "Peer datarecv thread: recving on socket", socket
+                recv_data = recv_message_dict(socket, timeout=5)
+            except SocketTimeoutError:
+                #print "Peer datarecv thread: timed out on socket", socket, "... continuing"
+                continue
+            else:
+                mycontext['connection_lock'].acquire()
+                mycontext['reduce_data'].update(recv_data)
+                #print "Peer datarecv thread: received data"
+                peer_socket_recvd.append(socket)
+                mycontext['connection_lock'].release()
+            
+    print "Peer datarecv thread: finished recving data"
+    mycontext['state'] = "ReducerWaiting"
+
+
+
+# Assumptions to make this simpler:
+# - all this data fits in memory (<2 GB) in the variable map_result
+# - data is stored in the files/string as "(key)(\t)(value)"  
+def do_map():
+    mycontext['state'] = "Mapping"
+
+    data = open("map_data.dat", "r")
+
+    map_result = []
+    for line in data:
+        line_parts = line.partition('\t')
+        # I assume that results are returned in the form "<key>\t<value>"
+        # map.mapper takes key, value as two separate arguments
+        map_result.extend(map_func(line_parts[0], line_parts[2]))
+#        print "map_result" , map_result
+    map_result.sort()
+    return map_result
+    
+
+    
+# the user must define their own partition function (hash_func)
+def partition(map_result):
+    mycontext['state'] = "Partitioning"
+
+    key_value = {}
+
+    # generate a key-value dict
+    # ! could use simple dict([]) here, but duplicate keys get overwritten
+    for kv_pair in map_result:
+        if kv_pair[0] in key_value:
+            key_value[kv_pair[0]].append(kv_pair[1])
+        else:
+            key_value[kv_pair[0]] = [kv_pair[1]]
+
+    print "map_result" , map_result
+    print
+    print "kv_pair", kv_pair
+    print
+    print "key_value", key_value
+    print
+
+    # try to partition objects bashed on their hash
+    partition_hash = {}
+    for key, values in key_value.iteritems():
+        hashcode = hash_func(key)
+        
+        # the following is always key in index 0, values following
+        # this is so we don't lose track of the key if the hash_func is not
+        # totally unique/reversible
+        values.insert(0,key)
+        if hashcode in partition_hash:
+            partition_hash[hashcode].append(values)
+        else:
+            partition_hash[hashcode] = [values]
+
+    # we should have a grouping of elements by hash now
+    print "partition hash:", partition_hash
+    print
+
+    # attempt to partition elements based on the number of replicas,
+    #   first, get all the hash values and sort them
+    hash_list = partition_hash.keys()
+    hash_list.sort()
+
+    # initialize the peer_data list
+    peer_data = [{}] * mycontext['num_peers']
+    #for index in range(mycontext['num_peers']):
+    #    peer_data.append({})
+
+    for hashcode in hash_list:
+        cur_replica = hashcode % mycontext['num_peers']
+        
+        for kv_pairs in partition_hash[hashcode]:
+            kv = dict([[kv_pairs[0], kv_pairs[1:]]])
+            peer_data[cur_replica].update(kv)
+
+    # print out the peer data, just for my reference
+    index = 0
+    print "peer_data:"
+    for peer in peer_data:
+        print index, "->", peer
+        index += 1
+
+    # send data to replicas, each replica should have a dictionary of kv pairs  
+    for peer_index in range(mycontext['num_peers']):
+        if peer_index == mycontext['my_peer_index']:
+            print "Main thread: sending data to self"
+            mycontext['connection_lock'].acquire()
+            mycontext['reduce_data'].update(peer_data[peer_index])
+            mycontext['peer_sockets'][mycontext['my_peer_index']] = "selfrecvd"
+            mycontext['connection_lock'].release()
+        else:
+            print "Main thread: sending data to peer %d..." % peer_index
+            socketobj = mycontext['peer_sockets'][peer_index]
+            send_message_dict(socketobj, peer_data[peer_index])
+
+    
+def do_reduce():
+    #data = open("reduce_data.dat", "r")
+    data = mycontext['reduce_data']
+
+    print "reduce_data", mycontext['reduce_data']
+    
+    reduce_result = {}
+    results_list = []
+
+
+    for key, values in data.iteritems():
+        print "reducing..."
+        returned_dict = reduce_func(key, values)
+        results_list.append(returned_dict)
+
+    print "Reducing: results_list:" , results_list
+
+    for single_dict in results_list:
+        for key, value in single_dict.iteritems():
+            if key in reduce_result:
+                reduce_result[key] += " " + value
+            else:
+                reduce_result[key] = value
+                          
+    print "Reducing: reduce_result:", reduce_result
+
+    mycontext['reduce_result'] = reduce_result
+
+
+# TODO...
+def report_results(map_results):
+    pass
+    
+
+    
+def send_message(socketobj, data):
+    data = str(len(data)) + "*" + data
+    socketobj.send(data)
+
+
+
+def send_message_dict(socketobj, data_dict):
+    buf = ""
+    for key,values in data_dict.iteritems():
+        buf += str(key) + "\n"
+        if isinstance(values, list):
+            for value in values:
+                buf += str(value) + "\n"
+        else:
+            buf += str(values) + "\n"
+        
+        # after last value, add another return to close key
+        buf += "\n"
+
+    send_message(socketobj, buf)
+
+
+
+def recv_message_dict(socketobj, initialread=2, timeout=None):
+    serialized_dict = recv_message(socketobj, initialread, timeout)
+
+    data_dict = {} 
+    
+    cur_key = ""
+    for line in serialized_dict.split("\n"):
+        if cur_key == "":
+            cur_key = line
+            data_dict[cur_key] = []
+        elif line == "":
+            cur_key = ""
+        else:
+            data_dict[cur_key].append(line)
+
+    return data_dict
+
+
+def recv_message(socketobj, initialread=2, timeout=None):
+    buf = ""
+    found = False
+
+#    print "recv_message: trying to recv from " + socketobj.remote_address
+
+    # if timeout, we have a timeout_socket object; try recving, but can throw
+    # a SocketTimeoutError here.
+    if timeout:
+        print "timeout was set to", timeout, "- entered timeout recv section"
+        socketobj.settimeout(timeout)
+        buf += socketobj.recv(1)
+
+    while not found:
+        buf += socketobj.recv(initialread)
+        if "*" in buf:
+            found = True
+
+    parts = buf.partition("*")
+    data_len = int(parts[0])
+    
+    data = parts[2]
+    data += socketobj.recv(data_len - len(parts[2]))
+    return data
+
+
+
+if callfunc == 'initialize':
+    mycontext['num_mappers'] = 1
+    mycontext['num_reducers'] = 1
+    mycontext['state'] = 'Ready'
+    
+    if len(callargs) > 1:
+        raise Exception("too many args")
+    elif len(callargs) == 1:
+        port = int(callargs[0])
+        ip = getmyip()
+    else:
+        port = 12345
+        ip = '127.0.0.1'
+
+    # save my ip/port for future reference
+    mycontext['myip'] = ip
+    mycontext['myport'] = port
+    
+    # wait for primary initialization data
+    print "Main thread: waiting for connection on ", ip, ":",  port
+    listencommhandle = timeout_waitforconn(ip, port-1, get_data)
+    
+    # block until we've been initialized
+    while mycontext['state'] == 'Ready':
+        sleep(.1)
+
+    # maintain connection with primary, keep scoreboard updated
+    # this is the main channel of communication with the primary
+    settimer(0, heartbeat_response, ())
+    
+    # try to open connections to all hosts
+    mycontext['connection_lock'] = getlock()
+    mycontext['peer_conn_left'] = mycontext['num_peers']
+
+    # listen for connections from peers
+    listen_replica_init = timeout_waitforconn(ip, port, recv_init_replica_conn)
+    print "Main thread: listening on %s:%d for peer connections" % (ip, port)
+
+    # sleep to slow the socket thing down, we're working over WAN so it's tricky
+    default_timeout = 4 * mycontext['num_peers']
+    lag = 4 * mycontext['my_peer_index']
+    sleeptime = default_timeout - lag
+
+    print "Main thread: sleeping for %d seconds to allow listeners to catch up" % sleeptime
+    sleep(sleeptime)
+
+    # open connections to peers
+    init_replica_sockets()
+
+    while mycontext['peer_conn_left'] > 1:
+        print "Main thread: sleeping for peer_conn_left (%d)" % mycontext['peer_conn_left']
+        sleep(0.1)
+
+    # destroy the listener
+    print "Main thread: destroyed peer-peer initialization listener"
+    stopcomm(listen_replica_init)
+    mycontext['state'] = 'Connected'
+
+    # start listening for map data from peers
+    # !! CAN'T DO IT LIKE THIS: use the sockettimeout thing?
+    # listencommhandle = waitforconn(ip, port, recv_peer_map_data)
+    
+    # this is the better way to do it... sockettimeout.repy
+    mycontext['reduce_data'] = {}
+    recv_handle = settimer(0, recv_peer_map_data, ())
+
+    # start mapping, synchronous call
+    map_result = do_map()
+
+    # send map results to all reducers, split as necessary
+    partition(map_result)
+    
+    # block until all partition data is acquired
+    while mycontext['state'] != 'ReducerWaiting':
+        print "Main thread: sleeping for state ReducerWaiting (state: %s)" % mycontext['state']
+        sleep(0.5)
+
+
+    # start reducing, synchronous call 
+    do_reduce()
+    mycontext['state'] = "ReducerDone"
+
+    # wait for a primary heartbeat to come in, then return data, change state
+    # and terminate
+    while mycontext['state'] != "Done":
+        print "Main thread: sleeping for state Done (state: %s)" % mycontext['state']
+        sleep(0.5)
+
+
+
+
+    

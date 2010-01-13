@@ -1,0 +1,49 @@
+"""
+<Description>
+  Tests if the congestion controller's update
+  function works.
+
+<Date>
+  February 26, 2009
+"""
+include congestion_controller.repy
+
+
+def test_update_reset():
+  contr = CongestionController()
+  contr.update(True)
+
+  assert contr.window_size == CONG_WINDOW_SIZE 
+  assert contr.threshold == int(CONG_WINDOW_SIZE / 2.0)
+
+def test_update_slow_start():
+  contr = CongestionController()
+  contr.update(False)
+
+  assert contr.window_size == CONG_WINDOW_SIZE
+  assert contr.threshold == None
+
+def test_update_avoidance():
+  contr = CongestionController()
+  contr.window_size = 5 * CONG_WINDOW_SIZE
+  contr.threshold = 5 * CONG_WINDOW_SIZE
+  contr.update(False)
+
+  assert contr.window_size == 5 * CONG_WINDOW_SIZE
+  assert contr.increment == (1.0 / 5.0) * CONG_WINDOW_SIZE
+  assert contr.threshold == 5 * CONG_WINDOW_SIZE
+
+def main():
+  # setup
+
+  # Tests  
+  test_update_reset()
+  test_update_slow_start()
+  test_update_avoidance()
+
+  # teardown
+  exitall()
+
+
+if callfunc == 'initialize':
+  main()

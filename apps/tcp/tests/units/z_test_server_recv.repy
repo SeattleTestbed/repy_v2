@@ -1,0 +1,69 @@
+""" 
+<Program Name>
+  z_test_server_recv.repy
+
+<Started>
+  February 9, 2009
+
+<Author>
+  Richard Jordan
+
+<Purpose>
+  To test that Server.recv() function works.
+
+  Passes quietly
+"""
+include server.repy
+
+if callfunc == "initialize":
+  MESS = "hihihihihi"
+  SMALL = 5
+  EXACT = len(MESS) # 10
+  LARGE = 15
+  SEQ_NUM = 0
+  WINDOW = 10
+
+def test_recv_exact():
+  serv = TcpServer(None)
+  serv.recv_window_size = 0
+  serv.buffer = list(MESS)
+  mess = serv.recv(EXACT)
+  assert mess == MESS
+  assert not serv.buffer
+  assert serv.recv_window_size == WINDOW
+
+def test_recv_small():
+  serv = TcpServer(None)
+  serv.recv_window_size = 0
+  serv.buffer = list(MESS)
+  mess = serv.recv(SMALL)
+  assert mess == MESS[0:SMALL]
+  assert serv.buffer == list(MESS[SMALL:])
+  assert serv.recv_window_size == WINDOW - SMALL
+
+def test_recv_large():
+  serv = TcpServer(None)
+  serv.recv_window_size = 0
+  serv.buffer = list(MESS)
+  mess = serv.recv(LARGE)
+  assert mess == MESS
+  assert not serv.buffer
+  serv.recv_window_size = WINDOW
+ 
+####################
+# Test Helper Functions
+####################
+
+def main():
+  # setup
+  
+  # Run tests
+  test_recv_exact()
+  test_recv_small()
+  test_recv_large()
+
+  # teardown
+  exitall()
+
+if callfunc == 'initialize':
+  main()

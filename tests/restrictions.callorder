@@ -1,0 +1,9 @@
+resource cpu 10
+resource memory 1000000000
+resource diskused 100000000 # 100 MB
+resource events 1
+resource lograte 1000
+call sleep deny
+call sleep allow
+call log.write allow
+call log.writelines allow

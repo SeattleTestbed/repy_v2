@@ -1,0 +1,36 @@
+resource cpu .10
+resource memory 100000000   # 100 Million bytes
+resource events 10
+resource filewrite 10000
+resource fileread 10000
+resource filesopened 5
+resource insockets 5
+resource outsockets 5
+resource netsend 10000
+resource netrecv 10000
+resource lograte 1000
+resource diskused 10000000
+
+call getmyip allow
+call sendmess allow 			# send messages anywhere
+call stopcomm allow 			# it doesn't make sense to restrict
+call recvmess arg 1 is 12340 allow 	# Allow listening on this port
+call recvmess arg 1 is 12341 allow 	# Allow listening on this port
+call recvmess arg 1 is 12342 allow 	# Allow listening on this port
+call recvmess arg 1 is 12343 allow 	# Allow listening on this port
+call recvmess arg 1 is 12344 allow 	# Allow listening on this port
+call recvmess arg 1 is 12345 allow 	# Allow listening on this port
+call recvmess arg 1 is 12346 allow 	# Allow listening on this port
+call recvmess arg 1 is 12347 allow 	# Allow listening on this port
+call recvmess arg 1 is 12348 allow 	# Allow listening on this port
+call recvmess arg 1 is 12349 allow 	# Allow listening on this port
+call waitforconn arg 1 is 9090 allow 	# for the UI
+call socket.send allow 			# for the UI
+call socket.close allow 		# for the UI
+call sleep allow			# harmless
+call settimer allow			# we can't really do anything smart
+call canceltimer allow			# should be okay
+call exitall allow			# should be harmless 
+
+call log.write allow
+call log.writelines allow

@@ -1,0 +1,477 @@
+"""
+<Program Name>
+  start_test_experiment.mix
+<Started>
+  September 30, 2008
+
+<Author>
+  Brent Couvrette
+
+<Purpose>
+  Repy script to run the Seattle test cases using the node manager...  
+  Adapted from a python script by Justin Cappos
+
+  The types of tests are:
+
+    s_*.py -- The correct result is the same as when run with python
+    e_*.py -- The restricted program produces output on stderr (most likely
+              because it throws an exception)
+    z_*.py -- The restricted program produces no output 
+    n_*.py -- The restricted program produces some output on stdout and no
+              output on stderr
+    b_*.py -- The restricted program produces output on both stderr and stdout
+    u_*.py -- The result of running these programs is undefined.   They are
+              not tested but may be useful as examples
+    l_*.py -- Use circular logging while testing.   These test cases indicate
+              an error by using exitall instead of letting the program 
+              terminate normally...
+"""
+
+include nmclient.repy
+include time.repy
+include testportfiller.repy
+
+# Runs a single test and prints out whether it succeeded or failed
+def run_test(testname):
+  if testname.startswith('rs_') or testname.startswith('re_') or \
+      testname.startswith('rz_') or testname.startswith('rn_') or \
+      testname.startswith('rb_') or testname.startswith('rl_'):
+
+    # must have three parts: r?_restrictionfn_testname.py
+    if len(testname.split('_')) != 3:
+      raise Exception, "Test name '"+testname+"' does not have 3 parts!"
+
+    # take the 2nd character of the testname 'rs_' -> 's'
+    testtype = testname[1]
+    restrictfn = testname.split('_')[1]
+
+  elif testname.startswith('s_') or testname.startswith('e_') or \
+      testname.startswith('z_') or testname.startswith('n_') or \
+      testname.startswith('b_') or testname.startswith('l_'):
+
+    # take the 1st character of the testname 's_' -> 's'
+    testtype = testname[0]
+    restrictfn = 'default'
+    
+  elif testname.startswith('ru_') or testname.startswith('u_'):
+    # Do not run undefined tests...
+    return
+  else:
+    raise Exception, "Test name '"+testname+"' of an unknown type!"
+
+
+  print "Running test %-50s [" % testname ,
+	
+  # Get the result of this test
+  result = do_test(testtype, testname, restrictfn)
+
+  # Increment passcount or failcount appropriately and print 
+  #  PASS ] or FAILED] to the result string as appropriate
+  if result[0]:
+    mycontext['passcount'] = mycontext['passcount'] + 1
+    print " PASS ]"
+  else:
+    mycontext['failcount'] = mycontext['failcount'] + 1
+    print "FAILED]"
+    # Print the error string immediately if we are being verbose
+    if mycontext['verbose']:
+      print result[1]
+
+
+
+# Runs the given test with the assumption that we have user
+# access to the vessel we are working with.
+# Returns a tuple of (result, errstring) where result is a
+# boolean indicating whether the test passed or failed, and
+# errstring is the error message if the test failed.
+def do_test(testtype, testname, restrictfn):
+  if restrictfn == 'default':
+    repylog = run_in_user_vessel(testname)
+  else:
+    repylog = run_in_owner_vessel(testname, restrictfn)
+
+  if repylog.startswith('Unable to split vessel:'):
+    return (False, repylog) 
+
+  # match python
+  if testtype == 's':
+    pyoutfile = file(testname+'.out', 'r')
+    pyout = pyoutfile.read()
+    pyoutfile.close()
+
+    if pyout != repylog:
+      # output differs
+      errput = testname+"\n" + "output mismatch '" + pyout + "' != '" + \
+          repylog+"'\n\n"
+      mycontext['endput'] = mycontext['endput']+errput
+      return (False, errput)
+
+    return (True, '')
+
+  # any out, no err...
+  elif testtype == 'n':
+    if repylog != '' and repylog.find('Traceback') == -1:
+      return (True, '')
+    else:
+      errput = testname+"\nout:"+repylog+"\n\n"
+      mycontext['endput'] = mycontext['endput']+errput
+      return (False, errput)
+
+  # any err, no out... (doesn't check no out as is)
+  elif testtype == 'e':
+    if repylog.find('Traceback') != -1:
+      return (True, '')
+    else:
+      errput = testname+"\nout:"+repylog+"\n\n"
+      mycontext['endput'] = mycontext['endput']+errput
+      return (False, errput)
+
+  # no err, no out...
+  elif testtype == 'z':
+    if repylog == '':
+      return (True, '')
+    else:
+      errput = testname+"\nout:"+repylog+"\n\n"
+      mycontext['endput'] = mycontext['endput']+errput
+      return (False, errput)
+
+  # any err, any out...
+  elif testtype == 'b':
+    if repylog.find('Traceback') != -1:
+      return (True, '')
+    else:
+      errput = testname+"\nout:"+repylog+"\n\n"
+      mycontext['endput'] = mycontext['endput']+errput
+      return (False, errput)
+
+  # no err, no out (logging)...
+  elif testtype == 'l':
+    if 'Fail' in repylog:
+      errput = testname+"\nString 'Fail' in logdata\n\n"
+      mycontext['endput'] = mycontext['endput']+errput
+      return (False, errput)
+    elif "Success" not in repylog:
+      errput = testname+"\nString 'Success' not in logdata\n\n"
+      mycontext['endput']= mycontext['endput']+errput
+      return (False, errput)
+    else:
+      return (True, '')
+  else: 
+    raise Exception, "Unknown test type '"+str(testout)+"'"
+		
+
+# Run the given test with the given restrictions file.
+# This requires owner privilages on the vessel for splitting
+# If we are unable to split, returns None
+def run_in_owner_vessel(testname, restrictfn):
+  testvessel = mycontext['myvessel']
+	
+  # read the restriction file into a string
+  restrictfile = file(restrictfn, 'r')
+  restrictstring = restrictfile.read()
+  restrictfile.close()
+
+  try:
+    # split the vessel so that we have one that uses the given restrictions 
+    # file
+    newvessels = nmclient_signedsay(mycontext['nmhandle'], 'SplitVessel', 
+        testvessel, restrictstring).split()
+  except NMClientException, e:
+    return 'Traceback: '+str(e)
+
+	
+  # add the test program that we wish to run
+  testfile = file(testname, 'r')
+  teststring = testfile.read()
+  testfile.close()
+
+  # The vessel with the desired resources and restrictions will be the second
+  # one in the newvessels list (newvessels[1])
+  nmclient_signedsay(mycontext['nmhandle'], 'AddFileToVessel', newvessels[1], 
+      testname, teststring)
+
+  # run the test program
+  nmclient_signedsay(mycontext['nmhandle'], 'StartVessel', newvessels[1], 
+      testname)
+
+  # wait for the program to complete
+  while nmclient_getvesseldict(
+      mycontext['nmhandle'])['vessels'][newvessels[1]]['status'] == 'Started':
+    sleep(0.5)
+
+  # read the log of the program's output
+  repylog = nmclient_signedsay(mycontext['nmhandle'], "ReadVesselLog", 
+      newvessels[1])
+
+  # now that we have captured the log, we are done with the test vessel, so 
+  # we will join it back together
+  nmclient_signedsay(mycontext['nmhandle'], 'JoinVessels', newvessels[0], 
+      newvessels[1])
+
+  # return the program's log
+  return repylog
+	
+
+# Run the given test in the test vessel we are using
+# This is where all of the actual vessel interaction happens
+def run_in_user_vessel(testname):
+  # the maximum size the logging buffer can be
+  # NOTE: make sure this is equal to the maxbuffersize in logging.py and 
+  # logmaxbuffersize in nmAPI.mix.
+  maxlogsize = 16*1024
+	
+  # Run the log flusher to ensure that we don't get anything back from other 
+  # test's logs.
+  nmclient_signedsay(mycontext['nmhandle'], 'StartVessel', 
+      mycontext['myvessel'], 'logflusher.py')
+	
+  # add the test program that we wish to run
+  addFileToVessel(mycontext['myvessel'], testname)
+
+  # Starting the test vessel will throw an exception if the logflusher
+  # hasn't finished yet, in which case we should just keep trying until
+  # it does finish, and the test program gets started.
+  while True:
+    try:
+      # run the test program
+      nmclient_signedsay(mycontext['nmhandle'], 'StartVessel', 
+          mycontext['myvessel'], testname)
+      break
+    except:
+      pass
+
+  # wait for the program to complete
+  while nmclient_getvesseldict(
+      mycontext['nmhandle'])['vessels'][mycontext['myvessel']]['status'] == \
+      'Started':
+    sleep(0.5)
+
+  # read the log of the program's output
+  repylog = nmclient_signedsay(mycontext['nmhandle'], "ReadVesselLog", 
+      mycontext['myvessel'])
+	
+  # Delete the program added to the test vessel
+  nmclient_signedsay(mycontext['nmhandle'], 'DeleteFileInVessel', 
+      mycontext['myvessel'], testname)
+
+  # Remove the extra spaces on the ends of the log caused by the log flusher
+  repylog = repylog.strip(' ')
+	
+  # Remove the extra newline that the logflusher put at it it's end
+  # (at the beginning of the log now)
+  repylog = repylog[1:]
+	
+  # return the program's log
+  return repylog
+
+# Add the given local file to the given vessel using 
+# mycontext['nmhandle']
+def addFileToVessel(vessel, filename):
+  testfile = file(filename, 'r')
+  filestring = testfile.read()
+  nmclient_signedsay(mycontext['nmhandle'], 'AddFileToVessel', vessel, 
+      filename, filestring)
+	
+
+# Prints the given error message then exits
+def helpExit(errMsg):
+  print errMsg
+  exitall()
+
+
+
+			
+
+# Given a list of vessels, we find the vessel with the most ports
+# available to run the tests, and put the found ports into the 
+# actual test files.			
+def chooseMostAvailablePorts(vessels):
+  maxPorts = 0
+		
+  for vessel in vessels:
+    # we will check to see if the vessels have the necesary number of ports 
+    # open.  To run all of the tests, both connport and messport each must 
+    # have 3 ports available, though most of the tests can get by with just 
+    # one.
+    resources = nmclient_rawsay(mycontext['nmhandle'], 'GetVesselResources', 
+        vessel)
+    foundMessports = []
+    foundConnports = []
+    for line in resources.split('\n'):
+      # for each line in the resources file, check to see if it
+      # is a messport or a connport line, and if so, add the port
+      # values to the found list
+      words = line.split()
+      if len(words) < 2:
+        continue
+			
+      if words[1] == 'messport':
+        foundMessports.append(words[2])
+				
+      if words[1] == 'connport':
+        foundConnports.append(words[2])
+				
+    # If we found the necesary 3 each of conn and mess ports, then we are 
+    # good, otherwise, keep track of the max ports found so far, and keep
+    # looking for the ideal
+    if len(foundMessports) >= 3 and len(foundConnports) >= 3:
+      bestVessel = vessel
+      maxPorts = 6
+      bestMessports = foundMessports
+      bestConnports = foundConnports
+      break
+    else:
+      # calculate the number of usefull mess and conn ports.  Note that having
+      # more than 3 of either port does not make it any better, hence we take 
+      # the min of each port count and 3.
+      numPorts = min(len(foundMessports), 3) + min(len(foundConnports), 3)
+      if numPorts > maxPorts:
+        # if this is the best vessel so far, keep track of it's information
+        bestVessel = vessel
+        bestMessports = foundMessports
+        bestConnports = foundConnports
+        maxPorts = numPorts
+				
+  # if there were less than the 6 required ports available, print a warning
+  if maxPorts < 6:
+    print 'Warning: Not enough available ports were found to successfully \
+        execute all tests'
+		
+  # Replace the ports in the tests files with the found ports
+  replace_ports(bestMessports, bestConnports)
+	
+  return bestVessel
+
+# Start the test experiment
+# The keyname is the filename that was used to generate
+# the owner's public/private keypair (not including the
+# .publickey or .privatekey suffixes).  nodeip is the ip
+# address of the node we will be running the tests on.
+# ownertest determines whether or not we attempt to run an
+# owner test
+def start_experiment(keyname, nodeip, ownertest, verbose):
+  print 'Setting up nmhandle'
+  time_updatetime(34612)
+	
+  # Because the different ports are random, we can't systematically do this
+  # We are trying all of the possible node manager ports
+  try:
+    mycontext['nmhandle'] = nmclient_createhandle(nodeip, 1224)
+  except:
+    try:
+      mycontext['nmhandle'] = nmclient_createhandle(nodeip, 2888)
+    except:
+      try:
+        mycontext['nmhandle'] = nmclient_createhandle(nodeip, 9625)
+      except:
+        try:
+          mycontext['nmhandle'] = nmclient_createhandle(nodeip, 10348)
+        except:
+          try:
+            mycontext['nmhandle'] = nmclient_createhandle(nodeip, 39303)
+          except:
+            try:
+              mycontext['nmhandle'] = nmclient_createhandle(nodeip, 48126)
+            except:
+              try:
+                mycontext['nmhandle'] = nmclient_createhandle(nodeip, 52862)
+              except:
+                try:
+                  mycontext['nmhandle'] = nmclient_createhandle(nodeip, 57344)
+                except:
+                  try:
+                    mycontext['nmhandle'] = nmclient_createhandle(nodeip, 64310)
+                  except Exception, e:
+                    print "No port will work :("
+                    print e
+                    raise e
+
+  myhandleinfo = nmclient_get_handle_info(mycontext['nmhandle'])
+
+  myhandleinfo['publickey'] = rsa_file_to_publickey(keyname+'.publickey')
+
+  myhandleinfo['privatekey'] = rsa_file_to_privatekey(keyname+'.privatekey')
+
+  nmclient_set_handle_info(mycontext['nmhandle'], myhandleinfo)
+	
+  mycontext['verbose'] = bool(verbose)
+	
+  print 'Getting Accessible Vessels'
+  # Get all of the vessels the given key can access
+  vessels = nmclient_listaccessiblevessels(mycontext['nmhandle'], 
+      myhandleinfo['publickey'])
+  if ownertest:
+    # We need a vessel that we own.
+    if len(vessels[0]) == 0:
+      helpExit(keyname + ' does not have owner access for any vessels on ' + 
+          nodeip)
+			
+    print 'Using a vessel we have owner permissions for...'
+    mycontext['myvessel'] = chooseMostAvailablePorts(vessels[0])
+  else:
+    # We need a vessel that we have at least user privilages on
+    if len(vessels[1]) > 0:
+      print 'Using a vessel we have user permissions for...'
+      mycontext['myvessel'] = chooseMostAvailablePorts(vessels[1])
+    elif len(vessels[0]) > 0:
+      print 'Using a vessel we have owner permissions for...'
+      mycontext['myvessel'] = chooseMostAvailablePorts(vessels[0])
+    else:
+      helpExit(keyname + ' does not have at least user access for any \
+          vessels on ' + nodeip)
+
+  # initialize passcount and failcount to 0
+  mycontext['passcount'] = 0
+  mycontext['failcount'] = 0
+  # what we print at the end...
+  mycontext['endput'] = ''
+
+  # Setup the log flusher program.  This program fills the readable log with
+  # whitespace, effectively erasing any previous log entry.
+  flusher = """
+if callfunc == 'initialize':
+  print ' ' * (16*1024)
+"""
+
+  print 'Adding miscellaneous files to test vessel...'
+  # Add the flusher to the test vessel
+  nmclient_signedsay(mycontext['nmhandle'], 'AddFileToVessel', 
+      mycontext['myvessel'], 'logflusher.py', flusher)
+	
+  # Add the separate files necesary for the tests to the test vessel
+  # I assume that all necesary input files start with hello
+  for inFile in listdir():
+    if inFile.startswith('hello'):
+      addFileToVessel(mycontext['myvessel'], inFile)
+	
+  print 'Starting user mode tests...'
+  # for each test... run it!
+  for testfile in listdir():
+    if((testfile[0:2] == "s_" or 
+        testfile[0:2] == "e_" or testfile[0:2] == "z_" or 
+        testfile[0:2] == "n_" or testfile[0:2] == "b_" or
+        testfile[0:2] == "u_" or testfile[0:2] == "l_") and
+        testfile[-3:] == ".py"):
+      run_test(testfile)
+
+  # if we have owner permisions, run the owner only tests too!
+  if ownertest:
+    for testfile in listdir():
+      if ((testfile.startswith("rs_") or 
+          testfile.startswith("re_") or testfile.startswith("rz_") or 
+          testfile.startswith("rn_") or testfile.startswith("rb_") or
+          testfile.startswith("ru_") or testfile.startswith("rl_") and
+          testfile.endswith(".py"))): 
+        run_test(testfile)
+
+  print mycontext['passcount'],"tests passed,",mycontext['failcount'], \
+      "tests failed"
+	
+  # only print if there is something to print
+  if mycontext['endput']:
+    print mycontext['endput']
+	
+
+if callfunc == 'initialize':
+  start_experiment(callargs[0], callargs[1], callargs[2], callargs[3])
+

@@ -1,0 +1,52 @@
+"""
+<Program Name>
+  z_test_state_machine_send.repy
+
+<Started>
+  February 8, 2009
+
+<Author>
+  Richard Jordan
+
+<Purpose>
+  To test that TcpStateMachine's send() function works.
+
+  Passes quietly
+"""
+include state_machine.repy
+
+def test_estab_send():
+  mycontext['sm'].state = mycontext['sm'].STATE_ESTAB
+  mycontext['sm'].send()
+
+def test_else_send_not_established():
+  try_send(mycontext['sm'].STATE_CLOSED)
+  try_send(mycontext['sm'].STATE_LISTEN)
+  try_send(mycontext['sm'].STATE_SYN_SENT)
+  try_send(mycontext['sm'].STATE_SYN_RCVD)
+
+####################
+# Test Helper Functions
+####################
+
+# Sets state to given state
+# And makes sure error is raised.
+def try_send(state):
+  mycontext['sm'].state = state
+  try:
+    mycontext['sm'].send()
+  except NotEstablishedError:
+    pass
+  else:
+    raise Exception("should have raised error")
+  
+if callfunc == 'initialize':
+  # setup
+  mycontext['sm'] = TcpStateMachine()
+  
+  # Run tests
+  test_estab_send()
+  test_else_send_not_established()
+
+  # teardown
+  exitall()

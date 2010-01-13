@@ -1,0 +1,104 @@
+include utilities.repy
+
+MAX = 10
+
+def test_mod_add():
+  assert mod_add(1, 1, MAX) == 2
+  assert mod_add(1, 11, MAX) == 2
+
+def test_mod_sub():
+  assert mod_sub(1, 1, MAX) == 0
+  assert mod_sub(1, 11, MAX) == 0
+  assert mod_sub(2, 1, MAX) == 1
+
+def test_mod_sep():
+  assert mod_sep(1, 5, MAX) == 4
+  assert mod_sep(5, 1, MAX) == 6
+  assert mod_sep(5, 5, MAX) == 0
+
+def test_mod_between():
+  assert mod_between(1, 2, 3, MAX)
+  assert mod_between(5, 5, 5, MAX)
+  assert mod_between(9, 0, 1, MAX)
+  assert mod_between(8, 9, 1, MAX) 
+  assert mod_between(1, 2, 0, MAX) 
+
+  assert not mod_between(3, 1, 2, MAX) 
+  assert not mod_between(3, 2, 1, MAX) 
+  assert not mod_between(1, 2, 2, MAX) 
+  assert not mod_between(1, 3, 2, MAX) 
+  assert not mod_between(1, 3, 1, MAX) 
+
+def test_mod_sort():
+  assert mod_sort([], 1, 3, MAX) == []
+  assert mod_sort([2,1,3], 1, 3, MAX) == [1,2,3]
+  assert mod_sort([9,1,0], 9, 5, MAX) == [9,0,1]
+  
+def test_mod_sep_range_error():
+  try:
+    mod_sep(MAX, 0, MAX)
+  except RangeError:
+    pass
+  else:
+    raise Exception("should have raised range error")
+
+  try:
+    mod_sep(0, MAX, MAX)
+  except RangeError:
+    pass
+  else:
+    raise Exception("should have raised range error")
+
+def test_mod_between_range_error():
+  try:
+    mod_between(MAX, 0, 0, MAX)
+  except RangeError:
+    pass
+  else:
+    raise Exception("should have raised range error")
+
+  try:
+    mod_between(0, MAX, 0, MAX)
+  except RangeError:
+    pass
+  else:
+    raise Exception("should have raised range error")
+
+  try:
+    mod_between(0, 0, MAX, MAX)
+  except RangeError:
+    pass
+  else:
+    raise Exception("should have raised range error")
+
+def test_mod_sort_range_error():
+  try:
+    mod_sort([MAX], 0, 9, MAX)
+  except RangeError:
+    pass
+  else:
+    raise Exception("should have raised range error")
+
+  try:
+    mod_sort([], MAX, 0, MAX)
+  except RangeError:
+    pass
+  else:
+    raise Exception("should have raised range error")
+
+  try:
+    mod_sort([], 0, MAX, MAX)
+  except RangeError:
+    pass
+  else:
+    raise Exception("should have raised range error")
+
+
+if callfunc == 'initialize':
+  test_mod_add()
+  test_mod_sub()
+  test_mod_sep()
+  test_mod_sort()
+  test_mod_between_range_error()
+  test_mod_sep_range_error()
+  test_mod_sort_range_error()

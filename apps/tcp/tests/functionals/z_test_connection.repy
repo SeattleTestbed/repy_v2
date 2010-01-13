@@ -1,0 +1,57 @@
+"""
+<Program Name>
+  z_test_connection.repy
+
+<Started>
+  February 9, 2009
+
+<Author>
+  Richard Jordan
+
+<Purpose>
+  To test that Connection functions work together.
+
+  Passes quietly
+"""
+include connection.repy
+include dummies.repy
+
+if callfunc == "initialize":
+  IP = getmyip()
+  PORT = 12345
+  MESS = "hi"
+  MAXLEN = 10
+
+def test_passive():
+  conn = Connection()
+  conn.bind(IP, PORT)
+  conn.listen()
+  tcup, addr = conn.accept() 
+  tcup.recv(MAXLEN)
+  tcup.send(MESS)
+  tcup.disconnect()
+  
+def test_active():
+  conn = Connection()
+  conn.bind(IP, PORT)
+  conn.connect(IP, PORT) 
+  conn.send(MESS)
+  conn.recv(MAXLEN)
+  conn.disconnect()
+
+####################
+# Test Helper Functions
+####################
+
+def main():
+  # setup
+  
+  # Run tests
+  test_active()
+  test_passive()
+
+  # teardown
+  exitall()
+
+if callfunc == 'initialize':
+  main()

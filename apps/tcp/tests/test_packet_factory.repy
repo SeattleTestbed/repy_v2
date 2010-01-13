@@ -1,0 +1,57 @@
+"""
+<Started>
+  February 10, 2009
+
+<Purpose>
+  Provides packets for easy use
+  during testing.
+"""
+include packet.repy
+include utilities.repy
+
+class TestPacketFactory:
+
+  def __init__(self, port):
+    # skeleton
+    self.packet = TcpPacket(port, port, 0, 0, "", 0, "")
+   
+  def syn(self, seq_num):
+    pack = self.packet.copy()
+    pack.seq_num = seq_num
+    pack.control_bits = "SYN"
+    return pack
+
+  def fin(self, seq_num):
+    pack = self.packet.copy()
+    pack.seq_num = seq_num
+    pack.control_bits = "FIN"
+    return pack
+
+  def synack(self, seq_num, ack_num, window = None):
+    pack = self.packet.copy()
+    pack.seq_num = seq_num
+    pack.ack_num = ack_num
+    pack.window = window
+    pack.control_bits = "SYNACK"
+    return pack
+
+  def ack(self, ack_num, window = None):
+    pack = self.packet.copy()
+    pack.ack_num = ack_num
+    pack.window = window
+    pack.control_bits = "ACK"
+    return pack
+
+  def psh(self, seq_num, size):
+    pack = self.packet.copy()
+    pack.seq_num = seq_num
+    pack.control_bits = "PSH"
+    pack.payload = long_str(size)
+    return pack
+ 
+def long_str(size):
+  payload = ""
+  for i in range(0, size):
+    payload += "a"
+  return payload
+

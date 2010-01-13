@@ -1,0 +1,7 @@
+resource cpu 10
+resource memory 1000000000
+resource diskused 100000000 # 100 MB
+resource lograte 1000
+call open arg abc is r allow     # bad arg num
+call log.write allow
+call log.writelines allow

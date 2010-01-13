@@ -1,0 +1,265 @@
+#!/bin/bash
+
+# The types of tests are:
+#
+#   s_*.py -- The correct result is the same as when run with python
+#   e_*.py -- The restricted program produces output on stderr (most likely
+#             because it throws an exception)
+#   z_*.py -- The restricted program produces no output 
+#   n_*.py -- The restricted program produces some output on stdout and no
+#             output on stderr
+#   b_*.py -- The restricted program produces output on both stderr and stdout
+#   u_*.py -- The result of running these programs is undefined.   They are
+#             not tested but may be useful as examples
+#
+# any of these types of tests may be preceeded by a 'r', which indicates that
+# there is a specific restriction file for the test.   For example:
+#  re_foo_bar.py -- run the test (expecting an exception) with foo as the 
+# restriction file.
+
+pass=0
+fail=0
+
+
+for file in rs_*.py
+do
+   if [ "$file" == "rs_*.py" ]
+   then
+      break
+   fi
+   
+   rfile=`echo $file | awk -F_ '{print $2}'`
+   echo | awk '{printf("Running test %-50s [","'$file'");}'
+   python $file > $file.python
+   python ../repy.py --simple $rfile $file > $file.repy
+   if diff -q $file.python $file.repy > /dev/null
+   then
+      echo " PASS ]"
+      rm $file.python $file.repy
+      pass=`expr $pass + 1`
+   else   
+      echo "FAILED]"
+      fail=`expr $fail + 1`
+   fi
+done
+
+for file in rz_*.py
+do
+   if [ "$file" == "rz_*.py" ]
+   then
+      break
+   fi
+   rfile=`echo $file | awk -F_ '{print $2}'`
+   echo | awk '{printf("Running test %-50s [","'$file'");}'
+   foo=`python ../repy.py $rfile $file 2> $file.bar | wc -c | awk '{print $1}'`
+   bar=`wc -c $file.bar | awk '{print $1}'`
+   if [ "$foo" == "0" -a "$bar" == "0" ]
+   then
+      rm $file.bar
+      echo " PASS ]"
+      pass=`expr $pass + 1`
+   else   
+      echo "FAILED]"
+      cat $file.bar
+      rm $file.bar
+      fail=`expr $fail + 1`
+   fi
+done
+
+
+for file in rn_*.py
+do
+   if [ "$file" == "rn_*.py" ]
+   then
+      break
+   fi
+   rfile=`echo $file | awk -F_ '{print $2}'`
+   echo | awk '{printf("Running test %-50s [","'$file'");}'
+   foo=`python ../repy.py $rfile $file 2> $file.bar | wc -c | awk '{print $1}'`
+   bar=`wc -c $file.bar | awk '{print $1}'`
+   if [ "$foo" != "0" -a "$bar" == "0" ]
+   then
+      rm $file.bar
+      echo " PASS ]"
+      pass=`expr $pass + 1`
+   else   
+      echo "FAILED]"
+      echo $foo $bar
+      cat $file.bar
+      rm $file.bar
+      fail=`expr $fail + 1`
+   fi
+done
+
+
+for file in re_*.py
+do
+   if [ "$file" == "re_*.py" ]
+   then
+      break
+   fi
+   rfile=`echo $file | awk -F_ '{print $2}'`
+   echo | awk '{printf("Running test %-50s [","'$file'");}'
+   foo=`python ../repy.py $rfile $file 2> $file.bar | wc -c | awk '{print $1}'`
+   bar=`wc -c $file.bar | awk '{print $1}'`
+   if [ "$foo" == "0" -a "$bar" != "0" ]
+   then
+      echo " PASS ]"
+      pass=`expr $pass + 1`
+#      cat $file.bar
+      rm $file.bar
+   else   
+      echo "FAILED]"
+      fail=`expr $fail + 1`
+      rm $file.bar
+   fi
+done
+
+
+for file in rb_*.py
+do
+   if [ "$file" == "rb_*.py" ]
+   then
+      break
+   fi
+   rfile=`echo $file | awk -F_ '{print $2}'`
+   echo | awk '{printf("Running test %-50s [","'$file'");}'
+   foo=`python ../repy.py $rfile $file 2> $file.bar | wc -c | awk '{print $1}'`
+   bar=`wc -c $file.bar | awk '{print $1}'`
+   if [ "$foo" != "0" -a "$bar" != "0" ]
+   then
+      echo " PASS ]"
+      pass=`expr $pass + 1`
+#      cat $file.bar
+      rm $file.bar
+   else   
+      echo "FAILED]"
+      fail=`expr $fail + 1`
+      rm $file.bar
+   fi
+done
+
+
+
+
+
+
+
+############### Now without the restrictions files
+
+
+rfile="restrictions.default"
+
+for file in s_*.py
+do
+   if [ "$file" == "s_*.py" ]
+   then
+      break
+   fi
+   echo | awk '{printf("Running test %-50s [","'$file'");}'
+   python $file > $file.python
+   python ../repy.py --simple $rfile $file > $file.repy
+   if diff -q $file.python $file.repy > /dev/null
+   then
+      echo " PASS ]"
+      rm $file.python $file.repy
+      pass=`expr $pass + 1`
+   else   
+      echo "FAILED]"
+      fail=`expr $fail + 1`
+   fi
+done
+
+for file in z_*.py
+do
+   if [ "$file" == "z_*.py" ]
+   then
+      break
+   fi
+   echo | awk '{printf("Running test %-50s [","'$file'");}'
+   foo=`python ../repy.py $rfile $file 2> $file.bar | wc -c | awk '{print $1}'`
+   bar=`wc -c $file.bar | awk '{print $1}'`
+   if [ "$foo" == "0" -a "$bar" == "0" ]
+   then
+      rm $file.bar
+      echo " PASS ]"
+      pass=`expr $pass + 1`
+   else   
+      echo "FAILED]"
+      cat $file.bar
+      rm $file.bar
+      fail=`expr $fail + 1`
+   fi
+done
+
+
+for file in n_*.py
+do
+   if [ "$file" == "n_*.py" ]
+   then
+      break
+   fi
+   echo | awk '{printf("Running test %-50s [","'$file'");}'
+   foo=`python ../repy.py $rfile $file 2> $file.bar | wc -c | awk '{print $1}'`
+   bar=`wc -c $file.bar | awk '{print $1}'`
+   if [ "$foo" != "0" -a "$bar" == "0" ]
+   then
+      rm $file.bar
+      echo " PASS ]"
+      pass=`expr $pass + 1`
+   else   
+      echo "FAILED]"
+      cat $file.bar
+      rm $file.bar
+      fail=`expr $fail + 1`
+   fi
+done
+
+
+for file in e_*.py
+do
+   if [ "$file" == "e_*.py" ]
+   then
+      break
+   fi
+   echo | awk '{printf("Running test %-50s [","'$file'");}'
+   foo=`python ../repy.py $rfile $file 2> $file.bar | wc -c | awk '{print $1}'`
+   bar=`wc -c $file.bar | awk '{print $1}'`
+   rm $file.bar
+   if [ "$foo" == "0" -a "$bar" != "0" ]
+   then
+      echo " PASS ]"
+      pass=`expr $pass + 1`
+   else   
+      echo "FAILED]"
+      fail=`expr $fail + 1`
+   fi
+done
+
+
+for file in b_*.py
+do
+   if [ "$file" == "b_*.py" ]
+   then
+      break
+   fi
+   echo | awk '{printf("Running test %-50s [","'$file'");}'
+   foo=`python ../repy.py $rfile $file 2> $file.bar | wc -c | awk '{print $1}'`
+   bar=`wc -c $file.bar | awk '{print $1}'`
+   rm $file.bar
+   if [ "$foo" != "0" -a "$bar" != "0" ]
+   then
+      echo " PASS ]"
+      pass=`expr $pass + 1`
+   else   
+      echo "FAILED]"
+      fail=`expr $fail + 1`
+   fi
+done
+
+
+
+rm junk_*
+
+
+echo "$pass tests passed, $fail tests failed"

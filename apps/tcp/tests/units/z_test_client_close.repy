@@ -1,0 +1,72 @@
+fail
+""" 
+<Program Name>
+  z_test_client_close.repy
+
+<Started>
+  February 20, 2009
+
+<Purpose>
+  To test that the function works.
+
+  Passes quietly
+"""
+include client.repy
+
+if callfunc == 'initialize':
+  DEST_IP = '1sfs'
+  DEST_PORT = 12345
+  SRC_IP = '1sfs22'
+  SRC_PORT = 12346
+  TIMEOUT = .01
+  RETRIES = 4  
+
+def test_close():
+  mycontext['packets'].clear()
+  cli = TcpClient(fin_register)
+  SEQ_NUM = 10
+  ACK_NUM = SEQ_NUM + 1
+  cli.last_seq_sent = SEQ_NUM
+  cli.last_ack_recv = ACK_NUM
+  try:
+    cli.close(DEST_IP, DEST_PORT, SRC_IP, SRC_PORT, RETRIES, TIMEOUT)
+  except TimeoutError:
+    pass
+  else:
+    raise Exception("should raise timeout")
+
+  assert ACK_NUM in mycontext['packets'].keys()
+  assert cli.last_seq_sent == ACK_NUM
+  assert mycontext['packet_count'] == RETRIES + 1
+  # packet correct?
+  assert mycontext['packets'][ACK_NUM].is_fin()
+  assert mycontext['packets'][ACK_NUM].srcport == SRC_PORT
+  assert mycontext['packets'][ACK_NUM].destport == DEST_PORT
+  assert mycontext['packets'][ACK_NUM].window
+  assert mycontext['packets'][ACK_NUM].ack_num == 0
+  assert mycontext['packets'][ACK_NUM].seq_num == ACK_NUM
+
+
+####################
+# Test Helper Functions
+####################
+def fin_register(message):
+    mycontext['packet_count'] +=1
+    pack = unpack(message)
+    mycontext['packets'][pack.seq_num] = pack
+    return len(pack.payload)
+
+
+def main():
+  # setup
+  mycontext['packet_count'] = 0
+  mycontext['packets'] = {}
+
+  # Run tests
+  test_close()
+
+  # teardown
+  exitall()
+
+if callfunc == 'initialize':
+  main()

@@ -1,0 +1,15 @@
+"""
+Make sure stop doesn't work on stopped controllers
+"""
+
+include controller.repy
+
+if callfunc == 'intialize':
+  c = Controller()
+  
+  try:
+    c.stop()
+  except ControllerStoppedError:
+    pass
+  else:
+    print "Controller.stop allowed before being started"

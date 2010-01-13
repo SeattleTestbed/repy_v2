@@ -1,0 +1,2 @@
+exitall()
+print "hi"

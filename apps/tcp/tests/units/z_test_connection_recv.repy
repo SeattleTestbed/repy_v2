@@ -1,0 +1,85 @@
+""" <Program Name>
+  z_test_connection_recv.repy
+
+<Started>
+  February 9, 2009
+
+<Author>
+  Richard Jordan
+
+<Purpose>
+  To test that Connection.recv() function works.
+
+  Passes quietly
+"""
+include connection.repy
+include dummies.repy
+
+if callfunc == "initialize":
+  IP = getmyip()
+  PORT = 12345
+  MAXLEN = 5
+
+def test_recv():
+  conn = Connection()
+  conn.client = TcpClient(conn)
+  conn.server = TcpServer(conn)
+  conn.conn = True
+  conn.localip = IP
+  conn.localport = PORT
+  conn.remoteip = IP
+  conn.remoteport = PORT
+  mess = conn.recv(MAXLEN)
+  assert mess
+
+def test_recv_not_bound():
+  conn = Connection()
+  try:
+    conn.recv(MAXLEN)
+  except NotBoundError:
+    pass
+  else:
+    raise Exception("should have raised error")
+
+def test_recv_not_established():
+  conn = Connection()
+  conn.localip = IP
+  conn.localport = PORT
+  conn.conn = True
+  try:
+    conn.recv(MAXLEN)
+  except NotEstablishedError:
+    pass
+  else:
+    raise Exception("should have raised error")
+
+def test_recv_not_connected():
+  conn = Connection()
+  conn.localip = IP
+  conn.localport = PORT
+  try:
+    conn.recv(MAXLEN)
+  except NotConnectedError:
+    pass
+  else:
+    raise Exception("should have raised error")
+
+
+####################
+# Test Helper Functions
+####################
+
+def main():
+  # setup
+  
+  # Run tests
+  test_recv()
+  test_recv_not_established()
+  test_recv_not_bound()
+  test_recv_not_connected()
+
+  # teardown
+  exitall()
+
+if callfunc == 'initialize':
+  main()

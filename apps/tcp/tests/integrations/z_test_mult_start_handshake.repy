@@ -1,0 +1,62 @@
+"""
+<Program Name>
+  z_test_mult_start_handshake.repy
+
+<Started>
+  February 7, 2009
+
+<Author>
+  Michael Moshofsky
+
+<Purpose>
+  To make sure the SYN comes more than once during a connect
+  in the Connection class.
+
+  Raises exception when SYNs are not sent the default number
+  of times.
+
+  Raises exception when a TimeoutError is not thrown. One should
+  be thrown because nothing is responding the the Connection's
+  SYNs.
+
+"""
+
+
+
+include tcp.repy
+include packet.repy
+
+
+def listenForSYN(remoteIP, remoteport, message, commhandle):
+  packet = unpack(message)
+  if(packet.is_syn()):
+    mycontext['numberOfSYNs'] += 1
+
+
+
+if callfunc == 'initialize':
+  IP = '127.0.0.1' #  getmyip()
+  PORT = 12345
+  SECOND_PORT = 12346
+  EXPECTED_SYN_RETRIES = 3
+
+  mycontext['numberOfSYNs'] = 0
+
+  socket = Connection()
+  socket.bind(IP, PORT)
+
+  recvmess(IP, SECOND_PORT, listenForSYN)
+
+  try:
+    socket.connect(IP, SECOND_PORT)
+  except TimeoutError:
+    sleep(.01)
+    if (mycontext['numberOfSYNs'] < DEFAULT_RETRIES):
+      raise Exception("SYN should have been resent " + str(DEFAULT_RETRIES) + " times.")
+  except:
+    raise Exception("should have raised timeout. Multiple SYNs not sent.")
+
+  socket.disconnect()
+  exitall()
+
+  
