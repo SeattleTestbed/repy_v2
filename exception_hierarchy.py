@@ -19,7 +19,7 @@ class RepyException (Exception):
   """All Repy Exceptions derive from this exception."""
   pass
 
-class RepyArgumentError (Exception):
+class RepyArgumentError (RepyException):
   """
   This Exception indicates that an argument was provided
   to a repy API as an in-appropriate type or value.
