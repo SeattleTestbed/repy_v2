@@ -1,7 +1,8 @@
 """
-   Author: Justin Cappos
+   Author: Justin Cappos, Armon Dadgar
 
    Start Date: 27 June 2008
+   V.2 Start Date: January 14th 2009
 
    Description:
 
@@ -10,22 +11,54 @@
    by repy.py to provide a highly restricted (but usable) environment.
 """
 
-import restrictions
 import nanny
-# needed for listdir and remove
-import os 
-import idhelper
 
+# Used for path and file manipulation
+import os 
+import os.path
+
+# Used to handle a fatal exception
+import tracebackrepy
+
+# Used to force Garbage collection to free resources
 import gc
 
-# needed for locking the fileinfo hash
+# Used to get a lock object
 import threading
 
-# I need to rename file so that the checker doesn't complain...
-myfile = file
+# Get access to the current working directory
+import repy_constants
 
-# PUBLIC
-def listdir():
+# Import all the exceptions
+from exception_hierarchy import *
+
+# Store a reference to file, so that we retain access
+# after the builtin's are disabled
+safe_file = file
+
+##### Constants
+
+# This restricts the number of characters in filenames
+MAX_FILENAME_LENGTH = 120
+
+# This is the set of characters which are allowed in a file name
+ALLOWED_FILENAME_CHAR_SET = set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-')
+
+# This is the set of filenames which are forbidden.
+ILLEGAL_FILENAMES = set(["", ".", ".."])
+
+
+##### Module data
+
+# This set contains the filenames of every file which is open
+# Access to this set should be serialized via the OPEN_FILES_LOCK
+OPEN_FILES_LOCK = threading.Lock()
+OPEN_FILES = set([])
+
+
+##### Public Functions
+
+def listfiles():
   """
    <Purpose>
       Allows the user program to get a list of files in their area.
@@ -34,22 +67,30 @@ def listdir():
       None
 
    <Exceptions>
-      This probably shouldn't raise any errors / exceptions so long as the
-      node manager isn't buggy.
+      None
 
    <Side Effects>
       None
 
+  <Resource Consumption>
+    Consumes 4K of fileread.
+
    <Returns>
       A list of strings (file names)
   """
+  # Wait for available fileread resources
+  nanny.tattle_quantity('fileread',0)
 
-  restrictions.assertisallowed('listdir')
+  # Get the list of files from the current directory
+  files = os.listdir(repy_constants.REPY_CURRENT_DIR)
 
-  return os.listdir('.')
-   
+  # Consume 4K
+  nanny.tattle_quantity('fileread', 4096)
 
-# PUBLIC
+  # Return the files
+  return files
+
+
 def removefile(filename):
   """
    <Purpose>
@@ -57,44 +98,51 @@ def removefile(filename):
 
    <Arguments>
       filename: the name of the file to remove.   It must not contain 
-      characters other than 'a-zA-Z0-9.-_' and cannot be '.' or '..'
+      characters other than 'a-zA-Z0-9.-_' and cannot be '.', '..' or
+      the empty string.
 
    <Exceptions>
-      An exception is raised if the file does not exist
+      FileNotFoundError is raised if the file does not exist
+      RepyArgumentError is raised if the filename is invalid.
+      FileInUseError is raised if the file is already open.
 
    <Side Effects>
       None
 
+  <Resource Consumption>
+      Consumes 4K of fileread, and 4K of filewrite if successful.
+
    <Returns>
       None
   """
-
-  restrictions.assertisallowed('removefile')
-
-  assert_is_allowed_filename(filename)
-  
-  # Problem notification thanks to Andrei Borac
-  # Handle the case where the file is open via an exception to prevent the user
-  # from removing a file to circumvent resource accounting
-
-  fileinfolock.acquire()
+  OPEN_FILES_LOCK.acquire()
   try:
-    for filehandle in fileinfo:
-      if filename == fileinfo[filehandle]['filename']:
-        raise Exception, 'File "'+filename+'" is open with handle "'+filehandle+'"'
+    # Check that the filename can be used
+    filename, exists = check_can_use_filename(filename, True)
 
-    result = os.remove(filename)
+    # Wait for available filewrite resources
+    nanny.tattle_quantity('filewrite',0)
+
+    # Try to remove the file
+    if not os.remove(filename):
+      raise InternalRepyException, "os.remove call on '"filename"' should have succeeded. Failed."
+
+    # Consume the filewrite resources
+    nanny.tattle_quantity('filewrite',4096)
+  
+  except RepyException:
+    # We can raise the exceptions that are expected
+    raise
+
+  except Exception, e:
+    # We should not get an exception. Log this...
+    tracebackrepy.handle_internalerror(str(e), 75)
+
   finally:
-    fileinfolock.release()
-
-  return result
-   
+    OPEN_FILES_LOCK.release()
 
 
-
-
-# PUBLIC
-def emulated_open(filename, mode="rb"):
+def emulated_open(filename, create):
   """
    <Purpose>
       Allows the user program to open a file safely. This function is meant
@@ -102,142 +150,182 @@ def emulated_open(filename, mode="rb"):
 
    <Arguments>
       filename:
-         The file that should be operated on.
-      mode:
-         The mode (see open).
+        The file that should be operated on. It must not contain 
+        characters other than 'a-zA-Z0-9.-_' and cannot be '.', '..' or
+        the empty string.
+
+      create:
+         A Boolean flag which specifies if the file should be created
+         if it does not exist.
 
    <Exceptions>
-      As with open, this may raise a number of errors. Additionally:
+      RepyArgumentError is raised if the filename is invalid.
+      FileNotFoundError is raised if the filename is not found, and create is False.
+      FileInUseError is raised if a handle to the file is already open.
+      ResourceExhaustedError is raised if there are no available file handles.
 
-      TypeError if the mode is not a string.
-      ValueError if the modestring is invalid.
-
-   <Side Effects>
-      Opens a file on disk, using a file descriptor. When opened with "w"
-      it will truncate the existing file.
+   <Resource Consumption>
+      Consumes 4K of fileread. If the file is created, then 4K of filewrite is used.
+      If a handle to the object is created, then a file descriptor is used.
 
    <Returns>
       A file-like object.
   """
+  OPEN_FILES_LOCK.acquire()
+  try:
+    # Check that the filename can be used
+    abs_filename, exists = check_can_use_filename(filename, False)
 
-  if type(mode) is not str:
-    raise TypeError("Attempted to open file with invalid mode (must be a string).")
+    # If the file does not exist, and we should create or through an exception
+    if not exists:
+      if create:
+        # Wait for available filewrite resources, then create
+        nanny.tattle_quantity('filewrite',0)
+        safe_open(abs_filename, "w").close()
+        nanny.tattle_quantity('filewrite', 4096)
+      else:
+        raise FileNotFoundError, 'File "'+filename+'" does not exist and "create" flag is False!'
 
-  restrictions.assertisallowed('open', filename, mode)
+    # Create an emulated file object
+    # Mode is always "rw" in binary, and the file can be assumed to exist.
+    return emulated_file(filename, abs_filename)
 
-  # We just filter out 'b' / 't' in modestrings because emulated_file opens
-  # everything in binary mode for us.
+  except RepyException:
+    # We can raise the exceptions that are expected
+    raise
 
-  originalmode = mode
+  except Exception, e:
+    # We should not get an exception. Log this...
+    tracebackrepy.handle_internalerror(str(e), 76)
 
-  if 'b' in mode:
-    mode = mode.replace('b','')
-
-  if 't' in mode:
-    mode = mode.replace('t','')
-
-  # Now we use our very safe, cross-platform open-like function and other
-  # file-object methods to emulate ANSI file modes.
-
-  file_object = None
-  if mode == "r":
-    file_object = emulated_file(filename, "r")
-
-  elif mode == "r+":
-    file_object = emulated_file(filename, "rw")
-
-  elif mode == "w" or mode == "w+":
-    file_object = emulated_file(filename, "rw", create=True)
-    fileinfo[file_object.filehandle]['fobj'].truncate()
-
-  elif mode == "a" or mode == "a+":
-    file_object = emulated_file(filename, "rw", create=True)
-    file_object.seek(0, os.SEEK_END)
-
-
-  if file_object is None:
-    raise ValueError("Invalid or unsupported mode ('%s') passed to open()." % originalmode)
-
-  return file_object
+  finally:
+    OPEN_FILES_LOCK.release()
 
 
 
+##### Private functions
 
-# This keeps the state for the files (the actual objects, etc.)
-fileinfo = {}
-fileinfolock = threading.Lock()
+def check_can_use_filename(filename, err_no_exist):
+  """
+  <Purpose>
+    Private method to check:
+      1) If a filename is allowed
+      2) If this filename is already in use
+      3) If a file with the given name exists
+
+    The OPEN_FILES_LOCK should be acquired prior to
+    calling this method.
+
+  <Arguments>
+    filename:
+      The filename to check.
+
+    err_no_exist:
+      A boolean flag, which specifies if it is an error
+      if the file does not exist.
+
+  <Exceptions>
+    Raises RepyArgumentError if the filename is not allowed.
+    Raises FileNotFoundError if the filename does not exist and err_no_exist is True.
+    Raises FileInUseError if the file is in use.
+
+  <Resource Consumption>
+    Consumes 4K worth of fileread.
+
+  <Returns>
+    A tuple of ( The absolute path to the file , (BOOL) If the file exists )
+  """
+  # Check that the filename is allowed
+  assert_is_allowed_filename(filename)
+  
+  # Check if the file is in use
+  if filename in OPEN_FILES:
+    raise FileInUseError, 'File "'+filename+'" is in use!'
+
+  # Get the absolute file path
+  absolute_path = os.path.abspath(os.path.join(repy_constants.REPY_CURRENT_DIR, filename))
+
+  # Wait for available fileread resources, then check if the file exists
+  nanny.tattle_quantity('fileread',0)
+  exists = os.path.isfile(absolute_path)
+  nanny.tattle_quantity('fileread', 4096)
+
+  if not exists and err_no_exist:
+    raise FileNotFoundError, 'File "'+filename+'" does not exist!'
+
+  # Return the absolute path and if the file exists
+  return absolute_path,exists
 
 
-
-# private.   Checks the filename for disallowed characters
 def assert_is_allowed_filename(filename):
+  """
+  <Purpose>
+    Private method to check if a filename is allowed.
 
-  # file names must contain *only* these chars
-  filenameallowedchars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-'
+  <Arguments>
+    filename:
+      The filename to check.
 
-  # I should check to see if the filename is allowed.   I'm going to do
-  # this here.  
-  if type(filename) != str:
-    raise TypeError, "filename is not a string!"
+  <Exceptions>
+    Raises a RepyArgumentError if the filename is not allowed.
 
-  # Make sure the filename isn't the empty string -- it doesn't make
-  # sense to allow this as a filename.
-  if "" == filename:
-    raise TypeError, "filename is the empty string!"
+  <Returns>
+    None
+  """
 
-  # among other things, this avoids them putting / or \ in the filename
+  # Check the type
+  if type(filename) is not str:
+    raise RepyArgumentError, "Filename is not a string!"
+
+  # Check if the filename is forbidden
+  if filename in ILLEGAL_FILENAMES:
+    raise RepyArgumentError, "Illegal filename provided!"
+
+  # Check that each character in the filename is allowed
   for char in filename:
-    if char not in filenameallowedchars:
-      raise TypeError, "filename has disallowed character '"+char+"'"
- 
-  # Should I do anything more rigorous?   I.e. check for links, etc.?
-  if filename == "." or filename == '..':
-    raise TypeError, "filename cannot be a directory"
+    if char not in ALLOWED_FILENAME_CHAR_SET:
+      raise RepyArgumentError, "Filename has disallowed character '"+char+"'"
 
 
 
+##### Class Definitions
 
-# PUBLIC class.  The user can mess with this...
+
 class emulated_file:
   """
-    A safe file-like class that resembles the builtin file class.
-    The functions in this file are essentially identical to the builtin file
-    class
-
+    A safe class which enables a very primitive file interaction.
+    We only allow reading and writing at a provided index.
   """
 
-  # This is an index into the fileinfo table...
+  # We use the following instance variables.
+  # filename is the name of the file we've opened,
+  # abs_filename is the absolute path to the file we've opened,
+  # and is the unique handle used to tattle the "filesopened" to nanny.
+  #
+  # fobj is the actual underlying file-object from python.
+  __slots__ = ["filename", "abs_filename", "fobj"]
 
-  filehandle = None
-
-  # I do not use these.   This is merely for user / API convenience
-  mode = None
-  name = None
-  softspace = 0
-
-  def __init__(self, filename, mode="r", create=False):
+  def __init__(self, filename, abs_filename):
     """
      <Purpose>
         Allows the user program to open a file safely.   This function is not
-        meant to resemble the builtin "open".
+        meant to resemble the builtin "open". The OPEN_FILES_LOCK should be
+        acquired prior to calling this method.
 
      <Arguments>
         filename:
-           The file that should be operated on
-        mode:
-           The mode:
-              "r":  Open the file for reading.
-              "rw": Open the file for reading and writing.
+           The name of the file, non-absolute.
 
-              These are the only valid modes accepted by this version of
-              open(). Note: files are always opened in "binary" mode.
-        create:
-           If True, create the file if it doesn't exist already.
+        abs_filename:
+           The absolute path to a file that should be opened with
+           read/write privileges in binary mode. This file must
+           exist.
+
+           This should be verified as valid prior to calling,
+           since it is assumed to be valid.
 
      <Exceptions>
-        As with open, this may raise a number of errors. Additionally:
-
-        ValueError is raised if this is passed an invalid mode.
+        ResourceExhaustedError if there are no available file handles.
 
      <Side Effects>
         Opens a file on disk, using a file descriptor.
@@ -246,136 +334,75 @@ class emulated_file:
         A file-like object 
     """
 
-    # Only allow 'r' and 'rw'.
+    # Store the filename we are given
+    self.filename = filename
+    self.abs_filename = abs_filename
 
-    actual_mode = None
-    if mode == "r":
-      actual_mode = "rb"
-    elif mode == "rw":
-      actual_mode = "r+b"
-
-    if actual_mode is None:
-      raise ValueError("Valid modes for opening a file in repy are 'r' and 'rw'.")
-     
-    restrictions.assertisallowed('file.__init__', filename, actual_mode)
-
-    # Here we are checking that we only open a given file once in 'write' mode
-    # so that file access is more uniform across platforms. (On Microsoft
-    # Windows, for example, writing to the same file from two different file-
-    # handles throws an error because of the way Windows (by default) locks
-    # files opened for writing.)
-    fileinfolock.acquire()
-
+    # Here is where we try to allocate a "file" resource from the
+    # nanny system. If that fails, we garbage collect and try again
+    # (this forces __del__() methods to be called on objects with
+    # no references, which is how we automatically free up
+    # file resources).
     try:
-      # Check the entire fileinfo dictionary for the same file already being
-      # open.
-      for fileinfokey in fileinfo.keys():
+      nanny.tattle_add_item('filesopened', abs_filename)
+    except Exception:
+      # Ok, maybe we can free up a file by garbage collecting.
+      gc.collect()
+      nanny.tattle_add_item('filesopened', abs_filename)
 
-        # If the filename matches this one, raise an exception.
-        if os.path.abspath(fileinfo[fileinfokey]['filename']) == \
-            os.path.abspath(filename):
-          raise ValueError(\
-              "A file is only allowed to have one open filehandle.")
+    # Store a file handle
+    # Always open in mode r+b, this avoids Windows text-mode
+    # quirks, and allows reading and writing
+    self.fobj = safe_open(abs_filename, "r+b")
 
-      assert_is_allowed_filename(filename)
-
-      # If the file doesn't exist and the create flag was passed, create the
-      # file first.
-      if create and not os.path.exists(filename):
-        # Create a file by opening it in write mode and then closing it.
-        restrictions.assertisallowed('file.__init__', filename, 'wb')
-
-        created_file = myfile(filename, 'wb')
-        created_file.close()
-
-      self.filehandle = idhelper.getuniqueid()
-
-      # Here is where we try to allocate a "file" resource from the
-      # nanny system. If that fails, we garbage collect and try again
-      # (this forces __del__() methods to be called on objects with
-      # no references, which is how we automatically free up
-      # file resources).
-      try:
-        nanny.tattle_add_item('filesopened', self.filehandle)
-      except Exception:
-        # Ok, maybe we can free up a file by garbage collecting.
-        gc.collect()
-        nanny.tattle_add_item('filesopened', self.filehandle)
-
-      fileinfo[self.filehandle] = {'filename':filename, \
-          'mode':actual_mode, 'fobj':myfile(filename, actual_mode)}
-      self.name = filename
-      self.mode = mode
-
-    finally:
-      fileinfolock.release()
+    # Add the filename to the open files
+    OPEN_FILES.add(filename)
 
 
-  # We are iterable!
-  def __iter__(self):
-    return self
-
-
-#
-# Do most of the normal file calls by checking them and passing them through
-#
 
   def close(self):
-    # prevent TOCTOU race with client changing my filehandle
-    myfilehandle = self.filehandle
-    restrictions.assertisallowed('file.close')
+    """
+    <Purpose>
+      Allows the user program to close the handle to the file.
 
-    # Ignore multiple closes (as file does)
-    if myfilehandle not in fileinfo:
-      return
+    <Arguments>
+      None.
 
-    nanny.tattle_remove_item('filesopened',myfilehandle)
+    <Exceptions>
+      FileClosedError is raised if the file is already closed.
 
-    fileinfolock.acquire()
+    <Resource Consumption>
+      Releases a file handle.
+
+    <Returns>
+      None.
+    """
+
+    # Acquire the lock to the set 
+    OPEN_FILES_LOCK.acquire()
+
+    # Tell nanny we're gone.
+    nanny.tattle_remove_item('filesopened', self.abs_filename)
+   
     try:
-      returnvalue = fileinfo[myfilehandle]['fobj'].close()
+      # Release the file object
+      fobj = self.fobj
+      if fobj is not None:
+        fobj.close()
+        self.fobj = None
+      else:
+        raise FileClosedError, "File '"+self.filename+"' is already closed!" 
 
-      # delete the filehandle
-      del fileinfo[myfilehandle]
+      # Remove this file from the list of open files
+      OPEN_FILES.remove(self.filename)
 
     finally:
-      fileinfolock.release()
-
-    return returnvalue
+      OPEN_FILES_LOCK.release()
 
 
+  def readat(self,sizelimit, offset):
+    ### TODO: V2 Implementation
 
-  def flush(self):
-    # prevent TOCTOU race with client changing my filehandle
-    myfilehandle = self.filehandle
-    restrictions.assertisallowed('file.flush')
-
-    if "w" in self.mode:
-      return fileinfo[myfilehandle]['fobj'].flush()
-    else:
-      return None
-
-
-  def next(self):
-    # prevent TOCTOU race with client changing my filehandle
-    myfilehandle = self.filehandle
-    restrictions.assertisallowed('file.next')
-
-    if "w" in self.mode:
-      raise IOError("file.next() is invalid for write-enabled files.")
-
-    # wait if it's already over used
-    nanny.tattle_quantity('fileread',0)
-
-    readdata = fileinfo[myfilehandle]['fobj'].next()
-
-    nanny.tattle_quantity('fileread', len(readdata))
-
-    return readdata
-
-
-
-  def read(self,*args):
     # prevent TOCTOU race with client changing my filehandle
     myfilehandle = self.filehandle
     restrictions.assertisallowed('file.read',*args)
@@ -400,55 +427,10 @@ class emulated_file:
     return readdata
 
 
-  def readline(self,*args):
-    # prevent TOCTOU race with client changing my filehandle
-    myfilehandle = self.filehandle
-    restrictions.assertisallowed('file.readline',*args)
 
-    # wait if it's already over used
-    nanny.tattle_quantity('fileread',0)
+  def writeat(self,data, offset):
+    ### TODO: V2 Implementation
 
-    try:
-      readdata =  fileinfo[myfilehandle]['fobj'].readline(*args)
-    except KeyError:
-      raise ValueError("Invalid file object (probably closed).")
-
-    nanny.tattle_quantity('fileread',len(readdata))
-
-    return readdata
-
-
-  def readlines(self,*args):
-    # prevent TOCTOU race with client changing my filehandle
-    myfilehandle = self.filehandle
-    restrictions.assertisallowed('file.readlines',*args)
-
-    # wait if it's already over used
-    nanny.tattle_quantity('fileread',0)
-
-    try:
-      readlist = fileinfo[myfilehandle]['fobj'].readlines(*args)
-    except KeyError:
-      raise ValueError("Invalid file object (probably closed).")
-
-    readamt = 0
-    for readitem in readlist:
-      readamt = readamt + len(str(readitem))
-
-    nanny.tattle_quantity('fileread',readamt)
-
-    return readlist
-
-
-  def seek(self,*args):
-    # prevent TOCTOU race with client changing my filehandle
-    myfilehandle = self.filehandle
-    restrictions.assertisallowed('file.seek',*args)
-
-    return fileinfo[myfilehandle]['fobj'].seek(*args)
-
-
-  def write(self,writeitem):
     # prevent TOCTOU race with client changing my filehandle
     myfilehandle = self.filehandle
     restrictions.assertisallowed('file.write',writeitem)
@@ -469,45 +451,12 @@ class emulated_file:
 
     return retval
 
-
-  def writelines(self,writelist):
-    # prevent TOCTOU race with client changing my filehandle
-    myfilehandle = self.filehandle
-    restrictions.assertisallowed('file.writelines',writelist)
-
-    # wait if it's already over used
-    nanny.tattle_quantity('filewrite',0)
-
-    if "w" not in self.mode:
-      raise ValueError("writelines() isn't allowed on read-only file objects!")
-    
-    try:
-      fh = fileinfo[myfilehandle]['fobj']
-    except KeyError:
-      raise ValueError("Invalid file object (probably closed).")
-
-    for writeitem in writelist:
-      strtowrite = str(writeitem)
-      fileinfo[myfilehandle]['fobj'].write(strtowrite)
-      nanny.tattle_quantity('filewrite', len(strtowrite))
-
-    return None   # python documentation states there is no return value
-
-
   def __del__(self):
-    myfilehandle = self.filehandle
-
-    # Tell nanny we're gone.
-    nanny.tattle_remove_item('filesopened', myfilehandle)
-
-    # Take the fileinfo dict lock, delete ourselves, and unlock.
-    fileinfolock.acquire()
+    # Make sure we are closed
     try:
-      del fileinfo[myfilehandle]['fobj']
-      del fileinfo[myfilehandle]
-    except KeyError:
-      pass
-    finally:
-      fileinfolock.release()
+      self.close()
+    except FileClosedError:
+      pass # Good, we are already closed.
+
 
 # End of emulated_file class
