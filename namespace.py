@@ -641,7 +641,7 @@ USERCONTEXT_WRAPPER_INFO = {
        'args' : [],
        'return' : Str()},
   'createvirtualnamespace' :
-      {'func' : virtual_namespace.get_VirtualNamespace,
+      {'func' : virtual_namespace.createvirtualnamespace,
        'args' : [Str(), Str()],
        'return' : VirtualNamespace()},
   'getresources' :
