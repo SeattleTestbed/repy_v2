@@ -17,14 +17,14 @@ import safe
 # Used to check that an API call is allowed
 import restrictions
 
+# Get the errors
+from exception_hierarchy import *
+
 # This is to work around safe...
 safe_compile = compile
 
 # Functional constructor for VirtualNamespace
-def get_VirtualNamespace(code, name="<string>"):
-  # Check if this is allows
-  restrictions.assertisallowed('VirtualNamespace')
-
+def createvirtualnamespace(code, name):
   return VirtualNamespace(code,name)
 
 # This class is used to represent a namespace
@@ -36,7 +36,7 @@ class VirtualNamespace(object):
   """
 
   # Constructor
-  def __init__(self, code, name="<string>"):
+  def __init__(self, code, name):
     """
     <Purpose>
       Initializes the VirtualNamespace class.
@@ -52,18 +52,18 @@ class VirtualNamespace(object):
           the traceback.
 
     <Exceptions>
-      A safety check is performed on the code, and a ValueError exception will be raised
+      A safety check is performed on the code, and a CodeUnsafeError exception will be raised
       if the code fails the safety check. 
 
-      If code or name are not string types, a TypeError exception will be raised.
+      If code or name are not string types, a RepyArgumentError exception will be raised.
     """
     # Check for the code
     # Do a type check
     if type(code) is not str:
-      raise TypeError, "Code must be a string!"
+      raise RepyArgumentError, "Code must be a string!"
 
     if type(name) is not str:
-      raise TypeError, "Name must be a string!"
+      raise RepyArgumentError, "Name must be a string!"
 
     # Remove any windows carriage returns
     code = code.replace('\r\n','\n')
@@ -72,7 +72,7 @@ class VirtualNamespace(object):
     try:
       safe.serial_safe_check(code)
     except Exception, e:
-      raise ValueError, "Code failed safety check! Error: "+str(e)
+      raise CodeUnsafeError, "Code failed safety check! Error: "+str(e)
 
     # All good, store the compiled byte code
     self.code = safe_compile(code,name,"exec")
@@ -91,8 +91,8 @@ class VirtualNamespace(object):
 
     <Exceptions>
       Any that may be raised by the code that is being evaluated.
-      A TypeError exception will be raised if the provided context is not
-      a safe dictionary object or a ValueError exception if the
+      A RepyArgumentError exception will be raised if the provided context is not
+      a safe dictionary object or a ContextUnsafeError if the
       context is a dict but cannot be converted into a SafeDict.
 
     <Returns>
@@ -106,11 +106,11 @@ class VirtualNamespace(object):
       try:
         context = safe.SafeDict(context)
       except Exception, e:
-        raise ValueError, "Provided context is not safe! Exception: "+str(e)
+        raise ContextUnsafeError, "Provided context is not safe! Exception: "+str(e)
 
     # Type check
     if not isinstance(context, safe.SafeDict):
-      raise TypeError, "Provided context is not a safe dictionary!"
+      raise RepyArgumentError, "Provided context is not a safe dictionary!"
 
     # Call safe_run with the underlying dictionary
     safe.safe_run(self.code, context.__under__)
