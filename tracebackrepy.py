@@ -38,7 +38,7 @@ import servicelogger
 import harshexit
 
 # Get the exception hierarchy
-import exception_hierarcy
+import exception_hierarchy
 
 # needed to get the PID
 import os
@@ -59,12 +59,18 @@ def initialize(useservlog=False, logdir = '.'):
   logdirectory = logdir
 
 
-# Public: this prints the previous exception in a readable way...
-def handle_exception():
+def format_exception():
   """
+  <Purpose>
+    Creates a string containing traceback and debugging information
+    for the current exception that is being handled in this thread.
+
+  <Returns>
+    A human readable string containing debugging information.
+
   This is an example traceback:
   ---
-  Uncaught exception! Following is a full traceback, and a user traceback.
+  Following is a full traceback, and a user traceback.
   The user traceback excludes non-user modules. The most recent call is displayed last.
 
   Full debugging traceback:
@@ -90,7 +96,6 @@ def handle_exception():
   Unsafe call: ('__import__',)
   ---
   """
-
   # exc_info() gives the traceback (see the traceback module for info)
   exceptiontype, exceptionvalue, exceptiontraceback = sys.exc_info()
  
@@ -126,36 +131,41 @@ def handle_exception():
       filtered_tb += stack_frame
 
 
-  # Print some general info
-  print >> sys.stderr, "---\nUncaught exception! Following is a full traceback, and a user traceback.\n" \
-                        "The user traceback excludes non-user modules. The most recent call is displayed last.\n"
+  # Construct the debug string
+  debug_str = "---\nFollowing is a full traceback, and a user traceback.\n" \
+              "The user traceback excludes non-user modules. The most recent call is displayed last.\n\n"
 
-  # Print the full traceback first
-  print >> sys.stderr, "Full debugging traceback:\n",full_tb
-      
-  print >> sys.stderr, "User traceback:\n",filtered_tb
-
+  debug_str += "Full debugging traceback:\n" + full_tb + "\n"
+  debug_str += "User traceback:\n" + filtered_tb + "\n"
 
   # When I try to print an Exception object, I get:
   # "<type 'exceptions.Exception'>".   I'm going to look for this and produce
   # more sensible output if it happens.
-
   if exceptiontype is exception_hierarchy.CheckNodeException:
-    print >> sys.stderr, "Unsafe call with line number / type:",str(exceptionvalue)
-
+    debug_str += "Unsafe call with line number / type: " + str(exceptionvalue)
   elif exceptiontype is exception_hierarchy.CheckStrException:
-    print >> sys.stderr, "Unsafe string on line number / string:",exceptionvalue
-
+    debug_str += "Unsafe string on line number / string: " + str(exceptionvalue)
   elif exceptiontype is exception_hierarchy.RunBuiltinException:
-    print >> sys.stderr, "Unsafe call:",exceptionvalue
-
+    debug_str += "Unsafe call: " + str(exceptionvalue)
   elif str(exceptiontype)[0] == '<':
-    print >> sys.stderr, "Exception (with "+str(exceptiontype)[1:-1]+"):", exceptionvalue
+    debug_str += "Exception (with "+str(exceptiontype)[1:-1]+"): " + str(exceptionvalue)
   else:
-    print >> sys.stderr, "Exception (with type "+str(exceptiontype)+"):", exceptionvalue
+    debug_str += "Exception (with type "+str(exceptiontype)+"): " + str(exceptionvalue)
 
-  # Print another line so that the end of the output is clear
-  print >> sys.stderr, "---"
+  debug_str += "\n---"
+
+  # Return the debug string
+  return debug_str
+
+
+# This function is called when there is an uncaught exception prior to exiting
+def handle_exception():
+  # Get the debug string
+  debug_str = format_exception()
+
+  # Print "Uncaught exception!", followed by the debug string
+  print >> sys.stderr, "---\nUncaught exception!\n",debug_str 
+
 
 
 def handle_internalerror(error_string, exitcode):
