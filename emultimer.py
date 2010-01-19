@@ -23,6 +23,8 @@ import tracebackrepy
 # for harshexit
 import harshexit
 
+# Import the exception hierarchy
+from exception_hierarchy import *
 
 ##### Constants
 

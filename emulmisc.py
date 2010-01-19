@@ -26,6 +26,7 @@ import tracebackrepy    # for os.urandom so exception can be logged internally
 import nonportable      # for getruntime
 import harshexit        # for harshexit()
 import threading        # for Lock()
+from exception_hierarchy import *
 
 ##### Public Functions
 
