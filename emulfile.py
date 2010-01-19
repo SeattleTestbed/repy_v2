@@ -303,7 +303,8 @@ class emulated_file:
   # and is the unique handle used to tattle the "filesopened" to nanny.
   #
   # fobj is the actual underlying file-object from python.
-  __slots__ = ["filename", "abs_filename", "fobj"]
+  # seek_lock is a Lock object to serialize seeking
+  __slots__ = ["filename", "abs_filename", "fobj", "seek_lock"]
 
   def __init__(self, filename, abs_filename):
     """
@@ -345,7 +346,7 @@ class emulated_file:
     # file resources).
     try:
       nanny.tattle_add_item('filesopened', abs_filename)
-    except Exception:
+    except ResourceExhaustedError:
       # Ok, maybe we can free up a file by garbage collecting.
       gc.collect()
       nanny.tattle_add_item('filesopened', abs_filename)
@@ -357,6 +358,9 @@ class emulated_file:
 
     # Add the filename to the open files
     OPEN_FILES.add(filename)
+
+    # Store a seek lock
+    self.seek_lock = threading.Lock()
 
 
 
@@ -383,7 +387,10 @@ class emulated_file:
 
     # Tell nanny we're gone.
     nanny.tattle_remove_item('filesopened', self.abs_filename)
-   
+    
+    # Acquire the seek lock
+    self.seek_lock.acquire()
+  
     try:
       # Release the file object
       fobj = self.fobj
@@ -397,59 +404,153 @@ class emulated_file:
       OPEN_FILES.remove(self.filename)
 
     finally:
+      # Release the two locks we hold
+      self.seek_lock.release()
       OPEN_FILES_LOCK.release()
 
 
-  def readat(self,sizelimit, offset):
-    ### TODO: V2 Implementation
+  def readat(self,sizelimit,offset):
+    """
+    <Purpose>
+      Reads from a file handle. Reading 0 bytes informs you if you have read
+      pas the end-of-file, but returns no data.
 
-    # prevent TOCTOU race with client changing my filehandle
-    myfilehandle = self.filehandle
-    restrictions.assertisallowed('file.read',*args)
+    <Arguments>
+      sizelimit: 
+        The maximum number of bytes to read from the file. Reading EOF will read less.
+      offset:
+        Seek to a specific absolute offset before reading.
 
-    # basic sanity checking of input
-    if len(args) > 1:
-      raise TypeError("read() takes at most 1 argument")
+    <Exceptions>
+      RepyArgumentError is raised if the offset or size is negative.
+      FileClosedError is raised if the file is already closed.
+      SeekPastEndOfFileError is raised if trying to read past the end of the file.
 
-    if len(args) == 1 and type(args[0]) != int:
-      raise TypeError("file.read() expects an integer argument")
+    <Resource Consumption>
+      Consumes 4K of fileread for each 4K aligned-block of the file read.
+      All reads will consume at least 4K.
 
-    # wait if it's already over used
-    nanny.tattle_quantity('fileread',0)
+    <Returns>
+      The data that was read. This may be the empty string if we have reached the
+      end of the file, or if the sizelimit was 0.
+    """
+    # Check the arguments
+    if sizelimit < 0:
+      raise RepyArgumentError, "Negative sizelimit specified!"
+    if offset < 0:
+      raise RepyArgumentError, "Negative read offset speficied!"
+
+    # Get the underlying file object
+    fobj = self.fobj
+    if fobj is None:
+      raise FileClosedError, "File '"+self.filename+"' is already closed!"
+
+    # Get the seek lock
+    self.seek_lock.acquire()
 
     try:
-      readdata = fileinfo[myfilehandle]['fobj'].read(*args)
-    except KeyError:
-      raise ValueError("Invalid file object (probably closed).")
+      # Get the file's size, seek to the end.
+      fobj.seek(0, os.SEEK_END)
+      filesize = fobj.tell()
 
-    nanny.tattle_quantity('fileread',len(readdata))
+      # Check the provided offset
+      if offset > filesize:
+        raise SeekPastEndOfFileError, "Seek offset extends past the EOF!"
+      
+      # Seek to the correct location
+      fobj.seek(offset)
 
-    return readdata
+      # Wait for available file read resources
+      nanny.tattle_quantity('fileread',0)
+
+      # Read the data
+      data = fobj.read(sizelimit)
+
+    finally:
+      # Release the seek lock
+      self.seek_lock.release()
+
+    # Check how much we've read, in terms of 4K "blocks"
+    end_offset = len(data) + offset
+    disk_blocks_read = end_offset / 4096 - offset / 4096
+    if end_offset % 4096 > 0:
+      disk_blocks_read += 1
+
+    # Charge 4K per block
+    nanny.tattle_quantity('fileread', disk_blocks_read*4096)
+
+    # Return the data
+    return data
 
 
+  def writeat(self,data,offset):
+    """
+    <Purpose>
+      Allows the user program to write data to a file.
 
-  def writeat(self,data, offset):
-    ### TODO: V2 Implementation
+    <Arguments>
+      data: The data to write
+      offset: An absolute offset into the file to write
 
-    # prevent TOCTOU race with client changing my filehandle
-    myfilehandle = self.filehandle
-    restrictions.assertisallowed('file.write',writeitem)
+    <Exceptions>
+      FileClosedError is raised if the file is already closed.
+      SeekPastEndOfFileError is raised if trying to write past the EOF.
+      RepyArgumentError is raised if the offset is negative.
 
-    # wait if it's already over used
-    nanny.tattle_quantity('filewrite',0)
+    <Side Effects>
+      Writes to persistent storage.
 
-    if "w" in self.mode:
-      try:
-        retval = fileinfo[myfilehandle]['fobj'].write(writeitem)
-      except KeyError:
-        raise ValueError("Invalid file object (probably closed).")
-    else:
-      raise ValueError("write() isn't allowed on read-only file objects!")
+    <Resource Consumption>
+      Consumes 4K of filewrite for each 4K aligned-block of the file written.
+      All writes consume at least 4K.
 
-    writeamt = len(str(writeitem))
-    nanny.tattle_quantity('filewrite',writeamt)
+    <Returns>
+      Nothing
+    """
+    # Check the arguments
+    if offset < 0:
+      raise RepyArgumentError, "Negative read offset speficied!"
 
-    return retval
+    # Get the underlying file object
+    fobj = self.fobj
+    if fobj is None:
+      raise FileClosedError, "File '"+self.filename+"' is already closed!"
+
+    # Get the seek lock
+    self.seek_lock.acquire()
+
+    try:
+      # Get the file's size, seek to the end.
+      fobj.seek(0, os.SEEK_END)
+      filesize = fobj.tell()
+
+      # Check the provided offset
+      if offset > filesize:
+        raise SeekPastEndOfFileError, "Seek offset extends past the EOF!"
+      
+      # Seek to the correct location
+      fobj.seek(offset)
+
+      # Wait for available file write resources
+      nanny.tattle_quantity('filewrite',0)
+
+      # Write the data and flush to disk
+      fobj.write(data)
+      fobj.flush()
+
+    finally:
+      # Release the seek lock
+      self.seek_lock.release()
+
+    # Check how much we've written, in terms of 4K "blocks"
+    end_offset = len(data) + offset
+    disk_blocks_written = end_offset / 4096 - offset / 4096
+    if end_offset % 4096 > 0:
+      disk_blocks_written += 1
+
+    # Charge 4K per block
+    nanny.tattle_quantity('filewrite', disk_blocks_written*4096)
+
 
   def __del__(self):
     # Make sure we are closed
