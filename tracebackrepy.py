@@ -37,9 +37,8 @@ import servicelogger
 # We need to be able to do a harshexit on internal errors
 import harshexit
 
-# I'd like to know if it's a "safety concern" so I can tell the user...
-# I'll import the module so I can check the exceptions
-import safety_exceptions
+# Get the exception hierarchy
+import exception_hierarcy
 
 # needed to get the PID
 import os
@@ -141,13 +140,13 @@ def handle_exception():
   # "<type 'exceptions.Exception'>".   I'm going to look for this and produce
   # more sensible output if it happens.
 
-  if exceptiontype is safety_exceptions.CheckNodeException:
+  if exceptiontype is exception_hierarchy.CheckNodeException:
     print >> sys.stderr, "Unsafe call with line number / type:",str(exceptionvalue)
 
-  elif exceptiontype is safety_exceptions.CheckStrException:
+  elif exceptiontype is exception_hierarchy.CheckStrException:
     print >> sys.stderr, "Unsafe string on line number / string:",exceptionvalue
 
-  elif exceptiontype is safety_exceptions.RunBuiltinException:
+  elif exceptiontype is exception_hierarchy.RunBuiltinException:
     print >> sys.stderr, "Unsafe call:",exceptionvalue
 
   elif str(exceptiontype)[0] == '<':

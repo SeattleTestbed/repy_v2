@@ -68,7 +68,7 @@ import harshexit    # This is to kill the external process on timeout
 import nonportable  # This is to get the current runtime
 import os           # This is for some path manipulation
 import repy_constants # This is to get our start-up directory
-import safety_exceptions # This is for exception classes shared with tracebackrepy
+import exception_hierarchy # This is for exception classes shared with tracebackrepy
 import compiler
 import platform # This is for detecting Nokia tablets
 import __builtin__
@@ -139,13 +139,13 @@ def _is_string_safe(token):
 
 def _check_node(node):
     if node.__class__.__name__ not in _NODE_CLASS_OK:
-        raise safety_exceptions.CheckNodeException(node.lineno,node.__class__.__name__)
+        raise exception_hierarchy.CheckNodeException(node.lineno,node.__class__.__name__)
     for k,v in node.__dict__.items():
         if k in _NODE_ATTR_OK: continue
 
         # Check the safety of any strings
         if not _is_string_safe(v):
-          raise safety_exceptions.CheckStrException(node.lineno,k,v)
+          raise exception_hierarchy.CheckStrException(node.lineno,k,v)
 
     for child in node.getChildNodes():
         _check_node(child)
@@ -177,7 +177,7 @@ _BUILTIN_STR = [
 
 def _builtin_fnc(k):
     def fnc(*vargs,**kargs):
-        raise safety_exceptions.RunBuiltinException(k)
+        raise exception_hierarchy.RunBuiltinException(k)
     return fnc
 _builtin_globals = None
 _builtin_globals_r = None
@@ -288,7 +288,7 @@ def safe_check(code):
       
     else:
       # Raise the error from the output
-      raise safety_exceptions.SafeException, output
+      raise exception_hierarchy.SafeException, output
 
 
 # Have the builtins already been destroyed?
@@ -439,48 +439,48 @@ if __name__ == '__main__':
     
     class TestSafe(unittest.TestCase):
         def test_check_node_import(self):
-            self.assertRaises(safety_exceptions.CheckNodeException,safe_exec,"import os")
+            self.assertRaises(exception_hierarchy.CheckNodeException,safe_exec,"import os")
         def test_check_node_from(self):
-            self.assertRaises(safety_exceptions.CheckNodeException,safe_exec,"from os import *")
+            self.assertRaises(exception_hierarchy.CheckNodeException,safe_exec,"from os import *")
         def test_check_node_exec(self):
-            self.assertRaises(safety_exceptions.CheckNodeException,safe_exec,"exec 'None'")
+            self.assertRaises(exception_hierarchy.CheckNodeException,safe_exec,"exec 'None'")
         def test_check_node_raise(self):
-            self.assertRaises(safety_exceptions.CheckNodeException,safe_exec,"raise Exception")
+            self.assertRaises(exception_hierarchy.CheckNodeException,safe_exec,"raise Exception")
         def test_check_node_global(self):
-            self.assertRaises(safety_exceptions.CheckNodeException,safe_exec,"global abs")
+            self.assertRaises(exception_hierarchy.CheckNodeException,safe_exec,"global abs")
         
         def test_check_str_x(self):
-            self.assertRaises(safety_exceptions.CheckStrException,safe_exec,"x__ = 1")
+            self.assertRaises(exception_hierarchy.CheckStrException,safe_exec,"x__ = 1")
         def test_check_str_str(self):
-            self.assertRaises(safety_exceptions.CheckStrException,safe_exec,"x = '__'")
+            self.assertRaises(exception_hierarchy.CheckStrException,safe_exec,"x = '__'")
         def test_check_str_class(self):
-            self.assertRaises(safety_exceptions.CheckStrException,safe_exec,"None.__class__")
+            self.assertRaises(exception_hierarchy.CheckStrException,safe_exec,"None.__class__")
         def test_check_str_func_globals(self):
-            self.assertRaises(safety_exceptions.CheckStrException,safe_exec,"def x(): pass; x.func_globals")
+            self.assertRaises(exception_hierarchy.CheckStrException,safe_exec,"def x(): pass; x.func_globals")
         def test_check_str_init(self):
             safe_exec("def __init__(self): pass")
         def test_check_str_subclasses(self):
-            self.assertRaises(safety_exceptions.CheckStrException,safe_exec,"object.__subclasses__")
+            self.assertRaises(exception_hierarchy.CheckStrException,safe_exec,"object.__subclasses__")
         def test_check_str_properties(self):
             code = """
 class X(object):
     def __get__(self,k,t=None):
         1/0
 """
-            self.assertRaises(safety_exceptions.CheckStrException,safe_exec,code)
+            self.assertRaises(exception_hierarchy.CheckStrException,safe_exec,code)
         def test_check_str_unicode(self):
-            self.assertRaises(safety_exceptions.CheckStrException,safe_exec,"u'__'")
+            self.assertRaises(exception_hierarchy.CheckStrException,safe_exec,"u'__'")
         
         def test_run_builtin_open(self):
-            self.assertRaises(safety_exceptions.RunBuiltinException,safe_exec,"open('test.txt','w')")
+            self.assertRaises(exception_hierarchy.RunBuiltinException,safe_exec,"open('test.txt','w')")
         def test_run_builtin_getattr(self):
-            self.assertRaises(safety_exceptions.RunBuiltinException,safe_exec,"getattr(None,'x')")
+            self.assertRaises(exception_hierarchy.RunBuiltinException,safe_exec,"getattr(None,'x')")
         def test_run_builtin_abs(self):
             safe_exec("abs(-1)")
         def test_run_builtin_open_fnc(self):
             def test():
                 f = open('test.txt','w')
-            self.assertRaises(safety_exceptions.RunBuiltinException,safe_exec,"test()",{'test':test})
+            self.assertRaises(exception_hierarchy.RunBuiltinException,safe_exec,"test()",{'test':test})
         def test_run_builtin_open_context(self):
             #this demonstrates how python jumps into some mystical
             #restricted mode at this point .. causing this to throw
@@ -491,7 +491,7 @@ class X(object):
             #python's mystical restricted mode doesn't throw anything.
             safe_exec("test(1)",{'test':type})
         def test_run_builtin_dir(self):
-            self.assertRaises(safety_exceptions.RunBuiltinException,safe_exec,"dir(None)")
+            self.assertRaises(exception_hierarchy.RunBuiltinException,safe_exec,"dir(None)")
         
         def test_run_exeception_div(self):
             self.assertRaises(ZeroDivisionError,safe_exec,"1/0")
@@ -541,7 +541,7 @@ def test2():
     open('test.txt','w')
 test(test2)
 """,{'test':test})
-            self.assertRaises(safety_exceptions.RunBuiltinException,safe_exec,"test()",{'test':self.value})
+            self.assertRaises(exception_hierarchy.RunBuiltinException,safe_exec,"test()",{'test':self.value})
         
         def test_misc_context_junk(self):
             #test that stuff isn't being added into *my* context
@@ -555,7 +555,7 @@ test(test2)
             #at least we've got it covered ...
             c = {}
             safe_exec("def test(): open('test.txt','w')",c)
-            self.assertRaises(safety_exceptions.RunBuiltinException,c['test'])
+            self.assertRaises(exception_hierarchy.RunBuiltinException,c['test'])
         
         #def test_misc_test(self):
             #code = "".join(open('test.py').readlines())
@@ -592,7 +592,7 @@ foo=type('Foo', (object,), {'_' + '_del_' + '_':delmethod})()
 foo.error
 """
             try:
-                self.assertRaises(safety_exceptions.RunBuiltinException,safe_exec,code)
+                self.assertRaises(exception_hierarchy.RunBuiltinException,safe_exec,code)
             finally:
                 pass
             
