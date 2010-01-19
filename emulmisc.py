@@ -20,7 +20,6 @@
      to log when os.urandom raises a NotImplementedError.
 """
 
-import restrictions
 import nanny
 import os               # for os.urandom(7)
 import tracebackrepy    # for os.urandom so exception can be logged internally
@@ -28,38 +27,31 @@ import nonportable      # for getruntime
 import harshexit        # for harshexit()
 import threading        # for Lock()
 
-# Public interface!
-def randomfloat():
+##### Public Functions
+
+def randombytes():
   """
-   <Purpose>
-     Return a random number in the range [0.0, 1.0) using sources 
-     provided by the operating system (such as /dev/urandom on Unix or
-     CryptGenRandom on Windows).
+  <Purpose>
+    Return a string of random bytes with length 1024
 
-   <Arguments>
-     None
+  <Arguments>
+    None.
 
-   <Exceptions>
-     None
+  <Exceptions>
+    None.
 
-   <Side Effects>
-     This function is metered because it may involve using a hardware
-     source of randomness.
-     
-     If os.urandom raises a NotImplementedError then we will log the
-     exception as interalerror and a harshexit will occur. A machine
-     that raised this exception has not been observed but it is best
-     that the problemed be logged. os.urandom will raise the exception
-     if a source of OS-specific random numbers is not found.
+  <Side Effects>
+    This function is metered because it may involve using a hardware source of randomness.
 
-   <Returns>
-     The number (a float)
+  <Resource Consumption>
+    This operation consumes 1024 bytes of random data.
 
+  <Returns>
+    The string of bytes.
   """
+  # Wait for random resources
+  nanny.tattle_quantity('random', 0)
 
-  restrictions.assertisallowed('randomfloat')
-  nanny.tattle_quantity('random',1)
-  
   # If an OS-specific source of randomness is not a found
   # a NotImplementedError would be raised. 
   # Anthony - a NotImplementedError will be logged as an internal
@@ -67,33 +59,23 @@ def randomfloat():
   # the exception is not passed on because the problem was not
   # caused by the user. The exit code 217 was chosen to be
   # unique from all other exit calls in repy.
-  # Get 56 bits of random data
   try:
-    randombytes = os.urandom(7)
+    randombytes = os.urandom(1024)
   except NotImplementedError, e:
     tracebackrepy.handle_internalerror("os.urandom is not implemented " + \
         "(Exception was: %s)" % e.message, 217)
 
-  
-  randomint = 0L
-  for i in range(0, 7):
-    randomint = (randomint << 8) 
-    randomint = randomint + ord(randombytes[i]) 
-
-  # Trim off the excess bits to get 53bits
-  randomint = randomint >> 3
-  # randomint is a number between 0 and 2**(53) - 1
-  
-  return randomint * (2**(-53))
+  # Tattle all 1024 now
+  nanny.tattle_quantity('random',1024)
+ 
+  return randombytes
 
 
-# Public interface!
 def getruntime():
   """
    <Purpose>
       Return the amount of time the program has been running.   This is in
-      wall clock time.   This function is not guaranteed to always return
-      increasing values due to NTP, etc.
+      wall clock time. This is guaranteed to be monotonic.
 
    <Arguments>
       None
@@ -104,17 +86,12 @@ def getruntime():
    <Side Effects>
       None
 
-   <Remarks>
-      Accurate granularity not guaranteed past 1 second.
-
    <Returns>
       The elapsed time as float
   """
-  restrictions.assertisallowed('getruntime')
   return nonportable.getruntime()
 
 
-# public interface
 def exitall():
   """
    <Purpose>
@@ -135,20 +112,14 @@ def exitall():
    <Returns>
       None.   The current thread does not resume after exit
   """
-
-  restrictions.assertisallowed('exitall')
-
   harshexit.harshexit(200)
 
 
-
-
-# public interface
-def getlock():
+def createlock():
   """
    <Purpose>
       Returns a lock object to the user program.    A lock object supports
-      two functions: acquire and release.   See threading.Lock() for details
+      two functions: acquire and release.
 
    <Arguments>
       None.
@@ -162,15 +133,11 @@ def getlock():
    <Returns>
       The lock object.
   """
-
-  restrictions.assertisallowed('getlock')
-
-  # I'm a little worried about this, but it should be safe.
-  return threading.Lock()
+  # Return an instance of emulated_lock
+  return emulated_lock()
 
 
-# Public interface
-def get_thread_name():
+def getthreadname():
   """
   <Purpose>
     Returns a string identifier for the currently executing thread.
@@ -188,14 +155,67 @@ def get_thread_name():
   <Returns>
     A string identifier.
   """
-
-  # Check if this is allows
-  restrictions.assertisallowed('get_thread_name')
-
   # Get the thread object
   tobj = threading.currentThread()
 
   # Return the name
   return tobj.getName()
+
+
+##### Class Declarations
+
+class emulated_lock (Object):
+  # We only have a single instance variable, "lock"
+  # which is a threading.Lock() object
+  __slots__ = ["lock"]
+
+  def __init__(self):
+    # Create our lock
+    self.lock = threading.Lock()
+
+
+  def acquire(blocking):
+    """
+    <Purpose>
+      Acquires the lock.
+
+    <Arguments>
+      blocking:
+          If False, returns immediately instead of waiting to acquire the lock.
+
+    <Exceptions>
+      None.
+
+    <Side Effects>
+      If successful, locks the object.
+
+    <Returns>
+     True if the lock was acquired.
+    """
+    # Call down
+    return self.lock.acquire(blocking)
+
+
+  def release():
+    """
+    <Purpose>
+      Releases the lock.
+
+    <Arguments>
+      None
+
+    <Exceptions>
+      LockDoubleReleaseError if release is called on an unlocked lock.
+
+    <Side Effects>
+      Unlocks the object.
+
+    <Returns>
+      None
+    """
+    try:
+      self.lock.release()
+    except:
+      raise LockDoubleReleaseError, "Releasing an un-locked lock!"
 
 
