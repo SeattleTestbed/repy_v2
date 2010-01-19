@@ -8,7 +8,7 @@ to import a single file to have access to all the defined exceptions.
 
 ##### High-level, generic exceptions
 
-class InternalRepyException (Exception):
+class InternalRepyError (Exception):
   """
   All Fatal Repy Exceptions derive from this exception.
   This error should never make it to the user-code.
@@ -40,6 +40,13 @@ class ResourceExhaustedError (ResourceUsageError):
   This Exception indicates that a resource has been
   Exhausted, and that the operation has failed for that
   reason.
+  """
+  pass
+
+class ResourceForbiddenError (ResourceUsageError):
+  """
+  This Exception indicates that a specified resource
+  is forbidden, and cannot be used.
   """
   pass
 
