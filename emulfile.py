@@ -61,7 +61,7 @@ OPEN_FILES = set([])
 def listfiles():
   """
    <Purpose>
-      Allows the user program to get a list of files in their area.
+      Allows the user program to get a list of files in their vessel.
 
    <Arguments>
       None
@@ -163,6 +163,9 @@ def emulated_open(filename, create):
       FileNotFoundError is raised if the filename is not found, and create is False.
       FileInUseError is raised if a handle to the file is already open.
       ResourceExhaustedError is raised if there are no available file handles.
+
+   <Side Effects>
+      Opens a file on disk, uses a file descriptor.
 
    <Resource Consumption>
       Consumes 4K of fileread. If the file is created, then 4K of filewrite is used.
