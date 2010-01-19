@@ -29,6 +29,9 @@ import tracebackrepy
 import nanny_resource_limits
 nanny_resource_limits.init(nonportable.getruntime)
 
+# Import the exception hierarchy
+from exception_hierarchy import *
+
 # These are resources that drain / replenish over time
 renewable_resources = nanny_resource_limits.renewable_resources
 
@@ -121,7 +124,7 @@ def sleep_until_resource_drains(resource):
 
   # It'll never drain!
   if resource_restriction_table[resource] == 0:
-    raise Exception, "Resource '"+resource+"' limit set to 0, won't drain!"
+    raise InternalRepyError, "Resource '"+resource+"' limit set to 0, won't drain!"
     
 
   # We may need to go through this multiple times because other threads may
@@ -152,7 +155,7 @@ def initialize_consumed_resource_tables():
       None.
          
    <Exceptions>
-      None.
+      InternalRepyError is raised if a resource is specified as both quantity and item based.
 
    <Side Effects>
       Flushes the resource consumption tables if they were already set up.
@@ -168,7 +171,7 @@ def initialize_consumed_resource_tables():
   for resource in item_resources:
     # double check there is no overlap...
     if resource in quantity_resources:
-      raise Exception, "Resource cannot be both quantity and item based!"
+      raise InternalRepyError, "Resource cannot be both quantity and item based!"
 
     resource_consumption_table[resource] = set()
 
@@ -278,7 +281,8 @@ def tattle_add_item(resource, item):
          each item used.
          
    <Exceptions>
-      Exception if the program attempts to use too many resources.
+      InternalRepyError is raised if the consumption of the resource has exceded the limit.
+      ResourceExhaustedError is raised if the resource is currently at the usage limit.
 
    <Side Effects>
       None.
@@ -297,11 +301,11 @@ def tattle_add_item(resource, item):
       return
 
     if len(resource_consumption_table[resource]) > resource_restriction_table[resource]:
-      raise InternalError, "Should not be able to exceed resource count"
+      raise InternalRepyError, "Should not be able to exceed resource count"
 
     if len(resource_consumption_table[resource]) == resource_restriction_table[resource]:
       # it's clobberin time!
-      raise Exception, "Resource '"+resource+"' limit exceeded!!"
+      raise ResourceExhaustedError, "Resource '"+resource+"' limit exceeded!!"
 
     # add the item to the list.   We're done now...
     resource_consumption_table[resource].add(item)
@@ -368,7 +372,7 @@ def tattle_check(resource, item):
          opaque to the nanny.   
          
    <Exceptions>
-      Exception if the program attempts to use an invalid resource.
+      ResourceForbiddenError is raised if an invalid resource is specified.
 
    <Side Effects>
       None.
@@ -378,6 +382,6 @@ def tattle_check(resource, item):
   """
 
   if item not in resource_restriction_table[resource]:
-    raise Exception, "Resource '"+resource+" "+str(item)+"' not allowed!!!"
+    raise ResourceForbiddenError, "Resource '"+resource+" "+str(item)+"' not allowed!!!"
 
   resource_consumption_table[resource].add(item)
