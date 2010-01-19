@@ -66,7 +66,8 @@ def format_exception():
     for the current exception that is being handled in this thread.
 
   <Returns>
-    A human readable string containing debugging information.
+    A human readable string containing debugging information. Returns
+    None if there is no exception being handled.
 
   This is an example traceback:
   ---
@@ -98,6 +99,10 @@ def format_exception():
   """
   # exc_info() gives the traceback (see the traceback module for info)
   exceptiontype, exceptionvalue, exceptiontraceback = sys.exc_info()
+
+  # Check if there is an exception
+  if exceptiontype is None:
+    return None
  
   # We store a full traceback, and a "filtered" user traceback to help the user
   full_tb = ""

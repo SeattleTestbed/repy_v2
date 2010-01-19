@@ -163,6 +163,25 @@ def getthreadname():
   return tobj.getName()
 
 
+def getlasterror():
+  """
+  <Purpose>
+    Obtains debugging information about the last exception that occured in the current thread.
+
+  <Arguments>
+    None
+
+  <Exceptions>
+    None
+
+  <Returns>
+    A string with details of the last exception in the current thread, or None if there is no such
+    exception.
+  """
+  # Call down into tracebackrepy
+  return tracebackrepy.format_exception()
+
+
 ##### Class Declarations
 
 class emulated_lock (Object):
