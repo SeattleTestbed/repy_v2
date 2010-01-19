@@ -27,6 +27,23 @@ class RepyArgumentError (RepyException):
   pass
 
 
+##### Code Safety Exceptions
+
+class CodeUnsafeError (RepyException):
+  """
+  This indicates that the static code analysis failed due to
+  unsafe constructions or a syntax error.
+  """
+  pass
+
+class ContextUnsafeError (RepyException):
+  """
+  This indicates that the context provided to evaluate() was
+  unsafe, and could not be converted into a SafeDict.
+  """
+  pass
+
+
 ##### Resource Related Exceptions
 
 class ResourceUsageError (RepyException):
