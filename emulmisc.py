@@ -184,7 +184,7 @@ def getlasterror():
 
 ##### Class Declarations
 
-class emulated_lock (Object):
+class emulated_lock (object):
   # We only have a single instance variable, "lock"
   # which is a threading.Lock() object
   __slots__ = ["lock"]
