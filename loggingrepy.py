@@ -27,7 +27,6 @@ class flush_logger(loggingrepy_core.flush_logger_core):
   """
 
   def write(self, writeitem):
-    restrictions.assertisallowed('log.write', writeitem)
     # block if already over
     nanny.tattle_quantity('lograte', 0)
 
@@ -40,7 +39,6 @@ class flush_logger(loggingrepy_core.flush_logger_core):
 
 
   def writelines(self, writelist):
-    restrictions.assertisallowed('log.writelines', writelist)
     # block if already over
     nanny.tattle_quantity('lograte', 0)
 
