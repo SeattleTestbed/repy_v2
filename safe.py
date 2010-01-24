@@ -196,6 +196,13 @@ def _builtin_init():
     # Armon: Make SafeDict available
     _builtin_globals["SafeDict"] = get_SafeDict
 
+    # Make the repy exception hierarchy available
+    # For every exception in the _EXPORTED_EXCEPTIONS list, make that available
+    # as a builtin
+    for exception_name in exception_hierarchy._EXPORTED_EXCEPTIONS:
+      _builtin_globals[exception_name] = exception_hierarchy.__dict__[exception_name]
+
+
 def _builtin_destroy():
     _builtin_init()
     for k,v in _builtin_globals.items():
