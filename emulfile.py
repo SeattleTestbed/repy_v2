@@ -32,9 +32,9 @@ import repy_constants
 # Import all the exceptions
 from exception_hierarchy import *
 
-# Store a reference to file, so that we retain access
+# Store a reference to open, so that we retain access
 # after the builtin's are disabled
-safe_file = file
+safe_open = open
 
 ##### Constants
 
