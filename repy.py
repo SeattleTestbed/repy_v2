@@ -48,7 +48,6 @@ import safe
 import sys
 import getopt
 import emulcomm
-import idhelper
 import namespace
 import nanny
 import restrictions
@@ -73,6 +72,13 @@ import virtual_namespace
 import tracebackrepy
 
 import nonportable
+
+from exception_hierarchy import *
+
+# BAD: REMOVE these imports after we remove the API calls
+import emulfile
+import emulmisc
+import emultimer
 
 # This block allows or denies different actions in the safe module.   I'm 
 # doing this here rather than the natural place in the safe module because
@@ -151,8 +157,20 @@ def main(restrictionsfn, program, args):
   # Allow some introspection by providing a reference to the context
   usercontext["_context"] = usercontext
 
-  # BAD:REMOVE
+  # BAD:REMOVE all API imports
   usercontext["getresources"] = nonportable.get_resources
+  usercontext["openfile"] = emulfile.emulated_open
+  usercontext["listfiles"] = emulfile.listfiles
+  usercontext["removefile"] = emulfile.removefile
+  usercontext["exitall"] = emulmisc.exitall
+  usercontext["createlock"] = emulmisc.createlock
+  usercontext["getruntime"] = emulmisc.getruntime
+  usercontext["randombytes"] = emulmisc.randombytes
+  usercontext["createthread"] = emultimer.createthread
+  usercontext["sleep"] = emultimer.sleep
+  usercontext["getthreadname"] = emulmisc.getthreadname
+  usercontext["createvirtualnamespace"] = virtual_namespace.createvirtualnamespace
+  usercontext["getlasterror"] = emulmisc.getlasterror
       
   # grab the user code from the file
   try:
@@ -162,7 +180,12 @@ def main(restrictionsfn, program, args):
     raise
 
   # Armon: Create the main namespace
-  main_namespace = virtual_namespace.VirtualNamespace(usercode, program)
+  try:
+    main_namespace = virtual_namespace.VirtualNamespace(usercode, program)
+  except CodeUnsafeError, e:
+    print "Specified repy program is unsafe!"
+    print "Static-code analysis failed with error: "+str(e)
+    harshexit.harshexit(5)
 
   # Let the code string get GC'ed
   usercode = None
@@ -180,13 +203,6 @@ def main(restrictionsfn, program, args):
   usercontext['callfunc'] = 'initialize'
   usercontext['callargs'] = args[:]
 
-  initialize_id = idhelper.getuniqueid()
-  try:
-    nanny.tattle_add_item('events', initialize_id)
-  except Exception, e:
-    tracebackrepy.handle_internalerror("Failed to aquire event for '" + \
-        "initialize' event.\n(Exception was: %s)" % e.message, 140)
-
   try:
     main_namespace.evaluate(usercontext)
   except SystemExit:
@@ -195,9 +211,6 @@ def main(restrictionsfn, program, args):
     # I think it makes sense to exit if their code throws an exception...
     tracebackrepy.handle_exception()
     harshexit.harshexit(6)
-  finally:
-    nanny.tattle_remove_item('events', initialize_id)
-
 
   # I've changed to the threading library, so this should increase if there are
   # pending events
@@ -206,31 +219,7 @@ def main(restrictionsfn, program, args):
     time.sleep(0.25)
 
 
-  # Once there are no more pending events for the user thread, we give them
-  # an "exit" event.   This allows them to clean up, etc. if needed.
-
-  # call the user program to notify them that we are exiting...
-  usercontext['callfunc'] = 'exit'
-
-  exit_id = idhelper.getuniqueid()
-  try:
-    nanny.tattle_add_item('events', exit_id)
-  except Exception, e:
-    tracebackrepy.handle_internalerror("Failed to aquire event for '" + \
-        "exit' event.\n(Exception was: %s)" % e.message, 141)
-
-  try:
-    main_namespace.evaluate(usercontext)
-  except SystemExit:
-    raise
-  except:
-    # I think it makes sense to exit if their code throws an exception...
-    tracebackrepy.handle_exception()
-    harshexit.harshexit(7)
-  finally:
-    nanny.tattle_remove_item('events', exit_id)
-
-  # normal exit...
+  # Once there are no more pending events for the user thread, we exit
   harshexit.harshexit(0)
 
 
