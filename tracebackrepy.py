@@ -65,6 +65,10 @@ def format_exception():
     Creates a string containing traceback and debugging information
     for the current exception that is being handled in this thread.
 
+  <Side Effects>
+    Calls sys.exc_clear(), so that we know this current exception has been
+    "handled".
+
   <Returns>
     A human readable string containing debugging information. Returns
     None if there is no exception being handled.
@@ -158,6 +162,9 @@ def format_exception():
     debug_str += "Exception (with type "+str(exceptiontype)+"): " + str(exceptionvalue)
 
   debug_str += "\n---"
+
+  # Clear the exception being handled
+  sys.exc_clear()
 
   # Return the debug string
   return debug_str
