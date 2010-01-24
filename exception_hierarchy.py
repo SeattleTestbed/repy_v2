@@ -5,6 +5,24 @@ to import a single file to have access to all the defined exceptions.
 
 """
 
+# This list maintains the exceptions that are exported to the user
+# If the exception is not listed here, the user cannot explicitly
+# catch that error.
+_EXPORTED_EXCEPTIONS = ["RepyException",
+                        "RepyArgumentError",
+                        "CodeUnsafeError",
+                        "ContextUnsafeError",
+                        "ResourceUsageError",
+                        "ResourceExhaustedError",
+                        "ResourceForbiddenError",
+                        "FileError",
+                        "FileNotFoundError",
+                        "FileInUseError",
+                        "SeekPastEndOfFileError",
+                        "FileClosedError",
+                       ]
+
+
 
 ##### High-level, generic exceptions
 
