@@ -194,7 +194,7 @@ class emulated_lock (object):
     self.lock = threading.Lock()
 
 
-  def acquire(blocking):
+  def acquire(self, blocking):
     """
     <Purpose>
       Acquires the lock.
@@ -216,7 +216,7 @@ class emulated_lock (object):
     return self.lock.acquire(blocking)
 
 
-  def release():
+  def release(self):
     """
     <Purpose>
       Releases the lock.
