@@ -97,6 +97,7 @@ safe._BUILTIN_OK.append("BaseException")
 safe._BUILTIN_OK.append("WindowsError")
 safe._BUILTIN_OK.append("type")
 safe._BUILTIN_OK.append("issubclass")
+safe._BUILTIN_OK.append("callable") # Armon: Convenient for user-level input checking. Need for emultimer
 # needed to allow primitive marshalling to be built
 safe._BUILTIN_OK.append("ord")
 safe._BUILTIN_OK.append("chr")
