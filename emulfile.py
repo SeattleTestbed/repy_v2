@@ -125,7 +125,7 @@ def removefile(filename):
 
     # Try to remove the file
     if not os.remove(filename):
-      raise InternalRepyException, "os.remove call on '"filename"' should have succeeded. Failed."
+      raise InternalRepyException, "os.remove call on '"+filename+"' should have succeeded. Failed."
 
     # Consume the filewrite resources
     nanny.tattle_quantity('filewrite',4096)
@@ -178,6 +178,18 @@ def emulated_open(filename, create):
   try:
     # Check that the filename can be used
     abs_filename, exists = check_can_use_filename(filename, False)
+
+    # Here is where we try to allocate a "file" resource from the
+    # nanny system. If that fails, we garbage collect and try again
+    # (this forces __del__() methods to be called on objects with
+    # no references, which is how we automatically free up
+    # file resources).
+    try:
+      nanny.tattle_add_item('filesopened', abs_filename)
+    except ResourceExhaustedError:
+      # Ok, maybe we can free up a file by garbage collecting.
+      gc.collect()
+      nanny.tattle_add_item('filesopened', abs_filename)
 
     # If the file does not exist, and we should create or through an exception
     if not exists:
@@ -312,9 +324,9 @@ class emulated_file:
   def __init__(self, filename, abs_filename):
     """
      <Purpose>
-        Allows the user program to open a file safely.   This function is not
-        meant to resemble the builtin "open". The OPEN_FILES_LOCK should be
-        acquired prior to calling this method.
+        This is an internal initializer. The OPEN_FILES_LOCK should be
+        acquired prior to calling this method. Additionally,
+        a "filesopened" resource should be acquired using the abs_filename.
 
      <Arguments>
         filename:
@@ -329,7 +341,7 @@ class emulated_file:
            since it is assumed to be valid.
 
      <Exceptions>
-        ResourceExhaustedError if there are no available file handles.
+        None.
 
      <Side Effects>
         Opens a file on disk, using a file descriptor.
@@ -341,18 +353,6 @@ class emulated_file:
     # Store the filename we are given
     self.filename = filename
     self.abs_filename = abs_filename
-
-    # Here is where we try to allocate a "file" resource from the
-    # nanny system. If that fails, we garbage collect and try again
-    # (this forces __del__() methods to be called on objects with
-    # no references, which is how we automatically free up
-    # file resources).
-    try:
-      nanny.tattle_add_item('filesopened', abs_filename)
-    except ResourceExhaustedError:
-      # Ok, maybe we can free up a file by garbage collecting.
-      gc.collect()
-      nanny.tattle_add_item('filesopened', abs_filename)
 
     # Store a file handle
     # Always open in mode r+b, this avoids Windows text-mode
