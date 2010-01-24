@@ -124,8 +124,7 @@ def removefile(filename):
     nanny.tattle_quantity('filewrite',0)
 
     # Try to remove the file
-    if not os.remove(filename):
-      raise InternalRepyException, "os.remove call on '"+filename+"' should have succeeded. Failed."
+    os.remove(filename)
 
     # Consume the filewrite resources
     nanny.tattle_quantity('filewrite',4096)
@@ -291,6 +290,10 @@ def assert_is_allowed_filename(filename):
   # Check the type
   if type(filename) is not str:
     raise RepyArgumentError, "Filename is not a string!"
+
+  # Check the length of the filename
+  if len(filename) > MAX_FILENAME_LENGTH:
+    raise RepyArgumentError, "Filename exceeds maximum length! Maximum: "+str(MAX_FILENAME_LENGTH)
 
   # Check if the filename is forbidden
   if filename in ILLEGAL_FILENAMES:
