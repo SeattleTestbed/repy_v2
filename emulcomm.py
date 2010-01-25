@@ -763,33 +763,41 @@ def find_outgoing_tcp_commhandle(localip, localport, remoteip, remoteport):
 
 
 # Public interface
-def gethostbyname_ex(name):
+def gethostbyname(name):
   """
    <Purpose>
-      Provides information about a hostname.   Calls socket.gethostbyname_ex()
+      Provides information about a hostname. Calls socket.gethostbyname().
+      Translate a host name to IPv4 address format. The IPv4 address is
+      returned as a string, such as '100.50.200.5'. If the host name is an
+      IPv4 address itself it is returned unchanged.
 
    <Arguments>
-      name:
-         The host name to get information about
+     name:
+         The host name to translate.
 
    <Exceptions>
-      As from socket.gethostbyname_ex()
+     NetworkAddressError (descends from NetworkError) if the address cannot
+     be resolved.
 
    <Side Effects>
-      None.
+     None.
+
+   <Resource Consumption>
+     This operation consumes network bandwidth of 4K netrecv, 1K netsend.
+     (It's hard to tell how much was actually sent / received at this level.)
 
    <Returns>
-      A tuple containing (hostname, aliaslist, ipaddrlist).   See the 
-      python docs for socket.gethostbyname_ex()
+     The IPv4 address as a string.
   """
 
-  restrictions.assertisallowed('gethostbyname_ex',name)
+  restrictions.assertisallowed('gethostbyname',name)
 
   # charge 4K for a look up...   I don't know the right number, but we should
   # charge something.   We'll always charge to the netsend interface...
-  nanny.tattle_quantity('netsend',4096) 
-  nanny.tattle_quantity('netrecv',4096)
-  return socket.gethostbyname_ex(name)
+  nanny.tattle_quantity('netsend', 1024) 
+  nanny.tattle_quantity('netrecv', 4096)
+
+  return socket.gethostbyname(name)
 
 
 
