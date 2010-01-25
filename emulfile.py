@@ -209,6 +209,9 @@ def emulated_open(filename, create):
     return emulated_file(filename, abs_filename)
 
   except RepyException:
+    # Restore the file handle we burned
+    nanny.tattle_remove_item('filesopened', abs_filename)
+
     # We can raise the exceptions that are expected
     raise
 
