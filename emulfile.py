@@ -520,6 +520,8 @@ class emulated_file:
     # Check the arguments
     if offset < 0:
       raise RepyArgumentError, "Negative read offset speficied!"
+    if type(data) is not str:
+      raise RepyArgumentError, "Data must be specified as a string!"
 
     # Get the underlying file object
     fobj = self.fobj
