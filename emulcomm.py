@@ -790,14 +790,19 @@ def gethostbyname(name):
      The IPv4 address as a string.
   """
 
-  restrictions.assertisallowed('gethostbyname',name)
+  restrictions.assertisallowed('gethostbyname', name)
 
   # charge 4K for a look up...   I don't know the right number, but we should
   # charge something.   We'll always charge to the netsend interface...
   nanny.tattle_quantity('netsend', 1024) 
   nanny.tattle_quantity('netrecv', 4096)
 
-  return socket.gethostbyname(name)
+  try:
+    return socket.gethostbyname(name)
+  except socket.gaierror:
+    raise NetworkAddressError("The name '%s' could not be resolved." % name)
+  except TypeError:
+    raise ArgumentError("gethostbyname() takes a string as argument.")
 
 
 
