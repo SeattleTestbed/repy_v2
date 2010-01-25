@@ -173,6 +173,10 @@ def emulated_open(filename, create):
    <Returns>
       A file-like object.
   """
+  # Check the  type of create
+  if type(create) is not bool:
+    raise RepyArgumentError, "Create argument type is invalid! Must be a Boolean!"
+  
   OPEN_FILES_LOCK.acquire()
   try:
     # Check that the filename can be used
