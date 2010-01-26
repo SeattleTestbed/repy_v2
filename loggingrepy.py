@@ -10,7 +10,6 @@
 """
 
 
-import restrictions
 import nanny
 import loggingrepy_core
 

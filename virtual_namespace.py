@@ -14,9 +14,6 @@
 # Used for safety checking
 import safe
 
-# Used to check that an API call is allowed
-import restrictions
-
 # Get the errors
 from exception_hierarchy import *
 
