@@ -138,9 +138,9 @@ def createthread(function):
       # Exit if they throw an uncaught exception
       tracebackrepy.handle_exception()
       harshexit.harshexit(30)
-    
-    # Remove the event before I exit
-    nanny.tattle_remove_item('events',eventhandle)
+    finally: 
+      # Remove the event before I exit
+      nanny.tattle_remove_item('events',eventhandle)
 
   # Create a thread object
   tobj = threading.Thread(target=wrapped_func, name=idhelper.get_new_thread_name(EVENT_PREFIX))

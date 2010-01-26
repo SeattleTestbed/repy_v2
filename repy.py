@@ -44,6 +44,7 @@
 import checkpythonversion
 checkpythonversion.ensure_python_version_is_supported()
 
+import idhelper
 import safe
 import sys
 import getopt
@@ -202,7 +203,14 @@ def main(restrictionsfn, program, args):
   # call the initialize function
   usercontext['callfunc'] = 'initialize'
   usercontext['callargs'] = args[:]
-
+ 
+  event_id = idhelper.getuniqueid()
+  try:
+    nanny.tattle_add_item('events', event_id)
+  except Exception, e:
+    tracebackrepy.handle_internalerror("Failed to aquire event for '" + \
+              "initialize' event.\n(Exception was: %s)" % e.message, 140)
+ 
   try:
     main_namespace.evaluate(usercontext)
   except SystemExit:
@@ -211,6 +219,8 @@ def main(restrictionsfn, program, args):
     # I think it makes sense to exit if their code throws an exception...
     tracebackrepy.handle_exception()
     harshexit.harshexit(6)
+  finally:
+    nanny.tattle_remove_item('events', event_id)
 
   # I've changed to the threading library, so this should increase if there are
   # pending events
