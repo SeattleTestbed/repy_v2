@@ -31,6 +31,8 @@ from exception_hierarchy import *
 # Armon: Prefix for use with event handles
 EVENT_PREFIX = "_EVENT:"
 
+# Store callable
+safe_callable = callable
 
 ##### Internal Functions
 
@@ -121,7 +123,7 @@ def createthread(function):
     None
   """
   # Check if the function is callable
-  if not callable(function):
+  if not safe_callable(function):
     raise RepyArgumentError, "Provided function is not callable!"
 
   # Generate a unique handle and see if there are resources available

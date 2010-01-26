@@ -180,7 +180,9 @@ def emulated_open(filename, create):
   OPEN_FILES_LOCK.acquire()
   try:
     # Check that the filename can be used
+    abs_filename = None
     abs_filename, exists = check_can_use_filename(filename, False)
+    assert(abs_filename is not None)
 
     # Here is where we try to allocate a "file" resource from the
     # nanny system. If that fails, we garbage collect and try again
