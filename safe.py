@@ -95,7 +95,7 @@ _NODE_CLASS_OK = [
     'Stmt', 'Sub', 'Subscript', 'Tuple', 'UnaryAdd', 'UnarySub', 'While',
     ]
 _NODE_ATTR_OK = []
-_STR_OK = ['__init__','__del__']
+_STR_OK = ['__init__','__del__','__iter__']
 _STR_NOT_CONTAIN = ['__']
 _STR_NOT_BEGIN = ['im_','func_','tb_','f_','co_',]
 
