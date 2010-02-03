@@ -1050,7 +1050,7 @@ def cleanup(handle):
 
 
 # Public interface!!!
-def sendmess(desthost, destport, message,localip=None,localport = None):
+def sendmessage(destip, destport, message, localip, localport):
   """
    <Purpose>
       Send a message to a host / port
@@ -1062,30 +1062,42 @@ def sendmess(desthost, destport, message,localip=None,localport = None):
          The port to send the message to
       message:
          The message to send
-      localhost (optional):
+      localhost:
          The local IP to send the message from 
-      localport (optional):
-         The local port to send the message from (0 for a random port)
+      localport:
+         The local port to send the message from
 
    <Exceptions>
-      socket.error when communication errors happen
+      AddressBindingError (descends NetworkError) when the local IP isn't
+        a local IP.
+
+      PortRestrictedException (descends ResourceException?) when the local
+        port isn't allowed
+
+      RepyArgumentError when the local IP and port aren't valid types
+        or values
 
    <Side Effects>
       None.
 
+   <Resource Consumption>
+      This operation consumes 64 bytes + number of bytes of the message that
+      were transmitted. This requires that the localport is allowed.
+
    <Returns>
       The number of bytes sent on success
   """
+
   # Check that if either localip or local port is specified, that both are
-  if (localip != None and localport == None) or (localport != None and localip == None):
-    raise Exception("Localip and localport must be specified simultaneously.")
-  
-  # Assign the default value to localport if none given
-  if localport == None:
-    localport = 0
+  if localport is None or localip is None:
+    raise RepyArgumentError("Localip and localport must be specified.")
+  if type(destip) is not str or type(destport) is not int or type(message) \
+      is not str or type(localip) is not str or type(localport) is not int:
+        raise RepyArgumentError("Invalid type of one or more arguments " + \
+            "to sendmessage().")
 
   if not localip or localip == '0.0.0.0':
-    localip = None
+    raise RepyArgumentError("Can only bind to a single local ip.")
 # JAC: removed since this breaks semantics
 #  else:
 #    if not is_valid_ip_address(localip):
@@ -1096,20 +1108,26 @@ def sendmess(desthost, destport, message,localip=None,localport = None):
 #    raise Exception("Destination host IP address is invalid.")
   
   if not is_valid_network_port(destport):
-    raise Exception("Destination port number must be an integer, between 1 and 65535.")
+    raise RepyArgumentError("Destination port number must be an " + \
+        "integer, between 1 and 65535.")
 
   if not is_valid_network_port(localport, True):
-    raise Exception("Local port number must be an integer, between 1 and 65535.")
+    raise RepyArgumentError("Local port number must be an integer, " + \
+        "between 1 and 65535.")
 
-  restrictions.assertisallowed('sendmess', desthost, destport, message,localip,localport)
+  try:
+    restrictions.assertisallowed('sendmess', desthost, destport, message, \
+        localip, localport)
+  except Exception, e:
+    raise PortRestrictedException(str(e))
 
   if localport:
-    nanny.tattle_check('messport',localport)
+    nanny.tattle_check('messport', localport)
 
   # Armon: Check if the specified local ip is allowed
   # this check only makes sense if the localip is specified
   if localip and not ip_is_allowed(localip):
-    raise Exception, "IP '"+str(localip)+"' is not allowed."
+    raise PortRestrictedException("IP '" + str(localip) + "' is not allowed.")
   
   # If there is a preference, but no localip, then get one
   elif user_ip_interface_preferences and not localip:
@@ -1121,7 +1139,7 @@ def sendmess(desthost, destport, message,localip=None,localport = None):
 
   if localip and localport:
     # let's see if the socket already exists...
-    commtableentry,commhandle = find_tip_entry('UDP',localip,localport)
+    commtableentry, commhandle = find_tip_entry('UDP', localip, localport)
   else:
     # no, we'll skip
     commhandle = None
@@ -1131,24 +1149,25 @@ def sendmess(desthost, destport, message,localip=None,localport = None):
 
     # block in case we're oversubscribed
     if is_loopback(desthost):
-      nanny.tattle_quantity('loopsend',0)
+      nanny.tattle_quantity('loopsend', 0)
     else:
-      nanny.tattle_quantity('netsend',0)
+      nanny.tattle_quantity('netsend', 0)
 
     # try to send using this socket
     try:
-      bytessent =  commtableentry['socket'].sendto(message,(desthost,destport))
-    except socket.error,e:
-      # we're going to save this error in case we also get an error below.   
+      bytessent = commtableentry['socket'].sendto(message, \
+          (desthost, destport))
+    except socket.error, e:
+      # we're going to save this error in case we also get an error below.
       # This is likely to be the error we actually want to raise
       firsterror = e
       # should I really fall through here?
     else:
       # send succeeded, let's wait and return
       if is_loopback(desthost):
-        nanny.tattle_quantity('loopsend',bytessent)
+        nanny.tattle_quantity('loopsend', bytessent)
       else:
-        nanny.tattle_quantity('netsend',bytessent)
+        nanny.tattle_quantity('netsend', bytessent)
       return bytessent
   
 
@@ -1162,21 +1181,21 @@ def sendmess(desthost, destport, message,localip=None,localport = None):
         s.bind((localip,localport))
       except socket.error, e:
         if firsterror:
-          raise Exception, firsterror
-        raise Exception, e
+          raise AddressBindingError(str(firsterror))
+        raise AddressBindingError(str(e))
 
     # wait if already oversubscribed
     if is_loopback(desthost):
-      nanny.tattle_quantity('loopsend',0)
+      nanny.tattle_quantity('loopsend', 0)
     else:
-      nanny.tattle_quantity('netsend',0)
+      nanny.tattle_quantity('netsend', 0)
 
-    bytessent =  s.sendto(message,(desthost,destport))
+    bytessent = s.sendto(message, (desthost, destport))
 
     if is_loopback(desthost):
-      nanny.tattle_quantity('loopsend',bytessent)
+      nanny.tattle_quantity('loopsend', bytessent)
     else:
-      nanny.tattle_quantity('netsend',bytessent)
+      nanny.tattle_quantity('netsend', bytessent)
 
     return bytessent
 
