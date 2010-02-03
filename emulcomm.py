@@ -1165,9 +1165,9 @@ def sendmessage(destip, destport, message, localip, localport):
     else:
       # send succeeded, let's wait and return
       if is_loopback(desthost):
-        nanny.tattle_quantity('loopsend', bytessent)
+        nanny.tattle_quantity('loopsend', 64 + bytessent)
       else:
-        nanny.tattle_quantity('netsend', bytessent)
+        nanny.tattle_quantity('netsend', 64 + bytessent)
       return bytessent
   
 
@@ -1193,9 +1193,9 @@ def sendmessage(destip, destport, message, localip, localport):
     bytessent = s.sendto(message, (desthost, destport))
 
     if is_loopback(desthost):
-      nanny.tattle_quantity('loopsend', bytessent)
+      nanny.tattle_quantity('loopsend', 64 + bytessent)
     else:
-      nanny.tattle_quantity('netsend', bytessent)
+      nanny.tattle_quantity('netsend', 64 + bytessent)
 
     return bytessent
 
