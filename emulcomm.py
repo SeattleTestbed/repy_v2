@@ -62,7 +62,7 @@ import repy_constants
 
 
 # Table of communications structures:
-# {'type':'UDP','localip':ip, 'localport':port,'function':func,'socket':s, outgoing:True, 'closing_lock':lockobj}
+# {'type':'UDP','localip':ip, 'localport':port, 'socket':s, outgoing:True, 'closing_lock':lockobj}
 # {'type':'TCP','remotehost':None, 'remoteport':None,'localip':None,'localport':None, 'socket':s, 'function':func, outgoing:False, 'closing_lock':lockobj}
 
 comminfo = {}
@@ -475,71 +475,30 @@ def should_selector_exit():
 # This function starts a thread to handle an entry with a readable socket in 
 # the comminfo table
 def start_event(entry, handle,eventhandle):
-  if entry['type'] == 'UDP':
-    # some sort of socket error, I'll assume they closed the socket or it's
-    # not important
-    try:
-      # NOTE: is 4096 a reasonable maximum datagram size?
-      data, addr = entry['socket'].recvfrom(4096)
-    except socket.error:
-      # they closed in the meantime?
-      nanny.tattle_remove_item('events',eventhandle)
-      return
+  # it's a TCP accept event...
+  try:
+    realsocket, addr = entry['socket'].accept()
+  except socket.error:
+    # they closed in the meantime?
+    nanny.tattle_remove_item('events',eventhandle)
+    return
+  
+  # put this handle in the table
+  newhandle = generate_commhandle()
+  comminfo[newhandle] = {'type':'TCP','remotehost':addr[0], 'remoteport':addr[1],'localip':entry['localip'],'localport':entry['localport'],'socket':realsocket,'outgoing':True, 'closing_lock':threading.Lock()}
+  # I don't think it makes sense to count this as an outgoing socket, does 
+  # it?
 
-    # wait if we're over the limit
-    if data:
-      if is_loopback(entry['localip']):
-        nanny.tattle_quantity('looprecv',len(data))
-      else:
-        nanny.tattle_quantity('netrecv',len(data))
-    else:
-      # no data...   Let's stop this...
-      nanny.tattle_remove_item('events',eventhandle)
-      return
+  # Armon: Create the emulated socket after the table entry
+  safesocket = emulated_socket(newhandle)
 
-      
-    try:
-      EventDeliverer(entry['function'],(addr[0], addr[1], data, handle), eventhandle).start()
-    except:
-      # This is an internal error I think...
-      # This will cause the program to exit and log things if logging is
-      # enabled. -Brent
-      tracebackrepy.handle_internalerror("Can't start UDP EventDeliverer", 29)
-
-
-
-  # or it's a TCP accept event...
-  elif entry['type'] == 'TCP':
-    try:
-      realsocket, addr = entry['socket'].accept()
-    except socket.error:
-      # they closed in the meantime?
-      nanny.tattle_remove_item('events',eventhandle)
-      return
-    
-    # put this handle in the table
-    newhandle = generate_commhandle()
-    comminfo[newhandle] = {'type':'TCP','remotehost':addr[0], 'remoteport':addr[1],'localip':entry['localip'],'localport':entry['localport'],'socket':realsocket,'outgoing':True, 'closing_lock':threading.Lock()}
-    # I don't think it makes sense to count this as an outgoing socket, does 
-    # it?
-
-    # Armon: Create the emulated socket after the table entry
-    safesocket = emulated_socket(newhandle)
-
-    try:
-      EventDeliverer(entry['function'],(addr[0], addr[1], safesocket, newhandle, handle),eventhandle).start()
-    except:
-      # This is an internal error I think...
-      # This will cause the program to exit and log things if logging is
-      # enabled. -Brent
-      tracebackrepy.handle_internalerror("Can't start TCP EventDeliverer", 23)
-
-
-  else:
-    # Should never get here
+  try:
+    EventDeliverer(entry['function'],(addr[0], addr[1], safesocket, newhandle, handle),eventhandle).start()
+  except:
+    # This is an internal error I think...
     # This will cause the program to exit and log things if logging is
     # enabled. -Brent
-    tracebackrepy.handle_internalerror("In start event, Unknown entry type", 51)
+    tracebackrepy.handle_internalerror("Can't start TCP EventDeliverer", 23)
 
 
 
@@ -656,7 +615,8 @@ class SocketSelector(threading.Thread):
           nanny.tattle_quantity('netrecv',0)
 
         # Now I can start a thread to run the user's code...
-        start_event(commtableentry,commhandle,eventhandle)
+        if commtableentry['type'] != 'UDP':
+          start_event(commtableentry,commhandle,eventhandle)
       
 
 
@@ -1212,62 +1172,62 @@ def sendmessage(destip, destport, message, localip, localport):
 
 
 # Public interface!!!
-def recvmess(localip, localport, function):
+def listenformessage(localip, localport):
   """
-   <Purpose>
-      Registers a function as an event handler for incoming messages
+    <Purpose>
+        Sets up a udpserversocket to receive incoming UDP messages.
 
-   <Arguments>
-      localip:
-         The local IP or hostname to register the handler on
-      localport:
-         The port to listen on
-      function:
-         The function that messages should be delivered to.   It should expect
-         the following arguments: (remoteIP, remoteport, message, commhandle)
+    <Arguments>
+        localip:
+            The local IP to register the handler on.
+        localport:
+            The port to listen on.
 
-   <Exceptions>
-      None.
+    <Exceptions>
+        PortInUseException (descends NetworkError) if the port cannot be
+        listened on because some other process on the system is listening on
+        it.
 
-   <Side Effects>
-      Registers an event handler.
+        PortInUseException if there is already a udpserversocket with the same
+        IP and port.
 
-   <Returns>
-      The commhandle for this event handler.
+        RepyArgumentError if the port number or ip is wrong type or obviously
+        invalid.
+
+        AddressBindingError (descends NetworkError) if the IP address isn't a
+        local IP.
+
+        PortRestrictedException (descends ResourceException?) if the port is
+        restricted.
+
+        SocketWouldBlockException if the call would block.
+
+    <Side Effects>
+        Prevents other udpserversockets from using this port / IP
+
+    <Resource Consumption>
+        This operation consumes an insocket and requires that the provided messport is allowed.
+
+    <Returns>
+        The udpserversocket.
+
   """
   if not localip or localip == '0.0.0.0':
-    raise Exception("Must specify a local IP address")
+    raise RepyArgumentError("Must specify a local IP address")
 
 # JAC: removed since this breaks semantics
 #  if not is_valid_ip_address(localip):
 #    raise Exception("Local IP address is invalid.")
 
   if not is_valid_network_port(localport):
-    raise Exception("Local port number must be an integer, between 1 and 65535.")
+    raise RepyArgumentError("Local port number must be an integer, " + \
+        "between 1 and 65535.")
 
-# Armon: Disabled function check since it is incompatible with functions that have
-# a variable number of parameters. e.g. func1(*args)
-#  # Check that the user specified function exists and takes 4 arguments
-#  try:
-#    # Get the argument count
-#    arg_count = function.func_code.co_argcount
-#    
-#    # Is "self" the first argument?
-#    object_function = function.func_code.co_varnames[0] == "self"   
-#    
-#    # We need the function to take 4 parameters, or 5 if its an object function
-#    assert(arg_count == 4 or (arg_count == 5 and object_function))
-#  except:
-#    # If this is not a function, an exception will be raised.
-#    raise Exception("Specified function must be valid, and take 4 parameters. See recvmess.")
-
-  restrictions.assertisallowed('recvmess',localip,localport)
-
-  nanny.tattle_check('messport',localport)
+  nanny.tattle_check('messport', localport)
   
   # Armon: Check if the specified local ip is allowed
   if not ip_is_allowed(localip):
-    raise Exception, "IP '"+localip+"' is not allowed."
+    raise PortRestrictedException("IP '" + localip + "' is not allowed.")
   
   # Armon: Generate the new handle since we need it 
   # to replace the old handle if it exists
@@ -1281,28 +1241,16 @@ def recvmess(localip, localport, function):
   oldhandle = find_tipo_commhandle('UDP', localip, localport, False)
   if oldhandle:
     # if it was already there, update the function and return
-    comminfo[oldhandle]['function'] = function
-
-    # Armon: Create a new comminfo entry with the same info
-    comminfo[handle] = comminfo[oldhandle]
-
-    # Remove the old entry
-    del comminfo[oldhandle]
-
-    # We need nanny to substitute the old handle with the new one
-    nanny.tattle_remove_item('insockets',oldhandle)
-    nanny.tattle_add_item('insockets',handle)
-    
-    # Return the new handle
-    return handle
+    raise PortInUseException("udpserversocket for this (ip, port) " + \
+        "already exists")
     
   # we'll need to add it, so add a socket...
-  nanny.tattle_add_item('insockets',handle)
+  nanny.tattle_add_item('insockets', handle)
 
   # get the socket
   try:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.bind((localip,localport))
+    s.bind((localip, localport))
 
     nonportable.preparesocket(s)
   except:
@@ -1310,16 +1258,115 @@ def recvmess(localip, localport, function):
       s.close()
     except:
       pass
-    nanny.tattle_remove_item('insockets',handle)
+    nanny.tattle_remove_item('insockets', handle)
     raise
 
   # set up our table entry
-  comminfo[handle] = {'type':'UDP','localip':localip, 'localport':localport,'function':function,'socket':s, 'outgoing':False, 'closing_lock':threading.Lock() }
+  comminfo[handle] = {'type': 'UDP', 'localip': localip, \
+      'localport': localport, 'socket': s, 'outgoing': False, \
+      'closing_lock': threading.Lock()}
 
   # start the selector if it's not running already
   check_selector()
 
-  return handle
+  return udpserversocket(handle)
+
+
+
+
+# Public: Class the behaves represents a listening UDP socket.
+class udpserversocket:
+
+  # UDP listening socket interface
+  def __init__(self, handle):
+    self._commid = handle
+    self._closed = False
+
+
+
+  def getmessage(self):
+    """
+    <Purpose>
+        Obtains an incoming message that was sent to an IP and port.
+
+    <Arguments>
+        None.
+
+    <Exceptions>
+        LocalIPChanged if the local IP address has changed and the
+        udpserversocket is invalid
+
+        PortRestrictedException if the port number is no longer allowed.
+
+        SocketClosedLocal if udpserversocket.close() was called.
+
+    <Side Effects>
+        None
+
+    <Resource Consumption>
+        This operation consumes 64 + size of message bytes of netrecv
+
+    <Returns>
+        A tuple consisting of the remote IP, remote port, and message.
+
+    """
+
+    if self._closed:
+      raise SocketClosedLocal("getmessage() was called on a closed " + \
+          "udpserversocket.")
+
+    mycommid = self._commid
+    socketinfo = comminfo[mycommid]
+    s = socketinfo['socket']
+
+    if socketinfo['localip'] not in allowediplist:
+      raise LocalIPChanged("The local ip " + socketinfo['localip'] + \
+          " is no longer present on a system interface.")
+
+    # Wait if we're oversubscribed.
+    if is_loopback(socketinfo['localip']):
+      nanny.tattle_quantity('looprecv', 0)
+    else:
+      nanny.tattle_quantity('netrecv', 0)
+
+    data, addr = s.recvfrom(4096)
+
+    # Report resource consumption:
+    if is_loopback(socketinfo['localip']):
+      nanny.tattle_quantity('looprecv', 64 + len(data))
+    else:
+      nanny.tattle_quantity('netrecv', 64 + len(data))
+
+    return (addr[0], addr[1], data)
+
+
+
+  def close(self):
+    """
+    <Purpose>
+        Closes a socket that is listening for messages.
+
+    <Arguments>
+        None.
+
+    <Exceptions>
+        None.
+
+    <Side Effects>
+        The IP address and port can be reused by other udpserversockets after
+        this.
+
+    <Resource Consumption>
+        If applicable, this operation stops consuming the corresponding
+        insocket.
+
+    <Returns>
+        True if this is the first close call to this socket, False otherwise.
+
+    """
+    self._closed = True
+    return stopcomm(self._commid)
+
 
 
 
