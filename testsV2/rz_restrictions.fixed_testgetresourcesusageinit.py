@@ -25,8 +25,12 @@ if init_usage["threadcpu"] > max_time:
 if init_usage["memory"] < 4000000:
   print "Initial Memory Usage is unreasonably low! Expect at least 4MB, using: "+str(init_usage["memory"])
 
+# Our event usage should be 1
+if init_usage["events"] != 1:
+  print "Initial event usage should be 1! Using: "+str(init_usage["events"])
+
 # The other stuff should all be 0 now
-expected_zero = ["events", "filewrite", "fileread", "filesopened", "insockets", "outsockets", "netsend",
+expected_zero = ["filewrite", "fileread", "filesopened", "insockets", "outsockets", "netsend",
                  "netrecv", "loopsend", "looprecv", "lograte", "random", "messport", "connport"]
 
 for resource in expected_zero:

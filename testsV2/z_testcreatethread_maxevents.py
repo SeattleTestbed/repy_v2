@@ -2,7 +2,7 @@
 This unit test checks createthread will eventually throw a ResourceExhaustedError.
 """
 
-MAX_EVENTS = 10
+MAX_EVENTS = 9
 
 def thread():
   sleep(60)
