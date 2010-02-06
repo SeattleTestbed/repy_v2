@@ -175,7 +175,7 @@ def emulated_open(filename, create):
   """
   # Check the  type of create
   if type(create) is not bool:
-    raise RepyArgumentError, "Create argument type is invalid! Must be a Boolean!"
+    raise RepyArgumentError("Create argument type is invalid! Must be a Boolean!")
   
   OPEN_FILES_LOCK.acquire()
   try:
@@ -204,7 +204,7 @@ def emulated_open(filename, create):
         safe_open(abs_filename, "w").close()
         nanny.tattle_quantity('filewrite', 4096)
       else:
-        raise FileNotFoundError, 'File "'+filename+'" does not exist and "create" flag is False!'
+        raise FileNotFoundError('File "'+filename+'" does not exist and "create" flag is False!')
 
     # Create an emulated file object
     # Mode is always "rw" in binary, and the file can be assumed to exist.
@@ -263,7 +263,7 @@ def check_can_use_filename(filename, err_no_exist):
   
   # Check if the file is in use
   if filename in OPEN_FILES:
-    raise FileInUseError, 'File "'+filename+'" is in use!'
+    raise FileInUseError('File "'+filename+'" is in use!')
 
   # Get the absolute file path
   absolute_path = os.path.abspath(os.path.join(repy_constants.REPY_CURRENT_DIR, filename))
@@ -274,7 +274,7 @@ def check_can_use_filename(filename, err_no_exist):
   nanny.tattle_quantity('fileread', 4096)
 
   if not exists and err_no_exist:
-    raise FileNotFoundError, 'File "'+filename+'" does not exist!'
+    raise FileNotFoundError('File "'+filename+'" does not exist!')
 
   # Return the absolute path and if the file exists
   return absolute_path,exists
@@ -298,20 +298,20 @@ def assert_is_allowed_filename(filename):
 
   # Check the type
   if type(filename) is not str:
-    raise RepyArgumentError, "Filename is not a string!"
+    raise RepyArgumentError("Filename is not a string!")
 
   # Check the length of the filename
   if len(filename) > MAX_FILENAME_LENGTH:
-    raise RepyArgumentError, "Filename exceeds maximum length! Maximum: "+str(MAX_FILENAME_LENGTH)
+    raise RepyArgumentError("Filename exceeds maximum length! Maximum: "+str(MAX_FILENAME_LENGTH))
 
   # Check if the filename is forbidden
   if filename in ILLEGAL_FILENAMES:
-    raise RepyArgumentError, "Illegal filename provided!"
+    raise RepyArgumentError("Illegal filename provided!")
 
   # Check that each character in the filename is allowed
   for char in filename:
     if char not in ALLOWED_FILENAME_CHAR_SET:
-      raise RepyArgumentError, "Filename has disallowed character '"+char+"'"
+      raise RepyArgumentError("Filename has disallowed character '"+char+"'")
 
 
 
@@ -413,7 +413,7 @@ class emulated_file:
         fobj.close()
         self.fobj = None
       else:
-        raise FileClosedError, "File '"+self.filename+"' is already closed!" 
+        raise FileClosedError("File '"+self.filename+"' is already closed!")
 
       # Remove this file from the list of open files
       OPEN_FILES.remove(self.filename)
@@ -451,14 +451,14 @@ class emulated_file:
     """
     # Check the arguments
     if sizelimit < 0:
-      raise RepyArgumentError, "Negative sizelimit specified!"
+      raise RepyArgumentError("Negative sizelimit specified!")
     if offset < 0:
-      raise RepyArgumentError, "Negative read offset speficied!"
+      raise RepyArgumentError("Negative read offset speficied!")
 
     # Get the underlying file object
     fobj = self.fobj
     if fobj is None:
-      raise FileClosedError, "File '"+self.filename+"' is already closed!"
+      raise FileClosedError("File '"+self.filename+"' is already closed!")
 
     # Get the seek lock
     self.seek_lock.acquire()
@@ -470,7 +470,7 @@ class emulated_file:
 
       # Check the provided offset
       if offset > filesize:
-        raise SeekPastEndOfFileError, "Seek offset extends past the EOF!"
+        raise SeekPastEndOfFileError("Seek offset extends past the EOF!")
       
       # Seek to the correct location
       fobj.seek(offset)
@@ -524,14 +524,14 @@ class emulated_file:
     """
     # Check the arguments
     if offset < 0:
-      raise RepyArgumentError, "Negative read offset speficied!"
+      raise RepyArgumentError("Negative read offset speficied!")
     if type(data) is not str:
-      raise RepyArgumentError, "Data must be specified as a string!"
+      raise RepyArgumentError("Data must be specified as a string!")
 
     # Get the underlying file object
     fobj = self.fobj
     if fobj is None:
-      raise FileClosedError, "File '"+self.filename+"' is already closed!"
+      raise FileClosedError("File '"+self.filename+"' is already closed!")
 
     # Get the seek lock
     self.seek_lock.acquire()
@@ -543,7 +543,7 @@ class emulated_file:
 
       # Check the provided offset
       if offset > filesize:
-        raise SeekPastEndOfFileError, "Seek offset extends past the EOF!"
+        raise SeekPastEndOfFileError("Seek offset extends past the EOF!")
       
       # Seek to the correct location
       fobj.seek(offset)

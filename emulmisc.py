@@ -236,6 +236,6 @@ class emulated_lock (object):
     try:
       self.lock.release()
     except:
-      raise LockDoubleReleaseError, "Releasing an un-locked lock!"
+      raise LockDoubleReleaseError("Releasing an un-locked lock!")
 
 

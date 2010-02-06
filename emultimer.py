@@ -124,7 +124,7 @@ def createthread(function):
   """
   # Check if the function is callable
   if not safe_callable(function):
-    raise RepyArgumentError, "Provided function is not callable!"
+    raise RepyArgumentError("Provided function is not callable!")
 
   # Generate a unique handle and see if there are resources available
   eventhandle = generate_eventhandle()
