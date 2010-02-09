@@ -1274,6 +1274,22 @@ def listenformessage(localip, localport):
 
 
 
+
+class tcpserversocket(object):
+
+  def close(self):
+    # TODO: Implement and update namespace.py
+    return False
+
+  def getconnection(self):
+    # TODO: Implement and update namespace.py
+    #return ('1.2.3.4', 1234, instance_of_emulated_socket)
+    raise NotImplementedError
+
+
+
+
+
 # Public: Class the behaves represents a listening UDP socket.
 class udpserversocket:
 
@@ -1567,6 +1583,13 @@ def openconn(desthost, destport,localip=None, localport=None,timeout=None):
     comminfo[handle]['socket'].settimeout(oldtimeout)
 
   return thissock
+
+
+
+
+def listenforconnection(localip, localport):
+  # TODO: Implement and update namespace.py
+  raise NotImplementedError
 
 
 

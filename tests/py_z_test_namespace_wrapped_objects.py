@@ -2,7 +2,10 @@
 Test the objects wrapped with NamespaceObjectWrapper.
 """
 
-import namespace  
+# TODO: Reenable everything related to file objects once those are working
+# in repyV2.
+
+import namespace
 
 import emulcomm
 import emulfile
@@ -22,8 +25,11 @@ namespace.wrap_and_insert_api_functions(usercontext)
 # Make sure that the wrappers for the methods of objects we may use have been
 # setup.
 assert(len(namespace.file_object_wrapped_functions_dict.keys()) > 0)
-assert(len(namespace.socket_object_wrapped_functions_dict.keys()) > 0)
 assert(len(namespace.lock_object_wrapped_functions_dict.keys()) > 0)
+assert(len(namespace.tcp_socket_object_wrapped_functions_dict.keys()) > 0)
+assert(len(namespace.tcp_server_socket_object_wrapped_functions_dict.keys()) > 0)
+assert(len(namespace.udp_server_socket_object_wrapped_functions_dict.keys()) > 0)
+assert(len(namespace.virtual_namespace_object_wrapped_functions_dict.keys()) > 0)
 
 # Check one of these dictionaries' values. They should all be wrapped functions.
 for func_name in namespace.file_object_wrapped_functions_dict:
@@ -40,107 +46,108 @@ commhandle = "fakecommhandle"
 # Armon: Create handle entry...
 emulcomm.comminfo[commhandle] = {"socket":socket.socket()}
 
-timerhandle = "faketimerhandle"
-socketobj = emulcomm.emulated_socket(commhandle)
-lockobj = emulmisc.getlock()
+tcpserversocketobj = emulcomm.tcpserversocket()
+tcpsocketobj = emulcomm.emulated_socket(commhandle)
+udpserversocketobj = emulcomm.udpserversocket(commhandle)
+lockobj = emulmisc.createlock()
 open("junk_test.out", "w").close() # touch the file
-fileobj = emulfile.emulated_file("junk_test.out", "r")
+#fileobj = emulfile.emulated_file("junk_test.out", "r")
 
-wrappedcommhandle = namespace.wrap_commhandle_obj(commhandle)
-wrappedtimerhandle = namespace.wrap_timerhandle_obj(timerhandle)
-wrappedsocket = namespace.wrap_socket_obj(socketobj)
-wrappedlock = namespace.wrap_lock_obj(lockobj)
-wrappedfile = namespace.wrap_file_obj(fileobj)
+wrapped_tcpserversocket = namespace.TCPServerSocket().wrap(tcpserversocketobj)
+wrapped_tcpsocket = namespace.TCPSocket().wrap(tcpsocketobj)
+wrapped_udpserversocket = namespace.UDPServerSocket().wrap(tcpsocketobj)
+wrapped_lock = namespace.Lock().wrap(lockobj)
+#wrapped_file = namespace.File().wrap(fileobj)
+# TODO: wrapped_virtualnamespace
 
 # Make sure these really are instances of NamespaceObjectWrapper
-assert(isinstance(wrappedcommhandle, namespace.NamespaceObjectWrapper))
-assert(isinstance(wrappedtimerhandle, namespace.NamespaceObjectWrapper))
-assert(isinstance(wrappedsocket, namespace.NamespaceObjectWrapper))
-assert(isinstance(wrappedlock, namespace.NamespaceObjectWrapper))
-assert(isinstance(wrappedfile, namespace.NamespaceObjectWrapper))
+assert(isinstance(wrapped_tcpserversocket, namespace.NamespaceObjectWrapper))
+assert(isinstance(wrapped_tcpsocket, namespace.NamespaceObjectWrapper))
+assert(isinstance(wrapped_udpserversocket, namespace.NamespaceObjectWrapper))
+assert(isinstance(wrapped_lock, namespace.NamespaceObjectWrapper))
+#assert(isinstance(wrapped_file, namespace.NamespaceObjectWrapper))
 
 # Reference attributes that should exist and thus not raise an AttributeError.
-wrappedsocket.close
-wrappedsocket.send
-wrappedsocket.recv
-wrappedsocket.willblock
+wrapped_tcpserversocket.close
+wrapped_tcpserversocket.getconnection
 
-wrappedlock.acquire
-wrappedlock.release
+wrapped_tcpsocket.close
+wrapped_tcpsocket.send
+wrapped_tcpsocket.recv
 
-wrappedfile.close
-wrappedfile.flush
-wrappedfile.next
-wrappedfile.read
-wrappedfile.readline
-wrappedfile.readlines
-wrappedfile.seek
-wrappedfile.write
-wrappedfile.writelines
+wrapped_udpserversocket.close
+wrapped_udpserversocket.getmessage
+
+wrapped_lock.acquire
+wrapped_lock.release
+
+#wrapped_file.close
+#wrapped_file.readat
+#wrapped_file.writeat
 
 # Reference attributes that should *not* exist just to make sure the above
 # checks aren't deceptively passing.
 try:
-  wrappedsocket.acquire
+  wrapped_tcpsocket.acquire
 except AttributeError:
   pass
 
 try:
-  wrappedlock.close
+  wrapped_lock.close
 except AttributeError:
   pass
 
-try:
-  wrappedfile.recv
-except AttributeError:
-  pass
+#try:
+#  wrapped_file.recv
+#except AttributeError:
+#  pass
 
 # Make sure that files are iterable but locks are not.
-for line in wrappedfile:
-  pass
+#for line in wrapped_file:
+#  pass
 
 try:
-  for something in wrappedlock:
+  for something in wrapped_lock:
     pass
 except TypeError:
   pass
 
 # Try to use a few of the methods of the objects. We didn't start with many
 # real objects, so we'll just use the wrappedfile.
-wrappedfile.read()
-wrappedfile.seek(0)
-wrappedfile.readlines()
-wrappedfile.close()
+#wrapped_file.readat(1024, 0)
+#wrapped_file.writeat("test", 0)
+#wrapped_file.close()
 # Read after close.
-try:
-  wrappedfile.read(1)
-except ValueError:
-  pass
+#try:
+#  wrapped_file.readat(1024, 0)
+#except ValueError:
+#  pass
 
 # Make sure wrapped commhandle objects expose the hash value of the underlying
 # string that is wrapped. For an object to be used as a dictionary key, an
 # equality check is also done, so test that as well.
-assert(hash(wrappedcommhandle) == hash(commhandle))
-assert(wrappedcommhandle == commhandle)
-assert(hash(wrappedtimerhandle) == hash(timerhandle))
-assert(wrappedtimerhandle == timerhandle)
+#assert(hash(wrappedcommhandle) == hash(commhandle))
+#assert(wrappedcommhandle == commhandle)
+#assert(hash(wrappedtimerhandle) == hash(timerhandle))
+#assert(wrappedtimerhandle == timerhandle)
 
 # Make sure that other wrapped objects are hashable.
-hash(wrappedfile)
-hash(wrappedlock)
-hash(wrappedsocket)
+hash(wrapped_tcpserversocket)
+hash(wrapped_tcpsocket)
+hash(wrapped_udpserversocket)
+#hash(wrapped_file)
+hash(wrapped_lock)
 
 # Make sure the wrapped objects are comparable (__eq__).
-wrappedcommhandle == -1
-wrappedtimerhandle == -1 
-wrappedsocket == -1
-wrappedlock == -1
-wrappedfile == -1
+wrapped_tcpserversocket == -1
+wrapped_tcpsocket == -1
+wrapped_udpserversocket == -1
+wrapped_lock == -1
+#wrapped_file == -1
 
 # Make sure the wrapped objects are comparable (__ne__).
-assert(wrappedcommhandle != -1)
-assert(wrappedtimerhandle != -1)
-assert(wrappedsocket != -1)
-assert(wrappedlock != -1)
-assert(wrappedfile != -1)
-
+assert(wrapped_tcpserversocket != -1)
+assert(wrapped_tcpsocket != -1)
+assert(wrapped_udpserversocket != -1)
+assert(wrapped_lock != -1)
+#assert(wrapped_file != -1)

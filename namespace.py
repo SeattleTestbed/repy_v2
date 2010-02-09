@@ -111,13 +111,16 @@ import types
 # To check if objects are thread.LockType objects.
 import thread
 
-import fakeapi
-
-# Used to get SafeDict
-import safe
-
-# Used to get VirtualNamespace
+import emulcomm
+import emulfile
+import emulmisc
+import emultimer
+import nonportable
+import safe # Used to get SafeDict
+import tracebackrepy
 import virtual_namespace
+
+from exception_hierarchy import *
 
 # Save a copy of a few functions not available at runtime.
 _saved_getattr = getattr
@@ -205,17 +208,14 @@ def _prepare_wrapped_functions_for_object_wrappers():
 
 
 ##############################################################################
-# Helper functions that raise NamespaceRequirementError if the argument
-# does not meet the required conditions.
+# Helper functions.
 ##############################################################################
 
-class NamespaceRequirementError(Exception):
+def _handle_internalerror(message, exitcode):
   """
-  Indicates that some namespace requirement has not been met. This is not an
-  exception that should be returned to the user. Instead, it is to signal to
-  our own code that there is a violation. We then raise a
-  NamespaceViolationError which will be seen by the offending user code.
-  """
+  Terminate the running program. This is used rather than
+  tracebackrepy.handle_internalerror directly in order to make testing easier."""
+  tracebackrepy.handle_internalerror(message, exitcode)
 
 
 
@@ -234,25 +234,15 @@ def _is_in(obj, sequence):
       return True
   return False
 
+
+
+
+
 ##############################################################################
 # Constants that define which functions should be wrapped and how. These are
 # used by the functions wrap_and_insert_api_functions() and
 # wrap_builtin_functions().
 ##############################################################################
-
-class RepyError(Exception):
-  """Base repy exception."""
-
-
-
-
-
-class RepyArgumentError(RepyError):
-  """Anything wrong with an argument."""
-
-
-
-
 
 class BaseProcessor(object):
   """Base type for ValueProcess and ObjectProcessor."""
@@ -447,7 +437,7 @@ class File(ObjectProcessor):
   """Allows File objects."""
 
   def check(self, val):
-    if not isinstance(val, fakeapi.FileObj):
+    if not isinstance(val, emulfile.emulated_file):
       raise RepyArgumentError("Invalid type %s" % type(val))
 
 
@@ -463,7 +453,6 @@ class Lock(ObjectProcessor):
   """Allows Lock objects."""
 
   def check(self, val):
-    # TODO: it's probably a real lock.
     if not isinstance(val, thread.LockType):
       raise RepyArgumentError("Invalid type %s" % type(val))
 
@@ -480,7 +469,7 @@ class UDPServerSocket(ObjectProcessor):
   """Allows UDPServerSocket objects."""
 
   def check(self, val):
-    if not isinstance(val, fakeapi.UDPServerSocketObj):
+    if not isinstance(val, emulcomm.udpserversocket):
       raise RepyArgumentError("Invalid type %s" % type(val))
 
 
@@ -496,7 +485,7 @@ class TCPServerSocket(ObjectProcessor):
   """Allows TCPServerSocket objects."""
 
   def check(self, val):
-    if not isinstance(val, fakeapi.TCPServerSocketObj):
+    if not isinstance(val, emulcomm.tcpserversocket):
       raise RepyArgumentError("Invalid type %s" % type(val))
 
 
@@ -512,7 +501,7 @@ class TCPSocket(ObjectProcessor):
   """Allows TCPSocket objects."""
 
   def check(self, val):
-    if not isinstance(val, fakeapi.TCPSocketObj):
+    if not isinstance(val, emulcomm.emulated_socket):
       raise RepyArgumentError("Invalid type %s" % type(val))
 
 
@@ -577,67 +566,67 @@ class DictOrSafeDict(ObjectProcessor):
 # defined here will be wrapped and made available to untrusted user code.
 USERCONTEXT_WRAPPER_INFO = {
   'gethostbyname' :
-      {'func' : fakeapi.gethostbyname,
+      {'func' : emulcomm.gethostbyname,
        'args' : [Str()],
        'return' : Str()},
   'getmyip' :
-      {'func' : fakeapi.getmyip,
+      {'func' : emulcomm.getmyip,
        'args' : [],
        'return' : Str()},
   'sendmessage' :
-      {'func' : fakeapi.sendmessage,
+      {'func' : emulcomm.sendmessage,
        'args' : [Str(), Int(), Str(), Str(), Int()],
        'return' : Int()},
   'listenformessage' :
-      {'func' : fakeapi.listenformessage,
+      {'func' : emulcomm.listenformessage,
        'args' : [Str(), Int()],
        'return' : UDPServerSocket()},
   'openconnection' :
-      {'func' : fakeapi.openconnection,
+      {'func' : emulcomm.openconn,
        'args' : [Str(), Int(), Str(), Int(), Int()],
        'return' : TCPSocket()},
   'listenforconnection' :
-      {'func' : fakeapi.listenforconnection,
+      {'func' : emulcomm.listenforconnection,
        'args' : [Str(), Int()],
        'return' : TCPServerSocket()},
   'openfile' :
-      {'func' : fakeapi.openfile,
+      {'func' : emulfile.emulated_open,
        'args' : [Str(maxlen=120), Bool()],
        'return' : File()},
   'listfiles' :
-      {'func' : fakeapi.listfiles,
+      {'func' : emulfile.listfiles,
        'args' : [],
        'return' : ListOfStr()},
   'removefile' :
-      {'func' : fakeapi.removefile,
+      {'func' : emulfile.removefile,
        'args' : [Str(maxlen=120)],
        'return' : None},
   'exitall' :
-      {'func' : fakeapi.exitall,
+      {'func' : emulmisc.exitall,
        'args' : [],
        'return' : None},
   'createlock' :
-      {'func' : fakeapi.createlock,
+      {'func' : emulmisc.createlock,
        'args' : [],
        'return' : Lock()},
   'getruntime' :
-      {'func' : fakeapi.getruntime,
+      {'func' : emulmisc.getruntime,
        'args' : [],
        'return' : Float()},
   'randombytes' :
-      {'func' : fakeapi.randombytes,
+      {'func' : emulmisc.randombytes,
        'args' : [],
        'return' : Str(maxlen=1024, minlen=1024)},
   'createthread' :
-      {'func' : fakeapi.createthread,
+      {'func' : emultimer.createthread,
        'args' : [Func(), NonCopiedVarArgs()],
        'return' : None},
   'sleep' :
-      {'func' : fakeapi.sleep,
+      {'func' : emultimer.sleep,
        'args' : [Float()],
        'return' : None},
   'getthreadname' :
-      {'func' : fakeapi.getthreadname,
+      {'func' : emulmisc.getthreadname,
        'args' : [],
        'return' : Str()},
   'createvirtualnamespace' :
@@ -645,59 +634,61 @@ USERCONTEXT_WRAPPER_INFO = {
        'args' : [Str(), Str()],
        'return' : VirtualNamespace()},
   'getresources' :
-      {'func' : fakeapi.getresources,
+      {'func' : nonportable.get_resources,
        'args' : [],
        'return' : (DictOfStrOrInt(), DictOfStrOrInt())},
 }
 
 FILE_OBJECT_WRAPPER_INFO = {
   'close' :
-      {'func' : fakeapi.FileObj.close,
+      {'func' : emulfile.emulated_file.close,
        'args' : [],
        'return' : None},
   'readat' :
-      {'func' : fakeapi.FileObj.readat,
+      {'func' : emulfile.emulated_file.readat,
        'args' : [Int(), Int()],
        'return' : Str()},
   'writeat' :
-      {'func' : fakeapi.FileObj.writeat,
+      {'func' : emulfile.emulated_file.writeat,
        'args' : [Str(), Int()],
        'return' : None},
 }
 
 TCP_SOCKET_OBJECT_WRAPPER_INFO = {
   'close' :
-      {'func' : fakeapi.TCPSocketObj.close,
+      {'func' : emulcomm.emulated_socket.close,
        'args' : [],
        'return' : Bool()},
   'recv' :
-      {'func' : fakeapi.TCPSocketObj.recv,
+      {'func' : emulcomm.emulated_socket.recv,
        'args' : [Int(min=1)],
        'return' : Str()},
   'send' :
-      {'func' : fakeapi.TCPSocketObj.send,
+      {'func' : emulcomm.emulated_socket.send,
        'args' : [Str()],
        'return' : Int(min=1)},
 }
 
+# TODO: Figure out which real object should be wrapped. It doesn't appear
+# to be implemented yet as there is no "getconnection" in the repy_v2 source.
 TCP_SERVER_SOCKET_OBJECT_WRAPPER_INFO = {
   'close' :
-      {'func' : fakeapi.TCPServerSocketObj.close,
+      {'func' : emulcomm.tcpserversocket.close,
        'args' : [],
        'return' : Bool()},
   'getconnection' :
-      {'func' : fakeapi.TCPServerSocketObj.getconnection,
+      {'func' : emulcomm.tcpserversocket.getconnection,
        'args' : [],
        'return' : (Str(), Int(), TCPSocket())},
 }
 
 UDP_SERVER_SOCKET_OBJECT_WRAPPER_INFO = {
   'close' :
-      {'func' : fakeapi.UDPServerSocketObj.close,
+      {'func' : emulcomm.udpserversocket.close,
        'args' : [],
        'return' : Bool()},
   'getmessage' :
-      {'func' : fakeapi.UDPServerSocketObj.getmessage,
+      {'func' : emulcomm.udpserversocket.getmessage,
        'args' : [],
        'return' : (Str(), Int(), Str())},
 }
@@ -840,9 +831,9 @@ def _copy(obj, objectmap=None):
     # be invoked, which will close the actual underlying file. As the object
     # is wrapped and the client does not have access to it, it's safe to not
     # wrap it.
-    elif isinstance(obj, (NamespaceObjectWrapper, fakeapi.FileObj,
-                          fakeapi.TCPSocketObj, fakeapi.TCPServerSocketObj,
-                          fakeapi.UDPServerSocketObj,thread.LockType,
+    elif isinstance(obj, (NamespaceObjectWrapper, emulfile.emulated_file,
+                          emulcomm.emulated_socket, emulcomm.tcpserversocket,
+                          emulcomm.udpserversocket, thread.LockType,
                           virtual_namespace.VirtualNamespace)):
       return obj
 
@@ -1012,7 +1003,7 @@ class NamespaceAPIFunctionWrapper(object):
       None
     """
 
-    # Required in func_dict.    
+    # Required in func_dict.
     self.__func = func_dict["func"]
     self.__args = func_dict["args"]
     self.__return = func_dict["return"]
@@ -1025,7 +1016,7 @@ class NamespaceAPIFunctionWrapper(object):
       raise TypeError("The func was neither callable nor a string when " +
                       "constructing a namespace-wrapped function. The object " +
                       "used for target_func was: " + repr(self.__func))
-    
+
     if type(self.__func) is str:
       self.__func_name = self.__func
     else:
@@ -1042,10 +1033,9 @@ class NamespaceAPIFunctionWrapper(object):
       if isinstance(self.__args[index], ValueProcessor):
         temparg = self.__args[index].copy(args[index])
       elif isinstance(self.__args[index], ObjectProcessor):
-        print args[index]
         temparg = self.__args[index].unwrap(args[index])
       else:
-        raise NamespaceInternalError("Unknown retval expectation.")
+        raise NamespaceInternalError("Unknown argument expectation.")
 
       self.__args[index].check(temparg)
 
@@ -1056,19 +1046,23 @@ class NamespaceAPIFunctionWrapper(object):
 
 
   def _process_retval_helper(self, processor, retval):
-    if isinstance(processor, ValueProcessor):
-      tempretval = processor.copy(retval)
-      processor.check(tempretval)
-    elif isinstance(processor, ObjectProcessor):
-      processor.check(retval)
-      tempretval = processor.wrap(retval)
-    elif processor is None:
-      if retval is not None:
-        raise RepyArgumentError("Expected None but wasn't.")
-      tempretval = None
-    else:
-      raise NamespaceInternalError("Unknown retval expectation.")
-    return tempretval
+    try:
+      if isinstance(processor, ValueProcessor):
+        tempretval = processor.copy(retval)
+        processor.check(tempretval)
+      elif isinstance(processor, ObjectProcessor):
+        processor.check(retval)
+        tempretval = processor.wrap(retval)
+      elif processor is None:
+        if retval is not None:
+          raise InternalRepyError("Expected None but wasn't.")
+        tempretval = None
+      else:
+        raise InternalRepyError("Unknown retval expectation.")
+      return tempretval
+
+    except RepyArgumentError, err:
+      raise InternalRepyError("Invalid retval type: %s" % err)
 
 
 
@@ -1077,7 +1071,7 @@ class NamespaceAPIFunctionWrapper(object):
       # Allow the return value to be a tuple of processors.
       if type(retval) is tuple:
         if len(retval) != len(self.__return):
-          raise RepyArgumentError("Returned tuple of wrong size.")
+          raise InternalRepyError("Returned tuple of wrong size: %s" % retval)
         tempretval = []
         for index in range(len(retval)):
           tempitem = self._process_retval_helper(self.__return[index], retval[index])
@@ -1086,11 +1080,8 @@ class NamespaceAPIFunctionWrapper(object):
       else:
         tempretval = self._process_retval_helper(self.__return, retval)
 
-    except RepyArgumentError:
-      raise
-    
     except Exception, e:
-      raise NamespaceInternalError(
+      raise InternalRepyError(
           "Function '" + self.__func_name + "' returned with unallowed return type " +
           str(type(retval)) + " : " + str(e))
 
@@ -1118,9 +1109,6 @@ class NamespaceAPIFunctionWrapper(object):
     <Returns>
       Anything that the underlying function may return.
     """
-
-    print args
-
     try:
       # We don't allow keyword args.
       if kwargs:
@@ -1140,7 +1128,7 @@ class NamespaceAPIFunctionWrapper(object):
         if not self.__args or not isinstance(self.__args[-1:][0], NonCopiedVarArgs):
           raise RepyArgumentError("Wrong number of arguments (%s) when calling %s." %
                                   (len(args_to_check), self.__func_name))
-      
+
       args_copy = self._process_args(args_to_check)
 
       args_to_use = None
@@ -1156,9 +1144,9 @@ class NamespaceAPIFunctionWrapper(object):
         func_to_call = self.__func
         if self.__is_method:
           # Sanity check the object we're adding back in as the "self" argument.
-          if not isinstance(args[0], (NamespaceObjectWrapper, fakeapi.FileObj,
-                                      fakeapi.TCPSocketObj, fakeapi.TCPServerSocketObj,
-                                      fakeapi.UDPServerSocketObj,thread.LockType,
+          if not isinstance(args[0], (NamespaceObjectWrapper, emulfile.emulated_file,
+                                      emulcomm.emulated_socket, emulcomm.tcpserversocket,
+                                      emulcomm.udpserversocket, thread.LockType,
                                       virtual_namespace.VirtualNamespace)):
             raise NamespaceInternalError("Wrong type for 'self' argument.")
           # If it's a method but the function was not provided as a string, we
@@ -1169,17 +1157,16 @@ class NamespaceAPIFunctionWrapper(object):
           args_to_use = args_copy
 
       retval = func_to_call(*args_to_use)
-        
+
       return self._process_retval(retval)
 
-    except RepyError, e:
+    except RepyException:
+      # TODO: this should be changed to RepyError along with all references to
+      # RepyException in the rest of the repy code.
       # We allow any RepyError to continue up to the client code.
       raise
 
     except:
-      # Any other exception is unexpected, possibly a programming error on our
-      # side, so we terminate.
-      # TODO: log and terminate.
-      import traceback
-      traceback.print_exc()
-      fakeapi.exitall()
+      # Any other exception is unexpected and thus is a programming error on
+      # our side, so we terminate.
+      _handle_internalerror("Unexpected exception from within Repy API", 843)
