@@ -1,2 +1,0 @@
-def hash_func(data):
-    return ord(data[0])/8
