@@ -142,3 +142,13 @@ class RunBuiltinException(SafeException):
     pass
 
 
+##### Lock related exceptions
+
+class LockDoubleReleaseError(RepyException):
+  """
+  This exception indicates that an attempt was made to
+  release a lock that was not acquired.
+  """
+  pass
+
+
