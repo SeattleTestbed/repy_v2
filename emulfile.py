@@ -118,7 +118,7 @@ def removefile(filename):
   OPEN_FILES_LOCK.acquire()
   try:
     # Check that the filename can be used
-    filename, exists = check_can_use_filename(filename, True)
+    filename, exists = _check_can_use_filename(filename, True)
 
     # Wait for available filewrite resources
     nanny.tattle_quantity('filewrite',0)
@@ -129,14 +129,6 @@ def removefile(filename):
     # Consume the filewrite resources
     nanny.tattle_quantity('filewrite',4096)
   
-  except RepyException:
-    # We can raise the exceptions that are expected
-    raise
-
-  except Exception, e:
-    # We should not get an exception. Log this...
-    tracebackrepy.handle_internalerror(str(e), 75)
-
   finally:
     OPEN_FILES_LOCK.release()
 
@@ -173,62 +165,14 @@ def emulated_open(filename, create):
    <Returns>
       A file-like object.
   """
-  # Check the  type of create
-  if type(create) is not bool:
-    raise RepyArgumentError("Create argument type is invalid! Must be a Boolean!")
-  
-  OPEN_FILES_LOCK.acquire()
-  try:
-    # Check that the filename can be used
-    abs_filename = None
-    abs_filename, exists = check_can_use_filename(filename, False)
-    assert(abs_filename is not None)
-
-    # Here is where we try to allocate a "file" resource from the
-    # nanny system. If that fails, we garbage collect and try again
-    # (this forces __del__() methods to be called on objects with
-    # no references, which is how we automatically free up
-    # file resources).
-    try:
-      nanny.tattle_add_item('filesopened', abs_filename)
-    except ResourceExhaustedError:
-      # Ok, maybe we can free up a file by garbage collecting.
-      gc.collect()
-      nanny.tattle_add_item('filesopened', abs_filename)
-
-    # If the file does not exist, and we should create or through an exception
-    if not exists:
-      if create:
-        # Wait for available filewrite resources, then create
-        nanny.tattle_quantity('filewrite',0)
-        safe_open(abs_filename, "w").close()
-        nanny.tattle_quantity('filewrite', 4096)
-      else:
-        raise FileNotFoundError('File "'+filename+'" does not exist and "create" flag is False!')
-
-    # Create an emulated file object
-    # Mode is always "rw" in binary, and the file can be assumed to exist.
-    return emulated_file(filename, abs_filename)
-
-  except RepyException:
-    # Restore the file handle we burned
-    nanny.tattle_remove_item('filesopened', abs_filename)
-
-    # We can raise the exceptions that are expected
-    raise
-
-  except Exception, e:
-    # We should not get an exception. Log this...
-    tracebackrepy.handle_internalerror(str(e), 76)
-
-  finally:
-    OPEN_FILES_LOCK.release()
+  # Call directly into our private initializer
+  return emulated_file(filename, create)
 
 
 
 ##### Private functions
 
-def check_can_use_filename(filename, err_no_exist):
+def _check_can_use_filename(filename, err_no_exist):
   """
   <Purpose>
     Private method to check:
@@ -259,7 +203,7 @@ def check_can_use_filename(filename, err_no_exist):
     A tuple of ( The absolute path to the file , (BOOL) If the file exists )
   """
   # Check that the filename is allowed
-  assert_is_allowed_filename(filename)
+  _assert_is_allowed_filename(filename)
   
   # Check if the file is in use
   if filename in OPEN_FILES:
@@ -280,7 +224,7 @@ def check_can_use_filename(filename, err_no_exist):
   return absolute_path,exists
 
 
-def assert_is_allowed_filename(filename):
+def _assert_is_allowed_filename(filename):
   """
   <Purpose>
     Private method to check if a filename is allowed.
@@ -331,52 +275,100 @@ class emulated_file:
   #
   # fobj is the actual underlying file-object from python.
   # seek_lock is a Lock object to serialize seeking
-  __slots__ = ["filename", "abs_filename", "fobj", "seek_lock"]
+  # size is the byte size of the file, to detect seeking past the end.
+  __slots__ = ["filename", "abs_filename", "fobj", "seek_lock", "filesize"]
 
-  def __init__(self, filename, abs_filename):
+  def __init__(self, filename, create):
     """
      <Purpose>
-        This is an internal initializer. The OPEN_FILES_LOCK should be
-        acquired prior to calling this method. Additionally,
-        a "filesopened" resource should be acquired using the abs_filename.
+        This is an internal initializer.
 
      <Arguments>
         filename:
-           The name of the file, non-absolute.
+          The file that should be operated on. It must not contain 
+          characters other than 'a-zA-Z0-9.-_' and cannot be '.', '..' or
+          the empty string.
 
-        abs_filename:
-           The absolute path to a file that should be opened with
-           read/write privileges in binary mode. This file must
-           exist.
-
-           This should be verified as valid prior to calling,
-           since it is assumed to be valid.
+        create:
+           A Boolean flag which specifies if the file should be created
+           if it does not exist.
 
      <Exceptions>
-        None.
+        RepyArgumentError is raised if the filename is invalid.
+        FileNotFoundError is raised if the filename is not found, and create is False.
+        FileInUseError is raised if a handle to the file is already open.
+        ResourceExhaustedError is raised if there are no available file handles.
 
      <Side Effects>
-        Opens a file on disk, using a file descriptor.
+        Opens a file on disk, uses a file descriptor.
+
+     <Resource Consumption>
+        Consumes 4K of fileread. If the file is created, then 4K of filewrite is used.
+        If a handle to the object is created, then a file descriptor is used.
 
      <Returns>
         A file-like object 
     """
-
-    # Store the filename we are given
+    # Initialize the fields, otherwise __del__ gets confused
+    # when we throw an exception. This was not a problem when the
+    # logic was in emulated_open, since we would never throw an
+    # exception
     self.filename = filename
-    self.abs_filename = abs_filename
-
-    # Store a file handle
-    # Always open in mode r+b, this avoids Windows text-mode
-    # quirks, and allows reading and writing
-    self.fobj = safe_open(abs_filename, "r+b")
-
-    # Add the filename to the open files
-    OPEN_FILES.add(filename)
-
-    # Store a seek lock
+    self.abs_filename = None
+    self.fobj = None
     self.seek_lock = threading.Lock()
+    self.filesize = 0
 
+    # Check the  type of create
+    if type(create) is not bool:
+      raise RepyArgumentError("Create argument type is invalid! Must be a Boolean!")
+
+    OPEN_FILES_LOCK.acquire()
+    try:
+      # Check that the filename can be used. The err_no_exist is set to
+      # not create. So that if create is False, then it is an error if the
+      # file does not exist.
+      self.abs_filename, exists = _check_can_use_filename(filename, not create)
+      assert(self.abs_filename is not None)
+
+      # Here is where we try to allocate a "file" resource from the
+      # nanny system. If that fails, we garbage collect and try again
+      # (this forces __del__() methods to be called on objects with
+      # no references, which is how we automatically free up
+      # file resources).
+      try:
+        nanny.tattle_add_item('filesopened', self.abs_filename)
+      except ResourceExhaustedError:
+        # Ok, maybe we can free up a file by garbage collecting.
+        gc.collect()
+        nanny.tattle_add_item('filesopened', self.abs_filename)
+
+      # If the file does not exist, and we should create or throw an exception
+      if not exists and create:
+        # Wait for available filewrite resources, then create
+        nanny.tattle_quantity('filewrite',0)
+        safe_open(self.abs_filename, "w").close() # Forces file creation
+        nanny.tattle_quantity('filewrite', 4096)
+
+      # Store a file handle
+      # Always open in mode r+b, this avoids Windows text-mode
+      # quirks, and allows reading and writing
+      self.fobj = safe_open(self.abs_filename, "r+b")
+
+      # Add the filename to the open files
+      OPEN_FILES.add(filename)
+
+      # Get the file's size, seek to the end.
+      self.fobj.seek(0, os.SEEK_END)
+      self.filesize = self.fobj.tell()
+
+    except RepyException:
+      # Restore the file handle we tattled
+      nanny.tattle_remove_item('filesopened', self.abs_filename)
+      raise
+
+    finally:
+      OPEN_FILES_LOCK.release()
 
 
   def close(self):
@@ -413,7 +405,7 @@ class emulated_file:
         fobj.close()
         self.fobj = None
       else:
-        raise FileClosedError("File '"+self.filename+"' is already closed!")
+        raise FileClosedError("File '"+str(self.filename)+"' is already closed!")
 
       # Remove this file from the list of open files
       OPEN_FILES.remove(self.filename)
@@ -455,21 +447,17 @@ class emulated_file:
     if offset < 0:
       raise RepyArgumentError("Negative read offset speficied!")
 
-    # Get the underlying file object
-    fobj = self.fobj
-    if fobj is None:
-      raise FileClosedError("File '"+self.filename+"' is already closed!")
-
     # Get the seek lock
     self.seek_lock.acquire()
 
     try:
-      # Get the file's size, seek to the end.
-      fobj.seek(0, os.SEEK_END)
-      filesize = fobj.tell()
+      # Get the underlying file object
+      fobj = self.fobj
+      if fobj is None:
+        raise FileClosedError("File '"+self.filename+"' is already closed!")
 
       # Check the provided offset
-      if offset > filesize:
+      if offset > self.filesize:
         raise SeekPastEndOfFileError("Seek offset extends past the EOF!")
       
       # Seek to the correct location
@@ -528,21 +516,17 @@ class emulated_file:
     if type(data) is not str:
       raise RepyArgumentError("Data must be specified as a string!")
 
-    # Get the underlying file object
-    fobj = self.fobj
-    if fobj is None:
-      raise FileClosedError("File '"+self.filename+"' is already closed!")
-
     # Get the seek lock
     self.seek_lock.acquire()
 
     try:
-      # Get the file's size, seek to the end.
-      fobj.seek(0, os.SEEK_END)
-      filesize = fobj.tell()
-
+      # Get the underlying file object
+      fobj = self.fobj
+      if fobj is None:
+        raise FileClosedError("File '"+self.filename+"' is already closed!")
+ 
       # Check the provided offset
-      if offset > filesize:
+      if offset > self.filesize:
         raise SeekPastEndOfFileError("Seek offset extends past the EOF!")
       
       # Seek to the correct location
@@ -554,6 +538,10 @@ class emulated_file:
       # Write the data and flush to disk
       fobj.write(data)
       fobj.flush()
+
+      # Check if we expanded the file size
+      if offset + len(data) > self.filesize:
+        self.filesize = offset + len(data)
 
     finally:
       # Release the seek lock
