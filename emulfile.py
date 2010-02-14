@@ -262,7 +262,7 @@ def _assert_is_allowed_filename(filename):
 ##### Class Definitions
 
 
-class emulated_file:
+class emulated_file (object):
   """
     A safe class which enables a very primitive file interaction.
     We only allow reading and writing at a provided index.
