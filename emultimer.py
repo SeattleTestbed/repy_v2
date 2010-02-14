@@ -34,46 +34,6 @@ EVENT_PREFIX = "_EVENT:"
 # Store callable
 safe_callable = callable
 
-##### Internal Functions
-
-# Generates a valid event handle
-def generate_eventhandle():
-  """
-  <Purpose>
-    Generates a string event handle that can be used to uniquely identify an event.
-    It is formatted so that cursory verification can be performed.
-
-  <Returns>
-    A string event handle.
-  """
-  # Get a unique handle from idhelper
-  uniqueh = idhelper.getuniqueid()
-
-  # Return the unique handle prefixed with EVENT_PREFIX
-  return (EVENT_PREFIX + uniqueh)
-
-
-# Helps validate an event handle
-def is_valid_eventhandle(eventhandle):
-  """
-  <Purpose>
-    Determines if a given event handle is valid.
-    This does not guarantee validity, just proper form.
-
-  <Arguments>
-    eventhandle:
-      The event handle to be checked.
-
-  <Returns>
-    True if valid, False otherwise.
-  """
-  # The handle must be a string, check type first
-  if type(eventhandle) != str:
-    return False
-
-  # Check if the handle has the correct prefix
-  return eventhandle.startswith(EVENT_PREFIX)
-
 
 ##### Public Functions
 
@@ -127,7 +87,7 @@ def createthread(function):
     raise RepyArgumentError("Provided function is not callable!")
 
   # Generate a unique handle and see if there are resources available
-  eventhandle = generate_eventhandle()
+  eventhandle = EVENT_PREFIX + idhelper.getuniqueid()
   nanny.tattle_add_item('events', eventhandle)
 
   # Wrap the provided function

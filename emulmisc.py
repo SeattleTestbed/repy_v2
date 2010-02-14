@@ -26,6 +26,7 @@ import tracebackrepy    # for os.urandom so exception can be logged internally
 import nonportable      # for getruntime
 import harshexit        # for harshexit()
 import threading        # for Lock()
+import thread           # to catch thread.error
 from exception_hierarchy import *
 
 ##### Public Functions
@@ -235,7 +236,7 @@ class emulated_lock (object):
     """
     try:
       self.lock.release()
-    except:
+    except thread.error:
       raise LockDoubleReleaseError("Releasing an un-locked lock!")
 
 
