@@ -16,6 +16,14 @@ import nix_common_api as nix_api # Import the Common API
 import textops      # Import seattlelib's text processing lib
 import portable_popen  # For Popen
 
+import platform
+
+# Determine if we are 32 bit or 64 bit
+running_32bit = True
+architecture = platform.architecture()
+if "64" in architecture[0]:
+  running_32bit = False
+
 # Manually import the common functions we want
 exists_outgoing_network_socket = nix_api.exists_outgoing_network_socket
 exists_listening_network_socket = nix_api.exists_listening_network_socket
@@ -34,7 +42,12 @@ last_stat_data = None   # Store the last array of data from _get_proc_info_by_pi
 # Constants
 JIFFIES_PER_SECOND = 100.0
 PAGE_SIZE = os.sysconf('SC_PAGESIZE')
-GETTID = 224 # Get the thread id of the currently executing thread
+
+# Get the thread id of the currently executing thread
+if running_32bit:
+  GETTID = 224 
+else:
+  GETTID = 186
 
 # Maps each field in /proc/{pid}/stat to an index when split by spaces
 FIELDS = {
@@ -84,7 +97,7 @@ FIELDS = {
 # Process a /proc/PID/stat or /proc/PID/task/TID/stat file and returns it as an array
 def _process_stat_file(file):
   # Get the file in proc
-  fileo = open(file,"r")
+  fileo = myopen(file,"r")
 
   # Read in all the data
   data = fileo.read()
