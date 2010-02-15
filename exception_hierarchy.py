@@ -20,6 +20,7 @@ _EXPORTED_EXCEPTIONS = ["RepyException",
                         "FileInUseError",
                         "SeekPastEndOfFileError",
                         "FileClosedError",
+                        "LockDoubleReleaseError",
                        ]
 
 
