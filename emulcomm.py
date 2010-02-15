@@ -1016,7 +1016,7 @@ def sendmessage(destip, destport, message, localip, localport):
       Send a message to a host / port
 
    <Arguments>
-      desthost:
+      destip:
          The host to send a message to
       destport:
          The port to send the message to
@@ -1031,8 +1031,7 @@ def sendmessage(destip, destport, message, localip, localport):
       AddressBindingError (descends NetworkError) when the local IP isn't
         a local IP.
 
-      PortRestrictedException (descends ResourceException?) when the local
-        port isn't allowed
+      ResourceForbiddenError when the local port isn't allowed
 
       RepyArgumentError when the local IP and port aren't valid types
         or values
@@ -1064,7 +1063,7 @@ def sendmessage(destip, destport, message, localip, localport):
 #      raise Exception("Local IP address is invalid.")
 
 # JAC: removed since this breaks semantics
-#  if not is_valid_ip_address(desthost):
+#  if not is_valid_ip_address(destip):
 #    raise Exception("Destination host IP address is invalid.")
   
   if not is_valid_network_port(destport):
@@ -1076,10 +1075,10 @@ def sendmessage(destip, destport, message, localip, localport):
         "between 1 and 65535.")
 
   try:
-    restrictions.assertisallowed('sendmess', desthost, destport, message, \
+    restrictions.assertisallowed('sendmess', destip, destport, message, \
         localip, localport)
   except Exception, e:
-    raise PortRestrictedException(str(e))
+    raise ResourceForbiddenError(str(e))
 
   if localport:
     nanny.tattle_check('messport', localport)
@@ -1087,7 +1086,7 @@ def sendmessage(destip, destport, message, localip, localport):
   # Armon: Check if the specified local ip is allowed
   # this check only makes sense if the localip is specified
   if localip and not ip_is_allowed(localip):
-    raise PortRestrictedException("IP '" + str(localip) + "' is not allowed.")
+    raise ResourceForbiddenError("IP '" + str(localip) + "' is not allowed.")
   
   # If there is a preference, but no localip, then get one
   elif user_ip_interface_preferences and not localip:
@@ -1108,7 +1107,7 @@ def sendmessage(destip, destport, message, localip, localport):
   if commhandle:
 
     # block in case we're oversubscribed
-    if is_loopback(desthost):
+    if is_loopback(destip):
       nanny.tattle_quantity('loopsend', 0)
     else:
       nanny.tattle_quantity('netsend', 0)
@@ -1116,7 +1115,7 @@ def sendmessage(destip, destport, message, localip, localport):
     # try to send using this socket
     try:
       bytessent = commtableentry['socket'].sendto(message, \
-          (desthost, destport))
+          (destip, destport))
     except socket.error, e:
       # we're going to save this error in case we also get an error below.
       # This is likely to be the error we actually want to raise
@@ -1124,7 +1123,7 @@ def sendmessage(destip, destport, message, localip, localport):
       # should I really fall through here?
     else:
       # send succeeded, let's wait and return
-      if is_loopback(desthost):
+      if is_loopback(destip):
         nanny.tattle_quantity('loopsend', 64 + bytessent)
       else:
         nanny.tattle_quantity('netsend', 64 + bytessent)
@@ -1145,14 +1144,14 @@ def sendmessage(destip, destport, message, localip, localport):
         raise AddressBindingError(str(e))
 
     # wait if already oversubscribed
-    if is_loopback(desthost):
+    if is_loopback(destip):
       nanny.tattle_quantity('loopsend', 0)
     else:
       nanny.tattle_quantity('netsend', 0)
 
-    bytessent = s.sendto(message, (desthost, destport))
+    bytessent = s.sendto(message, (destip, destport))
 
-    if is_loopback(desthost):
+    if is_loopback(destip):
       nanny.tattle_quantity('loopsend', 64 + bytessent)
     else:
       nanny.tattle_quantity('netsend', 64 + bytessent)
@@ -1197,8 +1196,7 @@ def listenformessage(localip, localport):
         AddressBindingError (descends NetworkError) if the IP address isn't a
         local IP.
 
-        PortRestrictedException (descends ResourceException?) if the port is
-        restricted.
+        ResourceForbiddenError if the port is restricted.
 
         SocketWouldBlockException if the call would block.
 
@@ -1227,7 +1225,7 @@ def listenformessage(localip, localport):
   
   # Armon: Check if the specified local ip is allowed
   if not ip_is_allowed(localip):
-    raise PortRestrictedException("IP '" + localip + "' is not allowed.")
+    raise ResourceForbiddenError("IP '" + localip + "' is not allowed.")
   
   # Armon: Generate the new handle since we need it 
   # to replace the old handle if it exists
@@ -1312,7 +1310,7 @@ class udpserversocket:
         LocalIPChanged if the local IP address has changed and the
         udpserversocket is invalid
 
-        PortRestrictedException if the port number is no longer allowed.
+        ResourceForbiddenError if the port number is no longer allowed.
 
         SocketClosedLocal if udpserversocket.close() was called.
 
@@ -1335,7 +1333,9 @@ class udpserversocket:
     socketinfo = comminfo[mycommid]
     s = socketinfo['socket']
 
-    if socketinfo['localip'] not in allowediplist:
+    update_ip_cache()
+    if socketinfo['localip'] not in allowediplist and \
+        not is_loopback(socketinfo['localip']):
       raise LocalIPChanged("The local ip " + socketinfo['localip'] + \
           " is no longer present on a system interface.")
 

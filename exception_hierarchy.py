@@ -21,6 +21,15 @@ _EXPORTED_EXCEPTIONS = ["RepyException",
                         "SeekPastEndOfFileError",
                         "FileClosedError",
                         "LockDoubleReleaseError",
+                        "NetworkError",
+                        "PortInUseError",
+                        "InternetConnectivityError",
+                        "AddressBindingError",
+                        "ConnectionRefusedError",
+                        "LocalIPChanged",
+                        "SocketClosedLocal",
+                        "SocketClosedRemote",
+                        "SocketWouldBlockError",
                        ]
 
 
@@ -86,6 +95,7 @@ class ResourceForbiddenError (ResourceUsageError):
   """
   pass
 
+
 ##### File Related Exceptions
 
 class FileError (RepyException):
@@ -121,6 +131,7 @@ class FileClosedError (FileError):
   """
   pass
 
+
 ##### Safety exceptions from safe.py
 
 class SafeException(RepyException):
@@ -153,3 +164,59 @@ class LockDoubleReleaseError(RepyException):
   pass
 
 
+##### Network exceptions
+
+class NetworkError (RepyException):
+  """
+  This exception parent-classes all of the networking exceptions.
+  """
+  pass
+
+class PortInUseError (NetworkError):
+  """
+  This exception gets raised when a port is already being used.
+  """
+  pass
+
+class InternetConnectivityError (NetworkError):
+  """
+  This exception is raised when there is no route to an IP passed to
+  sendmessage or openconnection.
+  """
+  pass
+
+class AddressBindingError (NetworkError):
+  """
+  This exception is raised when binding to an ip and port fails.
+  """
+  pass
+
+class ConnectionRefusedError (NetworkError):
+  """
+  This exception is raised when a TCP connection request is refused.
+  """
+  pass
+
+class LocalIPChanged (NetworkError):
+  """
+  This exception indicates that the local IP has changed.
+  """
+  pass
+
+class SocketClosedLocal (NetworkError):
+  """
+  This indicates that the socket was closed locally.
+  """
+  pass
+
+class SocketClosedRemote (NetworkError):
+  """
+  This indicates that the socket was closed on the remote end.
+  """
+  pass
+
+class SocketWouldBlockError (NetworkError):
+  """
+  This indicates that the socket operation would have blocked.
+  """
+  pass
