@@ -35,9 +35,9 @@ if len(sec_stops) <= len(init_stops):
 # Check the last entry
 last_stop = sec_stops[-1]
 
-# Check the amount is between 0.8 and 1
-if last_stop[1] < 0.8:
+# Check the amount is between 0.8 and 1 (with some fudge factor)
+if last_stop[1] < 0.8 * 0.95:
   print "We expect to be stopped at least for 0.8 seconds! Were stopped for: "+str(last_stop[1])
-if last_stop[1] > 1:
+if last_stop[1] > 1 * 1.05:
   print "We expect to be stopped at most for 1 second! Were stopped for: "+str(last_stop[1])
 
