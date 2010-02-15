@@ -62,7 +62,7 @@ def randombytes():
   # caused by the user. The exit code 217 was chosen to be
   # unique from all other exit calls in repy.
   try:
-    randombytes = os.urandom(1024)
+    randomdata = os.urandom(1024)
   except NotImplementedError, e:
     tracebackrepy.handle_internalerror("os.urandom is not implemented " + \
         "(Exception was: %s)" % e.message, 217)
@@ -70,7 +70,7 @@ def randombytes():
   # Tattle all 1024 now
   nanny.tattle_quantity('random',1024)
  
-  return randombytes
+  return randomdata
 
 
 def getruntime():
@@ -186,6 +186,11 @@ def getlasterror():
 ##### Class Declarations
 
 class emulated_lock (object):
+  """
+  This object is a slim wrapper around Python's
+  threading.Lock(). It provides a simple lock object.
+  """
+
   # We only have a single instance variable, "lock"
   # which is a threading.Lock() object
   __slots__ = ["lock"]

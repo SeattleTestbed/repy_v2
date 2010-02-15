@@ -108,7 +108,7 @@ def createthread(function):
   # Check if we get an exception trying to create a new thread
   try:
     tobj.start()
-  except thread.error, exp:
+  except thread.error:
     # Set exit code 56, which stands for a Threading Error
     # The Node manager will detect this and handle it
     harshexit.harshexit(56)
