@@ -73,6 +73,23 @@ import repy_constants
 # 
 OPEN_SOCKET_INFO = {}
 
+# This set holds all of the sockets which
+# are pending to open.
+#
+# Each entry is like the keys in OPEN_SOCKET_INFO,
+# acting like an identity tuple which uniquely identifies
+# each socket.
+#
+# Operations should check for another pending operation
+# before continuing, and removing their entry when finished.
+#
+# Access to the set should be serialized via the
+# PENDING_SOCKETS_LOCK.
+#
+PENDING_SOCKETS = set([])
+PENDING_SOCKETS_LOCK = threading.Lock()
+
+
 # If we have a preference for an IP/Interface this flag is set to True
 user_ip_interface_preferences = False
 
@@ -1173,46 +1190,62 @@ def listenforconnection(localip, localport):
   if not is_allowed_localport("TCP", localport):
     raise ResourceForbiddenError("Provided localport is not allowed!")
 
-  # Check if the tuple is in use
-  identity = ("TCP", localip, localport, None, None)
-  if identity in OPEN_SOCKET_INFO:
-    raise PortInUseError("The provided localip and localport are already in use!")
-
   # Check if the localip is valid
   update_ip_cache()
   if localip not in allowediplist:
     raise AddressBindingError("The provided localip is not a local IP!")
 
+  # Check if the tuple is in use
+  identity = ("TCP", localip, localport, None, None)
+  if identity in OPEN_SOCKET_INFO:
+    raise PortInUseError("The provided localip and localport are already in use!")
 
-  # Register this identity as an insocket
-  nanny.tattle_add_item('insockets',identity)
+  # Check if the tuple is pending
+  PENDING_SOCKETS_LOCK.acquire()
+  try:
+    if idenity in PENDING_SOCKETS:
+      raise PortInUseError("Concurrent listenforconnection with the localip and localport in progress!")
+    else:
+      # No pending operation, add us to the pending list
+      PENDING_SOCKETS.add(identity)
+  finally:
+    PENDING_SOCKETS_LOCK.release()
 
   try:
-    # Get the socket
-    sock = get_real_socket(localip,localport)
+    # Register this identity as an insocket
+    nanny.tattle_add_item('insockets',identity)
 
-    # NOTE: Should this be anything other than a hardcoded number?
-    sock.listen(5)
-  except Exception, e:
-    nanny.tattle_remove_item('insockets',identity)
+    try:
+      # Get the socket
+      sock = get_real_socket(localip,localport)
 
-    # Check if this an already in use error
-    if is_addr_in_use_exception(e):
-      raise PortInUseError("Provided Local IP and Local Port is already in use!")
-    
-    # Unknown error...
-    else:
-      raise
+      # NOTE: Should this be anything other than a hardcoded number?
+      sock.listen(5)
+    except Exception, e:
+      nanny.tattle_remove_item('insockets',identity)
 
-  # Create entry with a lock and the socket object
-  OPEN_SOCKET_INFO[identity] = (threading.Lock(), sock)
+      # Check if this an already in use error
+      if is_addr_in_use_exception(e):
+        raise PortInUseError("Provided Local IP and Local Port is already in use!")
+      
+      # Unknown error...
+      else:
+        raise
 
-  # Create a TCPServerSocket
-  server_sock = TCPServerSocket(identity)
+    # Create entry with a lock and the socket object
+    OPEN_SOCKET_INFO[identity] = (threading.Lock(), sock)
 
-  # Return the TCPServerSocket
-  return server_sock
+    # Create a TCPServerSocket
+    server_sock = TCPServerSocket(identity)
 
+    # Return the TCPServerSocket
+    return server_sock
+
+  finally:
+    # Remove us from the pending operations list
+    PENDING_SOCKETS_LOCK.acquire()
+    PENDING_SOCKETS.remove(identity)
+    PENDING_SOCKETS_LOCK.release()
 
 
 
