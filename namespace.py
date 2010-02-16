@@ -485,7 +485,7 @@ class TCPServerSocket(ObjectProcessor):
   """Allows TCPServerSocket objects."""
 
   def check(self, val):
-    if not isinstance(val, emulcomm.tcpserversocket):
+    if not isinstance(val, emulcomm.TCPServerSocket):
       raise RepyArgumentError("Invalid type %s" % type(val))
 
 
@@ -582,8 +582,10 @@ USERCONTEXT_WRAPPER_INFO = {
        'args' : [Str(), Int()],
        'return' : UDPServerSocket()},
   'openconnection' :
-      {'func' : emulcomm.openconn,
-       'args' : [Str(), Int(), Str(), Int(), Int()],
+      {'func' : emulcomm.openconnection,
+       'args' : [Str(), Int(), Str(), Int(), Float()],
+#      'raise' : [AddressBindingError, PortRestrictedError, PortInUseError,
+#                 ConnectionRefusedError, TimeoutError, RepyArgumentError],
        'return' : TCPSocket()},
   'listenforconnection' :
       {'func' : emulcomm.listenforconnection,
@@ -673,11 +675,11 @@ TCP_SOCKET_OBJECT_WRAPPER_INFO = {
 # to be implemented yet as there is no "getconnection" in the repy_v2 source.
 TCP_SERVER_SOCKET_OBJECT_WRAPPER_INFO = {
   'close' :
-      {'func' : emulcomm.tcpserversocket.close,
+      {'func' : emulcomm.TCPServerSocket.close,
        'args' : [],
        'return' : Bool()},
   'getconnection' :
-      {'func' : emulcomm.tcpserversocket.getconnection,
+      {'func' : emulcomm.TCPServerSocket.getconnection,
        'args' : [],
        'return' : (Str(), Int(), TCPSocket())},
 }
@@ -832,7 +834,7 @@ def _copy(obj, objectmap=None):
     # is wrapped and the client does not have access to it, it's safe to not
     # wrap it.
     elif isinstance(obj, (NamespaceObjectWrapper, emulfile.emulated_file,
-                          emulcomm.emulated_socket, emulcomm.tcpserversocket,
+                          emulcomm.emulated_socket, emulcomm.TCPServerSocket,
                           emulcomm.udpserversocket, thread.LockType,
                           virtual_namespace.VirtualNamespace)):
       return obj
@@ -1145,7 +1147,7 @@ class NamespaceAPIFunctionWrapper(object):
         if self.__is_method:
           # Sanity check the object we're adding back in as the "self" argument.
           if not isinstance(args[0], (NamespaceObjectWrapper, emulfile.emulated_file,
-                                      emulcomm.emulated_socket, emulcomm.tcpserversocket,
+                                      emulcomm.emulated_socket, emulcomm.TCPServerSocket,
                                       emulcomm.udpserversocket, thread.LockType,
                                       virtual_namespace.VirtualNamespace)):
             raise NamespaceInternalError("Wrong type for 'self' argument.")

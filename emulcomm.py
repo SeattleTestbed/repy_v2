@@ -357,12 +357,13 @@ def is_terminated_connection_exception(exceptionobj):
   return (errname in connection_closed_errors)
 
 
+
 # Armon: This is used for semantics, to determine if we have a valid IP.
-def is_valid_ip_address(ipaddr):
+def _is_valid_ip_address(ipaddr):
   """
   <Purpose>
     Determines if ipaddr is a valid IP address.
-    Address 0.0.0.0 is considered valid.
+    0.X and 224-255.X addresses are not allowed.
 
   <Arguments>
     ipaddr: String to check for validity. (It will check that this is a string).
@@ -375,42 +376,50 @@ def is_valid_ip_address(ipaddr):
     return False
 
   # A valid IP should have 4 segments, explode on the period
-  parts = ipaddr.split(".")
+  octets = ipaddr.split(".")
 
   # Check that we have 4 parts
-  if len(parts) != 4:
+  if len(octets) != 4:
     return False
 
   # Check that each segment is a number between 0 and 255 inclusively.
-  for part in parts:
-    # Check the length of each segment
-    digits = len(part)
-    if digits >= 1 and digits <= 3:
-      # Attempt to convert to an integer
-      try:
-        number = int(part)
-        if not (number >= 0 and number <= 255):
-          return False
-
-      except:
-        # There was an error converting to an integer, not an IP
-        return False
-    else:
+  for octet in octets:
+    # Attempt to convert to an integer
+    try:
+      ipnumber = int(octet)
+    except ValueError:
+      # There was an error converting to an integer, not an IP
       return False
+
+    # IP addresses octets must be between 0 and 255
+    if not (ipnumber >= 0 and ipnumber <= 255):
+      return False
+
+  # should not have a ValueError (I already checked)
+  firstipnumber = int(octets[0])
+
+  # IP addresses with the first octet 0 refer to all local IPs.   These are
+  # not allowed
+  if firstipnumber == 0:
+    return False
+
+  # IP addresses with the first octet >=224 are either Multicast or reserved.
+  # These are not allowed
+  if firstipnumber >= 224:
+    return False
 
   # At this point, assume the IP is valid
   return True
 
 
 # Armon: This is used for semantics, to determine if the given port is valid
-def is_valid_network_port(port, allowzero=False):
+def _is_valid_network_port(port):
   """
   <Purpose>
     Determines if a given network port is valid. 
 
   <Arguments>
     port: A numeric type (this will be checked) port number.
-    allowzero: Allows 0 as a valid port if true
 
   <Returns>
     True if valid, False otherwise.
@@ -419,7 +428,10 @@ def is_valid_network_port(port, allowzero=False):
   if not (type(port) == long or type(port) == int):
     return False
 
-  return ((allowzero and port == 0) or (port >= 1 and port <= 65535))
+  if port >= 1 and port <= 65535:
+    return True
+  else:
+    return False
 
 
 # Used to decide if an IP is the loopback IP or not.   This is needed for 
@@ -743,11 +755,11 @@ def sendmessage(destip, destport, message, localip, localport):
 #  if not is_valid_ip_address(destip):
 #    raise Exception("Destination host IP address is invalid.")
   
-  if not is_valid_network_port(destport):
+  if not _is_valid_network_port(destport):
     raise RepyArgumentError("Destination port number must be an " + \
         "integer, between 1 and 65535.")
 
-  if not is_valid_network_port(localport, True):
+  if not _is_valid_network_port(localport):
     raise RepyArgumentError("Local port number must be an integer, " + \
         "between 1 and 65535.")
 
@@ -894,7 +906,7 @@ def listenformessage(localip, localport):
 #  if not is_valid_ip_address(localip):
 #    raise Exception("Local IP address is invalid.")
 
-  if not is_valid_network_port(localport):
+  if not _is_valid_network_port(localport):
     raise RepyArgumentError("Local port number must be an integer, " + \
         "between 1 and 65535.")
 
@@ -954,70 +966,78 @@ def listenformessage(localip, localport):
 
 
 # Public interface!!!
-def openconn(desthost, destport,localip=None, localport=None,timeout=None):
+def openconnection(destip, destport,localip, localport, timeout):
   """
-   <Purpose>
+    <Purpose>
       Opens a connection, returning a socket-like object
 
-   <Arguments>
-      desthost:
-         The host to open communcations with
-      destport:
-         The port to use for communication
-      localip (optional):
-         The local ip to use for the communication
-      localport (optional):
-         The local port to use for communication (0 for a random port)
-      timeout (optional):
-         The maximum amount of time to wait to connect
 
-   <Exceptions>
-      As from socket.connect, etc.
+    <Arguments>
+      destip: The destination ip to open communications with
 
-   <Side Effects>
-      None.
+      destport: The destination port to use for communication
 
-   <Returns>
-      A socket-like object that can be used for communication.   Use send, 
+      localip: The local ip to use for the communication
+
+      localport: The local port to use for communication
+
+      timeout: The maximum amount of time to wait to connect.   This may
+               be a floating point number or an integer
+
+
+    <Exceptions>
+
+      RepyArgumentError if the arguments are invalid.   This includes both
+      the types and values of arguments.
+
+      AddressBindingError (descends NetworkError) if the localip isn't 
+      associated with the local system or is not allowed.
+
+      PortRestrictedError (descends ResourceError) if the localport isn't 
+      allowed.
+
+      PortInUseError (descends NetworkError) if the (localip, localport, 
+      destip, destport) tuple is already used.   This will also occur if the 
+      operating system prevents the local IP / port from being used.
+
+      ConnectionRefusedError (descends NetworkError) if the connection cannot 
+      be established because the destination port isn't being listened on.
+
+      TimeoutError (common to all API functions that timeout) if the 
+      connection times out
+
+
+    <Side Effects>
+      TODO
+
+    <Resource Consumption>
+      This operation consumes 64*2 bytes of netsend (SYN, ACK) and 64 bytes 
+      of netrecv (SYN/ACK). This requires that the localport is allowed. Upon 
+      success, this call consumes an outsocket.
+
+    <Returns>
+      A socket-like object that can be used for communication. Use send, 
       recv, and close just like you would an actual socket object in python.
   """
 
-  # Set a default timeout of 5 seconds if none is specified.
-  if timeout is None:
-    timeout = 5.0
+  # check the validity of the IP addresses
+  if not _is_valid_ip_address(destip):
+    raise RepyArgumentError("Invalid IP address listed for destip: '"+destip+"'")
+  if not _is_valid_ip_address(localip):
+    raise RepyArgumentError("Invalid IP address listed for localip: '"+localip+"'")
 
-  # Check that both localip and localport are given if either is specified
-  if localip != None and localport == None or localport != None and localip == None:
-    raise Exception("Localip and localport must be specified simultaneously.")
+  # ensure the timeout is positive
+  if timeout < 0:
+    raise RepyArgumentError("Invalid timeout '"+str(timeout)+"'.   Must be positive.")
 
-  # Set the default value of localip
-  if not localip or localip == '0.0.0.0':
-    localip = None
-#  else:
-# JAC: removed since this breaks semantics
-    # Check that the localip is valid if given
-#    if not is_valid_ip_address(localip):
-#      raise Exception("Local IP address is invalid.")
+  # check the port arguments
+  if not _is_valid_network_port(localport):
+    raise RepyArgumentError("Invalid localport '"+str(localport)+"'.   Must be between 1 and 65535, inclusive.")
 
-  # Assign the default value of localport if none is given.
-  if localport == None:
-    localport = 0
- 
-# JAC: removed since this breaks semantics
-  # Check the remote IP for validity
-#  if not is_valid_ip_address(desthost):
-#    raise Exception("Destination host IP address is invalid.")
+  if not _is_valid_network_port(destport):
+    raise RepyArgumentError("Invalid destport '"+str(localport)+"'.   Must be between 1 and 65535, inclusive.")
 
-  if not is_valid_network_port(destport):
-    raise Exception("Destination port number must be an integer, between 1 and 65535.")
 
-  # Allow the localport to be 0, which is the default.
-  if not is_valid_network_port(localport, True):
-    raise Exception("Local port number must be an integer, between 1 and 65535.")
-
-  # Check that the timeout is a number, greater than 0
-  if not (type(timeout) == float or type(timeout) == int or type(timeout) == long) or timeout <= 0.0:
-    raise Exception("Timeout parameter must be a numeric value greater than 0.")
 
   # Armon: Check if the specified local ip is allowed
   # this check only makes sense if the localip is specified
@@ -1180,7 +1200,7 @@ def listenforconnection(localip, localport):
   if not is_valid_ip_address(localip):
     raise RepyArgumentError("Provided localip is not valid!")
 
-  if not is_valid_network_port(localport):
+  if not _is_valid_network_port(localport):
     raise RepyArgumentError("Provided localport is not valid!")
 
   # Check the input arguments (permission)
