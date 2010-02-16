@@ -51,21 +51,24 @@ import errno
 # Armon: Used for getting the constant IP values for resolving our external IP
 import repy_constants 
 
-# The architecture is that I have a thread which "polls" all of the sockets
-# that are being listened on using select.  If a connection
-# oriented socket has a connection pending, or a message-based socket has a
-# message pending, and there are enough events it calls the appropriate
-# function.
 
+###### Module Data
 
-
-
-
-# Table of communications structures:
-# {'type':'UDP','localip':ip, 'localport':port, 'socket':s, outgoing:True, 'closing_lock':lockobj}
-# {'type':'TCP','remotehost':None, 'remoteport':None,'localip':None,'localport':None, 'socket':s, 'function':func, outgoing:False, 'closing_lock':lockobj}
-
-comminfo = {}
+# This dictionary holds all of the open sockets, and
+# is used to catalog all the used network tuples.
+#
+# The key to each entry is an identity tuple:
+# (Type, Local IP, Local Port, Remote IP, Remote Port)
+# Type is a string, either "TCP" or "UDP"
+# Remote IP and Remote Port are None for listening socket
+#
+# The value associated with each key is a tuple:
+# (lock, socket)
+# The lock object is used to serialize access to the socket,
+# and should be acquired before doing anything else.
+# The socket is an actual Python socket object.
+# 
+OPEN_SOCKET_INFO = {}
 
 # If we have a preference for an IP/Interface this flag is set to True
 user_ip_interface_preferences = False
@@ -84,6 +87,8 @@ user_specified_ip_interface_list = []
 allowediplist = []
 cachelock = threading.Lock()  # This allows only a single simultaneous cache update
 
+
+##### Internal Functions
 
 # Determines if a specified IP address is allowed in the context of user settings
 def ip_is_allowed(ip):
@@ -176,8 +181,9 @@ def update_ip_cache():
   finally:      
     # Release the lock
     cachelock.release()
-  
-########################### General Purpose socket functions #################
+ 
+
+############## General Purpose socket functions ##############
 
 def is_already_connected_exception(exceptionobj):
   """
@@ -338,6 +344,7 @@ def is_valid_ip_address(ipaddr):
   # At this point, assume the IP is valid
   return True
 
+
 # Armon: This is used for semantics, to determine if the given port is valid
 def is_valid_network_port(port, allowzero=False):
   """
@@ -358,364 +365,26 @@ def is_valid_network_port(port, allowzero=False):
   return ((allowzero and port == 0) or (port >= 1 and port <= 65535))
 
 
-# Constant prefix for comm handles.
-COMM_PREFIX = "_COMMH:"
-
-# Makes commhandles for networking functions
-def generate_commhandle():
-  """
-  <Purpose>
-    Generates a string commhandle that can be used to uniquely identify
-    a socket, while providing a means of "pseudo" verification.
-
-  <Returns>
-    A string handle.
-  """
-  # Get a unique value from idhelper
-  uniqueid = idhelper.getuniqueid()
-
-  # Return the id prefixed by the COMM_PREFIX
-  return (COMM_PREFIX + uniqueid)
-
-
-# Helps determine if a commhandle is valid
-def is_valid_commhandle(commhandle):
-  """
-  <Purpose>
-    Determines if the given commhandle is potentially valid.
-    This is not a guarentee of validity, e.g. the commhandle may not
-    exist.
-
-  <Arguments>
-    commhandle:
-      The handle to be checked for validity
-
-  <Returns>
-    True if the handle if valid, False otherwise.
-  """
-  # Check if the handle is a string, this is a requirement
-  if type(commhandle) != str:
+# Used to decide if an IP is the loopback IP or not.   This is needed for 
+# accounting
+def is_loopback(host):
+  if not host.startswith('127.'):
+    return False
+  if len(host.split('.')) != 4:
     return False
 
-  # Return if the handle starts with the correct prefix
-  # This way we are not relying on the format of idhelper.getuniqueid()
-  return commhandle.startswith(COMM_PREFIX)
+  for number in host.split('.'):
+    for char in number:
+      if char not in '0123456789':
+        return False
 
-
-########################### SocketSelector functions #########################
-
-
-
-# used to lock the methods that check to see if the thread is running
-selectorlock = threading.Lock()
-
-# is the selector thread started...
-selectorstarted = False
-
-
-#### helper functions
-
-# return the table entry for this socketobject
-def find_socket_entry(socketobject):
-  for commhandle in comminfo.keys():
-    if comminfo[commhandle]['socket'] is socketobject:
-      return comminfo[commhandle], commhandle
-  raise KeyError, "Can't find commhandle"
-
-
-
-
-# wait until there is a free event
-def wait_for_event(eventname):
-  while True:
     try:
-      nanny.tattle_add_item('events',eventname)
-      break
-    except Exception:
-      # They must be over their event limit.   I'll sleep and check later
-      time.sleep(.1)
-
-
-
-def should_selector_exit():
-  global selectorstarted
-
-  # Let's check to see if we should exit...   False means "nonblocking"
-  if selectorlock.acquire(False):
-
-    # Check that selector started is true.   This should *always* be the case
-    # when I enter this function.   This is to test for bugs in my code
-    if not selectorstarted:
-      # This will cause the program to exit and log things if logging is
-      # enabled. -Brent
-      tracebackrepy.handle_internalerror("SocketSelector is started when" +
-          ' selectorstarted is False', 39)
-
-    # Got the lock...
-    for comm in comminfo.values():
-      # I'm listening and waiting so all is well
-      if not comm['outgoing']:
-        break
-    else:
-      # there is no listening function so I should exit...
-      selectorstarted = False
-      # I'm exiting...
-      nanny.tattle_remove_item('events',"SocketSelector")
-      selectorlock.release()
-      return True
-
-    # I should continue
-    selectorlock.release()
-  return False
-    
-
-
-
-
-# This function starts a thread to handle an entry with a readable socket in 
-# the comminfo table
-def start_event(entry, handle,eventhandle):
-  # it's a TCP accept event...
-  try:
-    realsocket, addr = entry['socket'].accept()
-  except socket.error:
-    # they closed in the meantime?
-    nanny.tattle_remove_item('events',eventhandle)
-    return
-  
-  # put this handle in the table
-  newhandle = generate_commhandle()
-  comminfo[newhandle] = {'type':'TCP','remotehost':addr[0], 'remoteport':addr[1],'localip':entry['localip'],'localport':entry['localport'],'socket':realsocket,'outgoing':True, 'closing_lock':threading.Lock()}
-  # I don't think it makes sense to count this as an outgoing socket, does 
-  # it?
-
-  # Armon: Create the emulated socket after the table entry
-  safesocket = emulated_socket(newhandle)
-
-  try:
-    EventDeliverer(entry['function'],(addr[0], addr[1], safesocket, newhandle, handle),eventhandle).start()
-  except:
-    # This is an internal error I think...
-    # This will cause the program to exit and log things if logging is
-    # enabled. -Brent
-    tracebackrepy.handle_internalerror("Can't start TCP EventDeliverer", 23)
-
-
-
-# Armon: What is the maximum number of samples to perform per second?
-# This is to prevent excessive sampling if there is a bad socket and
-# select() returns before timing out
-MAX_SAMPLES_PER_SEC = 10
-TIME_BETWEEN_SAMPLES = 1.0 / MAX_SAMPLES_PER_SEC
-
-# Check for sockets using select and fire up user event threads as needed.
-#
-# This class holds nearly all of the complexity in this module.   It's 
-# basically just a loop that gets pending sockets (using select) and then
-# fires up events that call user provided functions
-class SocketSelector(threading.Thread):
-  
-  def __init__(self):
-    threading.Thread.__init__(self, name="SocketSelector")
-
-
-  # Gets a list of all the sockets which are ready to have
-  # accept() called on them
-  def get_acceptable_sockets(self):
-    # get the list of socket objects we might have a pending request on
-    requestlist = []
-    for comm in comminfo.values():
-      if not comm['outgoing']:
-        requestlist.append(comm['socket'])
-
-    # nothing to request.   We should loop back around and check if all 
-    # sockets have been closed
-    if requestlist == []:
-      return []
-
-    # Perform a select on these sockets
-    try:
-      # Call select
-      (acceptable, not_applic, has_excp) = select.select(requestlist,[],requestlist,0.5)
-    
-      # Add all the sockets with exceptions to the acceptable list
-      for sock in has_excp:
-        if sock not in acceptable:
-          acceptable.append(sock)
-
-      # Return the acceptable list
-      return acceptable
-    
-    # There was probably an exception on the socket level, check individually
-    except:
-
-      # Hold the ready sockets
-      readylist = []
-
-      # Check each requested socket
-      for socket in requestlist:
-        try:
-          (accept_will_block, write_will_block) = socket_state(socket, "r")
-          if not accept_will_block:
-            readylist.append(socket)
-        
-        # Ignore errors, probably the socket is closed.
-        except:
-          pass
-
-      # Return the ready list
-      return readylist
-
-
-
-  def run(self):
-    # Keep track of the last sample time
-    # updated when there are no ready sockets
-    last_sample = 0
-
-    while True:
-
-      # I'll stop myself only when there are no active threads to monitor
-      if should_selector_exit():
-        return
-
-      # If the last sample with 0 ready sockets was less than TIME_BETWEEN_SAMPLES
-      # seconds ago, sleep a while. This is to prevent a tight loop from consuming
-      # CPU time doing nothing.
-      current_time = nonportable.getruntime()
-      time_diff = current_time - last_sample
-      if time_diff < TIME_BETWEEN_SAMPLES:
-        time.sleep(TIME_BETWEEN_SAMPLES - time_diff)
-
-      # Get all the ready sockets
-      readylist = self.get_acceptable_sockets()
-
-      # If there is nothing to do, potentially delay the next sample
-      if len(readylist) == 0:
-        last_sample = current_time
-
-      # go through the pending sockets, grab an event and then start a thread
-      # to handle the connection
-      for thisitem in readylist:
-        try: 
-          commtableentry,commhandle = find_socket_entry(thisitem)
-        except KeyError:
-          # let's skip this one, it's likely it was closed in the interim
-          continue
-
-        # now it's time to get the event...   I'll loop until there is a free
-        # event
-        eventhandle = idhelper.getuniqueid()
-        wait_for_event(eventhandle)
-
-        # wait if already oversubscribed
-        if is_loopback(commtableentry['localip']):
-          nanny.tattle_quantity('looprecv',0)
-        else:
-          nanny.tattle_quantity('netrecv',0)
-
-        # Now I can start a thread to run the user's code...
-        if commtableentry['type'] != 'UDP':
-          start_event(commtableentry,commhandle,eventhandle)
-      
-
-
-
-
-
-
-
-# this gives an actual event to the user's code
-class EventDeliverer(threading.Thread):
-  func = None
-  args = None
-  eventid = None
-
-  def __init__(self, f, a,e):
-    self.func = f
-    self.args = a
-    self.eventid = e
-
-    # Initialize with a custom and unique thread name
-    threading.Thread.__init__(self,name=idhelper.get_new_thread_name(COMM_PREFIX))
-
-  def run(self):
-    try:
-      self.func(*(self.args))
-    except:
-      # we probably should exit if they raise an exception in a thread...
-      tracebackrepy.handle_exception()
-      harshexit.harshexit(14)
-
-    finally:
-      # our event is going away...
-      nanny.tattle_remove_item('events',self.eventid)
-      
-
-
-
-
-        
-#### used by other threads to interact with the SocketSelector...
-
-
-# private.   Check if the SocketSelector is running and start it if it isn't
-def check_selector():
-  global selectorstarted
-
-  # acquire the lock. 
-  if selectorlock.acquire():
-    # If I've not started, then start me...
-    if not selectorstarted:
-      # wait until there is a free event...
-      wait_for_event("SocketSelector")
-      selectorstarted = True
-      SocketSelector().start()
-
-    # verify a thread with the name "SocketSelector" is running
-    for threadobj in threading.enumerate():
-      if threadobj.getName() == "SocketSelector":
-        # all is well
-        selectorlock.release()
-        return
-  
-    # this is bad.   The socketselector went away...
-    # This will cause the program to exit and log things if logging is
-    # enabled. -Brent
-    tracebackrepy.handle_internalerror("SocketSelector died", 59)
-
-
-
-
-# return the table entry for this type of socket, ip, port 
-def find_tip_entry(socktype, ip, port):
-  for commhandle in comminfo.keys():
-    if comminfo[commhandle]['type'] == socktype and comminfo[commhandle]['localip'] == ip and comminfo[commhandle]['localport'] == port:
-      return comminfo[commhandle], commhandle
-  return (None,None)
-
-
-
-# Find a commhandle, given TIPO: type, ip, port, outgoing
-def find_tipo_commhandle(socktype, ip, port, outgoing):
-  for commhandle in comminfo.keys():
-    if comminfo[commhandle]['type'] == socktype and comminfo[commhandle]['localip'] == ip and comminfo[commhandle]['localport'] == port and comminfo[commhandle]['outgoing'] == outgoing:
-      return commhandle
-  return None
-
-
-# Find an outgoing TCP commhandle, given local ip, local port, remote ip, remote port, 
-def find_outgoing_tcp_commhandle(localip, localport, remoteip, remoteport):
-  for commhandle in comminfo.keys():
-    if comminfo[commhandle]['type'] == "TCP" and comminfo[commhandle]['localip'] == localip \
-    and comminfo[commhandle]['localport'] == localport and comminfo[commhandle]['remotehost'] == remoteip \
-    and comminfo[commhandle]['remoteport'] == remoteport and comminfo[commhandle]['outgoing'] == True:
-      return commhandle
-  return None
-
-
-
-
+      if int(number) > 255 or int(number) < 0:
+        return False
+    except ValueError:
+      return False
+ 
+  return True
 
 
 ######################### Simple Public Functions ##########################
@@ -871,75 +540,6 @@ def get_localIP_to_remoteIP(connection_type, external_ip, external_port=80):
 ###################### Shared message / connection items ###################
 
 
-# Used to decide if an IP is the loopback IP or not.   This is needed for 
-# accounting
-def is_loopback(host):
-  if not host.startswith('127.'):
-    return False
-  if len(host.split('.')) != 4:
-    return False
-
-  for number in host.split('.'):
-    for char in number:
-      if char not in '0123456789':
-        return False
-
-    try:
-      if int(number) > 255 or int(number) < 0:
-        return False
-    except ValueError:
-      return False
- 
-  return True
-
-
-
-
-
-
-
-
-
-# Public interface !!!
-def stopcomm(commhandle):
-  """
-   <Purpose>
-      Stop handling events for a commhandle.   This works for both message and
-      connection based event handlers.
-
-   <Arguments>
-      commhandle:
-         A commhandle as returned by recvmess or waitforconn.
-
-   <Exceptions>
-      None.
-
-   <Side Effects>
-      This has an undefined effect on a socket-like object if it is currently
-      in use.
-
-   <Returns>
-      Returns True if commhandle was successfully closed, False if the handle
-      cannot be closed (i.e. it was already closed).
-  """
-  # Armon: Check that the handle is valid, an exception needs to be raised otherwise.
-  if not is_valid_commhandle(commhandle):
-    raise Exception("Invalid commhandle specified!")
-
-  # if it has already been cleaned up, exit.
-  if commhandle not in comminfo:
-    # Armon: Semantic update, stopcomm needs to return True/False
-    # since the handle does not exist we will return False
-    return False
-
-  restrictions.assertisallowed('stopcomm',comminfo[commhandle])
-
-  cleanup(commhandle)
- 
-  # Armon: Semantic update, we successfully closed
-  # if we made it here, since cleanup blocks.
-  return True
-
 
 
 # Armon: How frequently should we check for the availability of the socket?
@@ -1031,7 +631,8 @@ def sendmessage(destip, destport, message, localip, localport):
       AddressBindingError (descends NetworkError) when the local IP isn't
         a local IP.
 
-      ResourceForbiddenError when the local port isn't allowed
+      ResourceForbiddenError (descends ResourceException?) when the local
+        port isn't allowed
 
       RepyArgumentError when the local IP and port aren't valid types
         or values
@@ -1225,7 +826,7 @@ def listenformessage(localip, localport):
   
   # Armon: Check if the specified local ip is allowed
   if not ip_is_allowed(localip):
-    raise ResourceForbiddenError("IP '" + localip + "' is not allowed.")
+    raise PortRestrictedException("IP '" + localip + "' is not allowed.")
   
   # Armon: Generate the new handle since we need it 
   # to replace the old handle if it exists
@@ -1268,130 +869,6 @@ def listenformessage(localip, localport):
   check_selector()
 
   return udpserversocket(handle)
-
-
-
-
-
-class tcpserversocket(object):
-
-  def close(self):
-    # TODO: Implement and update namespace.py
-    return False
-
-  def getconnection(self):
-    # TODO: Implement and update namespace.py
-    #return ('1.2.3.4', 1234, instance_of_emulated_socket)
-    raise NotImplementedError
-
-
-
-
-
-# Public: Class the behaves represents a listening UDP socket.
-class udpserversocket:
-
-  # UDP listening socket interface
-  def __init__(self, handle):
-    self._commid = handle
-    self._closed = False
-
-
-
-  def getmessage(self):
-    """
-    <Purpose>
-        Obtains an incoming message that was sent to an IP and port.
-
-    <Arguments>
-        None.
-
-    <Exceptions>
-        LocalIPChanged if the local IP address has changed and the
-        udpserversocket is invalid
-
-        ResourceForbiddenError if the port number is no longer allowed.
-
-        SocketClosedLocal if udpserversocket.close() was called.
-
-    <Side Effects>
-        None
-
-    <Resource Consumption>
-        This operation consumes 64 + size of message bytes of netrecv
-
-    <Returns>
-        A tuple consisting of the remote IP, remote port, and message.
-
-    """
-
-    if self._closed:
-      raise SocketClosedLocal("getmessage() was called on a closed " + \
-          "udpserversocket.")
-
-    mycommid = self._commid
-    socketinfo = comminfo[mycommid]
-    s = socketinfo['socket']
-
-    update_ip_cache()
-    if socketinfo['localip'] not in allowediplist and \
-        not is_loopback(socketinfo['localip']):
-      raise LocalIPChanged("The local ip " + socketinfo['localip'] + \
-          " is no longer present on a system interface.")
-
-    # Wait if we're oversubscribed.
-    if is_loopback(socketinfo['localip']):
-      nanny.tattle_quantity('looprecv', 0)
-    else:
-      nanny.tattle_quantity('netrecv', 0)
-
-    data, addr = s.recvfrom(4096)
-
-    # Report resource consumption:
-    if is_loopback(socketinfo['localip']):
-      nanny.tattle_quantity('looprecv', 64 + len(data))
-    else:
-      nanny.tattle_quantity('netrecv', 64 + len(data))
-
-    return (addr[0], addr[1], data)
-
-
-
-  def close(self):
-    """
-    <Purpose>
-        Closes a socket that is listening for messages.
-
-    <Arguments>
-        None.
-
-    <Exceptions>
-        None.
-
-    <Side Effects>
-        The IP address and port can be reused by other udpserversockets after
-        this.
-
-    <Resource Consumption>
-        If applicable, this operation stops consuming the corresponding
-        insocket.
-
-    <Returns>
-        True if this is the first close call to this socket, False otherwise.
-
-    """
-    self._closed = True
-    return stopcomm(self._commid)
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1588,6 +1065,34 @@ def openconn(desthost, destport,localip=None, localport=None,timeout=None):
 
 
 def listenforconnection(localip, localport):
+  """
+  <Purpose>
+    Sets up a TCPServerSocket to recieve incoming TCP connections. 
+
+  <Arguments>
+    localip:
+        The local IP to listen on
+    localport:
+        The local port to listen on
+
+  <Exceptions>
+    Raises PortInUseError if another TCPServerSocket or process has bound
+    to the provided localip and localport.
+
+    Raises RepyArgumentError if the localip or localport are invalid
+    Raises PortRestrictedError if the port is not allowed.
+    Raises AddressBindingError if the IP address isn't a local ip.
+
+  <Side Effects>
+    The IP / Port combination cannot be used until the TCPServerSocket
+    is closed.
+
+  <Resource Consumption>
+    Uses an insocket for the TCPServerSocket.
+
+  <Returns>
+    A TCPServerSocket object.
+  """
   # TODO: Implement and update namespace.py
   raise NotImplementedError
 
@@ -1766,7 +1271,7 @@ def socket_state(realsock, waitfor="rw", timeout=0.0):
   return (realsock not in readable, realsock not in writeable)
 
 
-
+##### Class Definitions
 
 # Public.   We pass these to the users for communication purposes
 class emulated_socket:
@@ -2037,6 +1542,171 @@ class emulated_socket:
   def __del__(self):
     cleanup(self.commid)
 
-
-
 # End of emulated_socket class
+
+
+# Public: Class the behaves represents a listening UDP socket.
+class udpserversocket:
+
+  # UDP listening socket interface
+  def __init__(self, handle):
+    self._commid = handle
+    self._closed = False
+
+
+
+  def getmessage(self):
+    """
+    <Purpose>
+        Obtains an incoming message that was sent to an IP and port.
+
+    <Arguments>
+        None.
+
+    <Exceptions>
+        LocalIPChanged if the local IP address has changed and the
+        udpserversocket is invalid
+
+        PortRestrictedException if the port number is no longer allowed.
+
+        SocketClosedLocal if udpserversocket.close() was called.
+
+    <Side Effects>
+        None
+
+    <Resource Consumption>
+        This operation consumes 64 + size of message bytes of netrecv
+
+    <Returns>
+        A tuple consisting of the remote IP, remote port, and message.
+
+    """
+
+    if self._closed:
+      raise SocketClosedLocal("getmessage() was called on a closed " + \
+          "udpserversocket.")
+
+    mycommid = self._commid
+    socketinfo = comminfo[mycommid]
+    s = socketinfo['socket']
+
+    update_ip_cache()
+    if socketinfo['localip'] not in allowediplist and \
+       not is_loopback(socketinfo['localip']):
+      raise LocalIPChanged("The local ip " + socketinfo['localip'] + \
+          " is no longer present on a system interface.")
+
+    # Wait if we're oversubscribed.
+    if is_loopback(socketinfo['localip']):
+      nanny.tattle_quantity('looprecv', 0)
+    else:
+      nanny.tattle_quantity('netrecv', 0)
+
+    data, addr = s.recvfrom(4096)
+
+    # Report resource consumption:
+    if is_loopback(socketinfo['localip']):
+      nanny.tattle_quantity('looprecv', 64 + len(data))
+    else:
+      nanny.tattle_quantity('netrecv', 64 + len(data))
+
+    return (addr[0], addr[1], data)
+
+
+
+  def close(self):
+    """
+    <Purpose>
+        Closes a socket that is listening for messages.
+
+    <Arguments>
+        None.
+
+    <Exceptions>
+        None.
+
+    <Side Effects>
+        The IP address and port can be reused by other udpserversockets after
+        this.
+
+    <Resource Consumption>
+        If applicable, this operation stops consuming the corresponding
+        insocket.
+
+    <Returns>
+        True if this is the first close call to this socket, False otherwise.
+
+    """
+    self._closed = True
+    return stopcomm(self._commid)
+
+
+
+
+class TCPServerSocket (object):
+  """
+  This object is a wrapper around a listening
+  TCP socket. It allows for accepting incoming
+  connections, and closing the socket.
+
+  It operates in a strictly non-blocking mode,
+  and uses Exceptions to indicate when an
+  operation would result in blocking behavior.
+  """
+
+  def __init__(self):
+    pass
+
+
+  def getconnection(self):
+    """
+    <Purpose>
+      Accepts an incoming connection to a listening TCP socket.
+
+    <Arguments>
+      None
+
+    <Exceptions>
+      Raises SocketClosedLocal if close() has been called.
+      Raises SocketWouldBlockError if the operation would block.
+
+    <Resource Consumption>
+      If successful, consumes 128 bytes of netrecv (64 bytes for
+      a SYN and ACK packet) and 64 bytes of netsend (1 ACK packet).
+      Uses an outsocket.
+
+    <Returns>
+      A tuple containing: (remote ip, remote port, socket object)
+    """
+    pass
+
+
+  def close(self):
+    """
+    <Purpose>
+      Closes the listening TCP socket.
+
+    <Arguments>
+      None
+
+    <Exceptions>
+      None
+
+    <Side Effects>
+      The IP and port can be re-used after closing.
+
+    <Resource Consumption>
+      Releases the insocket used.
+
+    <Returns>
+      True, if this is the first call to close.
+      False otherwise.
+    """
+    pass
+
+
+  def __del__(self):
+    # Close the socket
+    self.close()
+
+
