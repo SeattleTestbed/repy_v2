@@ -111,7 +111,7 @@ cachelock = threading.Lock()  # This allows only a single simultaneous cache upd
 ##### Internal Functions
 
 # Determines if a specified IP address is allowed in the context of user settings
-def ip_is_allowed(ip):
+def _ip_is_allowed(ip):
   """
   <Purpose>
     Determines if a given IP is allowed, by checking against the cached allowed IP's.
@@ -774,7 +774,7 @@ def sendmessage(destip, destport, message, localip, localport):
 
   # Armon: Check if the specified local ip is allowed
   # this check only makes sense if the localip is specified
-  if localip and not ip_is_allowed(localip):
+  if localip and not _ip_is_allowed(localip):
     raise ResourceForbiddenError("IP '" + str(localip) + "' is not allowed.")
   
   # If there is a preference, but no localip, then get one
@@ -913,7 +913,7 @@ def listenformessage(localip, localport):
   nanny.tattle_check('messport', localport)
   
   # Armon: Check if the specified local ip is allowed
-  if not ip_is_allowed(localip):
+  if not _ip_is_allowed(localip):
     raise PortRestrictedException("IP '" + localip + "' is not allowed.")
   
   # Armon: Generate the new handle since we need it 
@@ -1026,7 +1026,7 @@ def openconnection(destip, destport,localip, localport, timeout):
   if not _is_valid_ip_address(localip):
     raise RepyArgumentError("Invalid IP address listed for localip: '"+localip+"'")
 
-  # ensure the timeout is positive
+  # Timeout must be positive (of course)
   if timeout < 0:
     raise RepyArgumentError("Invalid timeout '"+str(timeout)+"'.   Must be positive.")
 
@@ -1038,19 +1038,13 @@ def openconnection(destip, destport,localip, localport, timeout):
     raise RepyArgumentError("Invalid destport '"+str(localport)+"'.   Must be between 1 and 65535, inclusive.")
 
 
+  # Check if the specified local ip is allowed.   
+  # TODO: We may need to do something different to check if the localip is 
+  # actually a local IP.
+  if not _ip_is_allowed(localip):
+    raise AddressBindingError("Cannot bind to IP '"+str(localip)+"'.   Is not local or is disallowed."
 
-  # Armon: Check if the specified local ip is allowed
-  # this check only makes sense if the localip is specified
-  if localip and not ip_is_allowed(localip):
-    raise Exception, "IP '"+str(localip)+"' is not allowed."
 
-  # If there is a preference, but no localip, then get one
-  elif user_ip_interface_preferences and not localip:
-    # Use whatever getmyip returns
-    localip = getmyip()
-
-  restrictions.assertisallowed('openconn',desthost,destport,localip,localport)
-  
   # Get our start time
   starttime = nonportable.getruntime()
 
@@ -1204,7 +1198,7 @@ def listenforconnection(localip, localport):
     raise RepyArgumentError("Provided localport is not valid!")
 
   # Check the input arguments (permission)
-  if not ip_is_allowed(localip):
+  if not _ip_is_allowed(localip):
     raise ResourceForbiddenError("Provided localip is not allowed!")
 
   if not is_allowed_localport("TCP", localport):
