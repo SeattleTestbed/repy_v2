@@ -203,6 +203,7 @@ def handle_internalerror(error_string, exitcode):
 
   try:
     print >> sys.stderr, "Internal Error"
+    handle_exception()
     if not servicelog:
       # If the service log is disabled, lets just exit.
       harshexit.harshexit(exitcode)
