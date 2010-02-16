@@ -39,6 +39,9 @@ import tracebackrepy
 # accounting
 import nanny
 
+# Used to check restrictions
+import nanny_resource_limits
+
 # give me uniqueIDs for the comminfo table
 import idhelper
 
@@ -221,6 +224,43 @@ def is_already_connected_exception(exceptionobj):
   return (errname in connected_errors)
 
 
+def is_addr_in_use_exception(exceptionobj):
+  """
+  <Purpose>
+    Determines if a given error number indicates that the provided
+    localip / localport are already bound and that the unique
+    tuple is already in use.
+
+  <Arguments>
+    An exception object from a network call.
+
+  <Returns>
+    True if already in use, false otherwise
+  """
+  # Get the type
+  exception_type = type(exceptionobj)
+
+  # Only continue if the type is socket.error
+  if exception_type is not socket.error:
+    return False
+
+  # Get the error number
+  errnum = exceptionobj[0]
+
+  # Store a list of error messages meaning we are in use
+  in_use_errors = ["EADDRINUSE", "WSAEADDRINUSE"]
+
+  # Convert the errno to and error string name
+  try:
+    errname = errno.errorcode[errnum]
+  except Exception,e:
+    # The error is unknown for some reason...
+    errname = None
+  
+  # Return if the error name is in our white list
+  return (errname in in_use_errors)
+
+
 def is_recoverable_network_exception(exceptionobj):
   """
   <Purpose>
@@ -385,6 +425,25 @@ def is_loopback(host):
       return False
  
   return True
+
+
+# Checks if binding to the local port is allowed
+# type should be "TCP" or "UDP".
+def is_allowed_localport(type, localport):
+  # Switch to the proper resource
+  if type == "TCP":
+    resource = "connport"
+  elif type == "UDP":
+    resource = "messport"
+  else:
+    raise InternalRepyError("Bad type specified for is_allowed_localport()")
+
+  # Check what is allowed by nanny
+  allowed_ports = nanny_resource_limits.resource_limit(resource)
+
+  # Check if the port is in the list
+  return localport in allowed_ports
+
 
 
 ######################### Simple Public Functions ##########################
@@ -1080,7 +1139,7 @@ def listenforconnection(localip, localport):
     to the provided localip and localport.
 
     Raises RepyArgumentError if the localip or localport are invalid
-    Raises PortRestrictedError if the port is not allowed.
+    Raises ResourceForbiddenError if the ip or port is not allowed.
     Raises AddressBindingError if the IP address isn't a local ip.
 
   <Side Effects>
@@ -1093,124 +1152,91 @@ def listenforconnection(localip, localport):
   <Returns>
     A TCPServerSocket object.
   """
-  # TODO: Implement and update namespace.py
-  raise NotImplementedError
+  # Check the input arguments (type)
+  if type(localip) is not str:
+    raise RepyArgumentError("Provided localip must be a string!")
 
+  if type(localport) is not int:
+    raise RepyArgumentError("Provided localport must be a int!")
 
+  # Check the input arguments (sanity)
+  if not is_valid_ip_address(localip):
+    raise RepyArgumentError("Provided localip is not valid!")
 
-
-# Public interface!!!
-def waitforconn(localip, localport,function):
-  """
-   <Purpose>
-      Waits for a connection to a port.   Calls function with a socket-like 
-      object if it succeeds.
-
-   <Arguments>
-      localip:
-         The local IP to listen on
-      localport:
-         The local port to bind to
-      function:
-         The function to call.   It should take five arguments:
-         (remoteip, remoteport, socketlikeobj, thiscommhandle, maincommhandle)
-         If your function has an uncaught exception, the socket-like object it
-         is using will be closed.
-         
-   <Exceptions>
-      None.
-
-   <Side Effects>
-      Starts an event handler that listens for connections.
-
-   <Returns>
-      A handle to the comm object.   This can be used to stop listening
-  """
-  if not localip or localip == '0.0.0.0':
-    raise Exception("Must specify a local IP address")
-
-# JAC: removed since this breaks semantics
-#  if not is_valid_ip_address(localip):
-#    raise Exception("Local IP address is invalid.")
-  
   if not is_valid_network_port(localport):
-    raise Exception("Local port number must be an integer, between 1 and 65535.")
+    raise RepyArgumentError("Provided localport is not valid!")
 
-  restrictions.assertisallowed('waitforconn',localip,localport)
-
-  nanny.tattle_check('connport',localport)
-
-  # Armon: Check if the specified local ip is allowed
+  # Check the input arguments (permission)
   if not ip_is_allowed(localip):
-    raise Exception, "IP '"+localip+"' is not allowed."
+    raise ResourceForbiddenError("Provided localip is not allowed!")
 
-  # Get the new handle first, because we need to replace
-  # the oldhandle if it exists to match semantics
-  handle = generate_commhandle()
-  
-  # check if I'm already listening on this port / ip
-  oldhandle = find_tipo_commhandle('TCP', localip, localport, False)
-  if oldhandle:
-    # if it was already there, update the function and return
-    comminfo[oldhandle]['function'] = function
+  if not is_allowed_localport("TCP", localport):
+    raise ResourceForbiddenError("Provided localport is not allowed!")
 
-    # Armon: Create an entry for the handle, replicate the information
-    comminfo[handle] = comminfo[oldhandle]
-    
-    # Remove the entry for the old socket
-    del comminfo[oldhandle]
+  # Check if the tuple is in use
+  identity = ("TCP", localip, localport, None, None)
+  if identity in OPEN_SOCKET_INFO:
+    raise PortInUseError("The provided localip and localport are already in use!")
 
-    # Un "tattle" the old handle, re-add the new handle
-    nanny.tattle_remove_item('insockets',oldhandle)
-    nanny.tattle_add_item('insockets',handle)
+  # Check if the localip is valid
+  update_ip_cache()
+  if localip not in allowediplist:
+    raise AddressBindingError("The provided localip is not a local IP!")
 
-    # Give the new handle
-    return handle
-    
-  # we'll need to add it, so add a socket...
-  nanny.tattle_add_item('insockets',handle)
 
-  # get the socket
+  # Register this identity as an insocket
+  nanny.tattle_add_item('insockets',identity)
+
   try:
-    mainsock = get_real_socket(localip,localport)
+    # Get the socket
+    sock = get_real_socket(localip,localport)
+
     # NOTE: Should this be anything other than a hardcoded number?
-    mainsock.listen(5)
-    # set up our table entry
-    comminfo[handle] = {'type':'TCP','remotehost':None, 'remoteport':None,'localip':localip,'localport':localport,'socket':mainsock, 'outgoing':False, 'function':function, 'closing_lock':threading.Lock()}
-  except:
-    nanny.tattle_remove_item('insockets',handle)
-    raise
+    sock.listen(5)
+  except Exception, e:
+    nanny.tattle_remove_item('insockets',identity)
+
+    # Check if this an already in use error
+    if is_addr_in_use_exception(e):
+      raise PortInUseError("Provided Local IP and Local Port is already in use!")
+    
+    # Unknown error...
+    else:
+      raise
+
+  # Create entry with a lock and the socket object
+  OPEN_SOCKET_INFO[identity] = (threading.Lock(), sock)
+
+  # Create a TCPServerSocket
+  server_sock = TCPServerSocket(identity)
+
+  # Return the TCPServerSocket
+  return server_sock
 
 
-  # start the selector if it's not running already
-  check_selector()
-
-  return handle
 
 
-
-
-
-# Private
-def get_real_socket(localip=None, localport = None):
-
+# Private method to create a TCP socket and bind
+# to a localip and localport.
+# 
+# The socket is automatically set to non-blocking mode
+def get_real_socket(localip, localport):
+  # Create the TCP socket
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-  # reuse the socket if it's "pseudo-availible"
+  # Reuse the socket if it's "pseudo-availible"
   s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
 
   if localip and localport:
     try:
       s.bind((localip,localport))
-    except socket.error, e:
-      # don't leak sockets
-      s.close()
-      raise Exception, e
-    except:
+    except: # Raise the exception un-tainted:w
       # don't leak sockets
       s.close()
       raise
+
+  # Make the socket non-blocking
+  s.setblocking(0)
 
   return s
 
@@ -1653,9 +1679,31 @@ class TCPServerSocket (object):
   and uses Exceptions to indicate when an
   operation would result in blocking behavior.
   """
+  # Fields:
+  # identity: This is a tuple which is our identity in the
+  #           OPEN_SOCKET_INFO dictionary. We use this to
+  #           perform the look-up for our info.
+  #
+  __slots__ = ["identity"]
 
-  def __init__(self):
-    pass
+  def __init__(self, identity):
+    """
+    <Purpose>
+      Initializes the TCPServerSocket. The socket
+      should already be established by listenforconnection
+      prior to calling the initializer.
+
+    <Arguments>
+      identity: The identity tuple.
+
+    <Exceptions>
+      None
+
+    <Returns>
+      A TCPServerSocket
+    """
+    # Store our identity
+    self.identity = identity
 
 
   def getconnection(self):
