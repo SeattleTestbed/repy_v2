@@ -1191,7 +1191,7 @@ def listenforconnection(localip, localport):
     raise RepyArgumentError("Provided localport must be a int!")
 
   # Check the input arguments (sanity)
-  if not is_valid_ip_address(localip):
+  if not _is_valid_ip_address(localip):
     raise RepyArgumentError("Provided localip is not valid!")
 
   if not _is_valid_network_port(localport):
@@ -1217,7 +1217,7 @@ def listenforconnection(localip, localport):
   # Check if the tuple is pending
   PENDING_SOCKETS_LOCK.acquire()
   try:
-    if idenity in PENDING_SOCKETS:
+    if identity in PENDING_SOCKETS:
       raise PortInUseError("Concurrent listenforconnection with the localip and localport in progress!")
     else:
       # No pending operation, add us to the pending list
@@ -1277,7 +1277,7 @@ def get_real_socket(localip, localport):
   if localip and localport:
     try:
       s.bind((localip,localport))
-    except: # Raise the exception un-tainted:w
+    except: # Raise the exception un-tainted
       # don't leak sockets
       s.close()
       raise
