@@ -129,6 +129,9 @@ import harshexit
 import signal
 import random
 
+print 'This is obsolete, use utf.py instead'
+sys.exit(1)
+
 # Used to spawn subprocesses for tests. Fails on
 # WindowsCE so we use WindowsAPI instead
 try:

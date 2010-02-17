@@ -1,1 +1,3 @@
+#pragma repy
+
 getruntime()

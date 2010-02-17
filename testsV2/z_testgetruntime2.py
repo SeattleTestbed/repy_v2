@@ -1,3 +1,5 @@
+#pragma repy
+
 start = getruntime()
 sleep(.2)
 end = getruntime()
