@@ -1042,7 +1042,7 @@ def openconnection(destip, destport,localip, localport, timeout):
   # TODO: We may need to do something different to check if the localip is 
   # actually a local IP.
   if not _ip_is_allowed(localip):
-    raise AddressBindingError("Cannot bind to IP '"+str(localip)+"'.   Is not local or is disallowed."
+    raise AddressBindingError("Cannot bind to IP '"+str(localip)+"'.   Is not local or is disallowed.")
 
 
   # Get our start time
