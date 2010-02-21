@@ -64,6 +64,8 @@ import repy_constants
 # (Type, Local IP, Local Port, Remote IP, Remote Port)
 # Type is a string, either "TCP" or "UDP"
 # Remote IP and Remote Port are None for listening socket
+# This identity tuple is what should be used to register the
+# socket with nanny.
 #
 # The value associated with each key is a tuple:
 # (lock, socket)
@@ -633,63 +635,79 @@ def _get_localIP_to_remoteIP(connection_type, external_ip, external_port=80):
 # Armon: How frequently should we check for the availability of the socket?
 RETRY_INTERVAL = 0.2 # In seconds
 
-# Private
-def _cleanup_socket(handle):
-  # Armon: lock the cleanup so that only one thread will do the cleanup, but
-  # all the others will block as well
+
+def _cleanup_socket(identity):
+  """
+  <Purpose>
+    Internal cleanup method for open sockets.
+
+  <Arguments>
+    identity: An identity tuple for the socket to cleanup
+
+  <Side Effects>
+    The entry in OPEN_SOCKET_INFO will be removed. The socket will
+    be closed, and a insocket/outsocket handle will be released.
+
+  <Exceptions>
+    None
+
+  <Returns>
+    None
+  """
+  # Get the socket lock
   try:
-    handle_lock = comminfo[handle]['closing_lock']
+    socket_lock = OPEN_SOCKET_INFO[self.identity][0]
   except KeyError:
-    # Handle a possible race condition, the socket has already been cleaned up.
+    # Socket is already closed, ignore
     return
-  
-  # Acquire the lock       
-  handle_lock.acquire()
 
-  # if it's in the table then remove the entry and tattle...
+  # Acquire the lock
+  socket_lock.acquire()
   try:
-    if handle in comminfo:
-      # Armon: Shutdown the socket for writing prior to close
-      # to unblock any threads that are writing
-      try:
-        comminfo[handle]['socket'].shutdown(socket.SHUT_WR)
-      except:
-        pass
+    # De-compose and get the socket
+    sock = OPEN_SOCKET_INFO[self.identity][1]
+    type, localip, localport, remoteip, remoteport = identity
+    listening_sock = remoteip is None # Check if this is a listening sock`
+    is_tcp = type == "TCP" # Check if it is TCP
+  
+    # Shutdown the socket for writing prior to close
+    # to unblock any threads that are writing
+    try:
+      sock.shutdown(socket.SHUT_WR)
+    except:
+      pass
 
-      try:
-        comminfo[handle]['socket'].close()
-      except:
-        pass
-      
-      info = comminfo[handle]  # Store the info
+    # Close the socket
+    try:
+      sock.close()
+    except:
+      pass
 
-      if info['outgoing']:
-        nanny.tattle_remove_item('outsockets', handle)
-      else:
-        nanny.tattle_remove_item('insockets', handle)
-    
-        # Armon: Block while the socket is not yet cleaned up
-        # Get the socket info
-        ip = info['localip']
-        port = info['localport']
-        socketType = info['type']
-        tcp = (socketType == 'TCP') # Check if this is a TCP typed connection
-    
-        # Loop until the socket no longer exists
-        # BUG: There exists a potential race condition here. The problem is that
-        # the socket may be cleaned up and then before we are able to check for it again
-        # another process binds to the ip/port we are checking. This would cause us to detect
-        # the socket from the other process and we would block indefinately while that socket
-        # is open.
-        while nonportable.os_api.exists_listening_network_socket(ip,port, tcp):
-          time.sleep(RETRY_INTERVAL)
-      
-      # Delete the entry last, so that other stopcomm operations will block
-      del comminfo[handle]
-    
+    # Re-store resources
+    if listening_sock:
+      nanny.tattle_remove_item('insockets', identity)
+    else:
+      nanny.tattle_remove_item('outsockets', identity)
+
+    # Loop until the socket no longer exists
+    # BUG: There exists a potential race condition here. The problem is that
+    # the socket may be cleaned up and then before we are able to check for it again
+    # another process binds to the ip/port we are checking. This would cause us to detect
+    # the socket from the other process and we would block indefinately while that socket
+    # is open.
+    while nonportable.os_api.exists_listening_network_socket(localip, localport, is_tcp):
+      time.sleep(RETRY_INTERVAL)
+
+    # Cleanup the socket
+    del OPEN_SOCKET_INFO[identity]
+
+  except KeyError:
+    # Already cleaned up
+    return
+
   finally:
-    # Always release the lock
-    handle_lock.release()
+    # Release the lock
+    socket_lock.release()
 
 
 
@@ -1773,7 +1791,53 @@ class TCPServerSocket (object):
     <Returns>
       A tuple containing: (remote ip, remote port, socket object)
     """
-    pass
+    # Get the socket lock
+    try:
+      socket_lock = OPEN_SOCKET_INFO[self.identity][0]
+    except KeyError:
+      # Socket closed
+      raise SocketClosedLocal("The socket has been closed!")
+
+    # Acquire the lock
+    socket_lock.acquire()
+    try:
+      # Get the socket itself. This must be done after
+      # we acquire the lock because it is possible that the
+      # socket was closed/re-opened or that it was set to None,
+      # etc.
+      socket = OPEN_SOCKET_INFO[self.identity][1]
+      if socket is None:
+        raise KeyError # Indicates socket is closed
+
+      # Try to accept
+      new_socket, remote_host_info = socket.accept()
+      remote_host_ip, remote_host_port = remote_host_info
+
+      # Wrap the socket
+      # TODO: Update this with emulated_socket
+      wrapped_socket = emulated_socket(new_socket)
+
+      # Return everything
+      return (remote_host_ip, remote_host_port, wrapped_socket)
+
+    except KeyError:
+      # Socket is closed
+      raise SocketClosedLocal("The socket has been closed!")
+  
+    except Exception, e:
+      # Check if this is a would-block error
+      if _is_recoverable_network_exception(e):
+        raise SocketWouldBlockError("No connections currently available!")
+
+      else: 
+        # Unexpected, close the socket, and then raise SocketClosedLocal
+        _cleanup_socket(self.identity)
+        self.identity = None
+        raise SocketClosedLocal("Unexpected error, socket closed!")
+
+    finally:
+      # Release the lock
+      socket_lock.release()
 
 
   def close(self):
@@ -1797,8 +1861,28 @@ class TCPServerSocket (object):
       True, if this is the first call to close.
       False otherwise.
     """
-    pass
+    # Get the socket lock
+    try:
+      socket_lock = OPEN_SOCKET_INFO[self.identity][0]
+    except KeyError:
+      # Socket is already closed, ignore
+      return False
 
+    # Acquire the lock
+    socket_lock.acquire()
+    try:
+      # Clean up the socket
+      _cleanup_socket(self.identity)
+
+      # Replace the identity
+      self.identity = None
+
+      # Done
+      return True
+
+    finally:
+      socket_lock.release()
+ 
 
   def __del__(self):
     # Close the socket
