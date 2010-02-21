@@ -469,7 +469,7 @@ class UDPServerSocket(ObjectProcessor):
   """Allows UDPServerSocket objects."""
 
   def check(self, val):
-    if not isinstance(val, emulcomm.udpserversocket):
+    if not isinstance(val, emulcomm.UDPServerSocket):
       raise RepyArgumentError("Invalid type %s" % type(val))
 
 
@@ -501,7 +501,7 @@ class TCPSocket(ObjectProcessor):
   """Allows TCPSocket objects."""
 
   def check(self, val):
-    if not isinstance(val, emulcomm.emulated_socket):
+    if not isinstance(val, emulcomm.EmulatedSocket):
       raise RepyArgumentError("Invalid type %s" % type(val))
 
 
@@ -658,15 +658,15 @@ FILE_OBJECT_WRAPPER_INFO = {
 
 TCP_SOCKET_OBJECT_WRAPPER_INFO = {
   'close' :
-      {'func' : emulcomm.emulated_socket.close,
+      {'func' : emulcomm.EmulatedSocket.close,
        'args' : [],
        'return' : Bool()},
   'recv' :
-      {'func' : emulcomm.emulated_socket.recv,
+      {'func' : emulcomm.EmulatedSocket.recv,
        'args' : [Int(min=1)],
        'return' : Str()},
   'send' :
-      {'func' : emulcomm.emulated_socket.send,
+      {'func' : emulcomm.EmulatedSocket.send,
        'args' : [Str()],
        'return' : Int(min=1)},
 }
@@ -686,11 +686,11 @@ TCP_SERVER_SOCKET_OBJECT_WRAPPER_INFO = {
 
 UDP_SERVER_SOCKET_OBJECT_WRAPPER_INFO = {
   'close' :
-      {'func' : emulcomm.udpserversocket.close,
+      {'func' : emulcomm.UDPServerSocket.close,
        'args' : [],
        'return' : Bool()},
   'getmessage' :
-      {'func' : emulcomm.udpserversocket.getmessage,
+      {'func' : emulcomm.UDPServerSocket.getmessage,
        'args' : [],
        'return' : (Str(), Int(), Str())},
 }
@@ -834,8 +834,8 @@ def _copy(obj, objectmap=None):
     # is wrapped and the client does not have access to it, it's safe to not
     # wrap it.
     elif isinstance(obj, (NamespaceObjectWrapper, emulfile.emulated_file,
-                          emulcomm.emulated_socket, emulcomm.TCPServerSocket,
-                          emulcomm.udpserversocket, thread.LockType,
+                          emulcomm.EmulatedSocket, emulcomm.TCPServerSocket,
+                          emulcomm.UDPServerSocket, thread.LockType,
                           virtual_namespace.VirtualNamespace)):
       return obj
 
@@ -1147,8 +1147,8 @@ class NamespaceAPIFunctionWrapper(object):
         if self.__is_method:
           # Sanity check the object we're adding back in as the "self" argument.
           if not isinstance(args[0], (NamespaceObjectWrapper, emulfile.emulated_file,
-                                      emulcomm.emulated_socket, emulcomm.TCPServerSocket,
-                                      emulcomm.udpserversocket, thread.LockType,
+                                      emulcomm.EmulatedSocket, emulcomm.TCPServerSocket,
+                                      emulcomm.UDPServerSocket, thread.LockType,
                                       virtual_namespace.VirtualNamespace)):
             raise NamespaceInternalError("Wrong type for 'self' argument.")
           # If it's a method but the function was not provided as a string, we

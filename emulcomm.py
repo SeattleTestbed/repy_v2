@@ -280,6 +280,43 @@ def _is_addr_in_use_exception(exceptionobj):
   return (errname in in_use_errors)
 
 
+def _is_addr_unavailable_exception(exceptionobj):
+  """
+  <Purpose>
+    Determines if a given error number indicates that the provided
+    localip is not available during a bind() call.
+    This indicates an AddressBindingError should be raised.
+
+  <Arguments>
+    An exception object from a network call.
+
+  <Returns>
+    True if already in use, false otherwise
+  """
+  # Get the type
+  exception_type = type(exceptionobj)
+
+  # Only continue if the type is socket.error
+  if exception_type is not socket.error:
+    return False
+
+  # Get the error number
+  errnum = exceptionobj[0]
+
+  # Store a list of error messages meaning the address is not available
+  not_avail_errors = ["EADDRNOTAVAIL", "WSAEADDRNOTAVAIL"]
+
+  # Convert the errno to and error string name
+  try:
+    errname = errno.errorcode[errnum]
+  except Exception,e:
+    # The error is unknown for some reason...
+    errname = None
+  
+  # Return if the error name is in our white list
+  return (errname in not_avail_errors)
+
+
 def _is_recoverable_network_exception(exceptionobj):
   """
   <Purpose>
@@ -659,7 +696,7 @@ def _cleanup_socket(identity):
   """
   # Get the socket lock
   try:
-    socket_lock = OPEN_SOCKET_INFO[self.identity][0]
+    socket_lock = OPEN_SOCKET_INFO[identity][0]
   except KeyError:
     # Socket is already closed, ignore
     return
@@ -672,7 +709,7 @@ def _cleanup_socket(identity):
 
   try:
     # De-compose and get the socket
-    sock = OPEN_SOCKET_INFO[self.identity][1]
+    sock = OPEN_SOCKET_INFO[identity][1]
     type, localip, localport, remoteip, remoteport = identity
     listening_sock = remoteip is None # Check if this is a listening sock`
     is_tcp = type == "TCP" # Check if it is TCP
@@ -1219,17 +1256,14 @@ def listenforconnection(localip, localport):
     raise RepyArgumentError("Provided localport is not valid!")
 
   # Check the input arguments (permission)
+  update_ip_cache()
   if not _ip_is_allowed(localip):
     raise ResourceForbiddenError("Provided localip is not allowed!")
 
   if not _is_allowed_localport("TCP", localport):
     raise ResourceForbiddenError("Provided localport is not allowed!")
 
-  # Check if the localip is valid
-  update_ip_cache()
-  if localip not in allowediplist:
-    raise AddressBindingError("The provided localip is not a local IP!")
-
+  
   # Check if the tuple is in use
   identity = ("TCP", localip, localport, None, None)
   if identity in OPEN_SOCKET_INFO:
@@ -1262,7 +1296,11 @@ def listenforconnection(localip, localport):
       # Check if this an already in use error
       if _is_addr_in_use_exception(e):
         raise PortInUseError("Provided Local IP and Local Port is already in use!")
-      
+ 
+      # Check if this is a binding error
+      if _is_addr_unavailable_exception(e):
+        raise AddressBindingError("Cannot bind to the specified local ip, invalid!")
+
       # Unknown error...
       else:
         raise
