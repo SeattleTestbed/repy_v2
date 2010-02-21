@@ -881,7 +881,7 @@ def sendmessage(destip, destport, message, localip, localport):
 def listenformessage(localip, localport):
   """
     <Purpose>
-        Sets up a udpserversocket to receive incoming UDP messages.
+        Sets up a UDPServerSocket to receive incoming UDP messages.
 
     <Arguments>
         localip:
@@ -894,7 +894,7 @@ def listenformessage(localip, localport):
         listened on because some other process on the system is listening on
         it.
 
-        PortInUseException if there is already a udpserversocket with the same
+        PortInUseException if there is already a UDPServerSocket with the same
         IP and port.
 
         RepyArgumentError if the port number or ip is wrong type or obviously
@@ -908,13 +908,13 @@ def listenformessage(localip, localport):
         SocketWouldBlockException if the call would block.
 
     <Side Effects>
-        Prevents other udpserversockets from using this port / IP
+        Prevents other UDPServerSockets from using this port / IP
 
     <Resource Consumption>
         This operation consumes an insocket and requires that the provided messport is allowed.
 
     <Returns>
-        The udpserversocket.
+        The UDPServerSocket.
 
   """
   if not localip or localip == '0.0.0.0':
@@ -946,7 +946,7 @@ def listenformessage(localip, localport):
   oldhandle = find_tipo_commhandle('UDP', localip, localport, False)
   if oldhandle:
     # if it was already there, update the function and return
-    raise PortInUseException("udpserversocket for this (ip, port) " + \
+    raise PortInUseException("UDPServerSocket for this (ip, port) " + \
         "already exists")
     
   # we'll need to add it, so add a socket...
@@ -974,7 +974,7 @@ def listenformessage(localip, localport):
   # start the selector if it's not running already
   check_selector()
 
-  return udpserversocket(handle)
+  return UDPServerSocket(handle)
 
 
 
@@ -1120,7 +1120,7 @@ def openconnection(destip, destport,localip, localport, timeout):
 
 
   try:
-    thissock = emulated_socket(handle)
+    thissock = EmulatedSocket(handle)
     # We set a timeout before we connect.  This allows us to timeout slow 
     # connections...
     oldtimeout = comminfo[handle]['socket'].gettimeout()
@@ -1365,37 +1365,57 @@ def _check_socket_state(realsock, waitfor="rw", timeout=0.0):
 ##### Class Definitions
 
 # Public.   We pass these to the users for communication purposes
-class emulated_socket:
-  # This is an index into the comminfo table...
+class EmulatedSocket:
+  """
+  This object is a wrapper around a tcp
+  TCP socket. It allows for sending and
+  recieving data, and closing the socket.
 
-  commid = 0
+  It operates in a strictly non-blocking mode,
+  and uses Exceptions to indicate when an
+  operation would result in blocking behavior.
+  """
+  # Fields:
+  # identity: This is a tuple which is our identity in the
+  #           OPEN_SOCKET_INFO dictionary. We use this to
+  #           perform the look-up for our info.
+  #
+  # send_buffer_size: The size of the send buffer. We send less than
+  #                  this to avoid a bug.
+  __slots__ = ["identity", "send_buffer_size"]
 
-  def __init__(self, handle):
-    self.commid = handle
+  
+  def __init__(self, identity):
+    """
+    <Purpose>
+      Initializes a EmulatedSocket object.
 
-    # Armon: Get the real socket
+    <Arguments>
+      identity: An identity tuple identifing the socket.
+                An entry should already exist for this socket.
+
+    <Exceptions>
+      InteralRepyError is raised if there is no table entry for
+      the socket.
+
+    <Returns>
+      A EmulatedSocket object.
+    """
+    # Store the identity tuple
+    self.identity = identity
+
+    # Get the socket
     try:
-      realsocket = comminfo[handle]['socket']
+      sock_lock, sock = OPEN_SOCKET_INFO[self.identity]
 
+      # Store the socket send buffer size
+      sock_lock.acquire()
+      self.send_buffer_size = sock.getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF)
+      sock_lock.release()
+   
     # Shouldn't happen because my caller should create the table entry first
     except KeyError:
-      raise Exception, "Internal Error. No table entry for new socket!"
-
-    # Make the socket non-blocking
-    realsocket.setblocking(0)
-
-    try:
-      # Store the send buffer size.   We'll send less than this to avoid a bug
-      comminfo[handle]['sendbuffersize'] = realsocket.getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF)
-
-    # Really shouldn't happen.   We just checked!
-    except KeyError:
-      raise Exception, "Internal Error. No table entry when looking up sendbuffersize for new socket!"
-
-
-    return None 
-
-
+      raise InteralRepyError("Internal Error. No table entry for new socket!")
 
 
   def close(self):
@@ -1594,50 +1614,14 @@ class emulated_socket:
     return bytessent
 
 
-  # Checks if socket read/write operations will block
-  def willblock(self):
-    """
-    <Purpose>
-      Determines if a socket would block if send() or recv() was called.
-
-    <Exceptions>
-      Socket Closed if the socket has been closed.
-
-    <Returns>
-      A tuple, (recv_will_block, send_will_block) both are boolean values.
-
-    """
-
-    try:
-      # Get the real socket
-      realsocket = comminfo[self.commid]['socket']
-
-      # Call into _check_socket_state with no timout to return instantly
-      return _check_socket_state(realsocket)
-    
-    # The socket is closed or in the process of being closed...
-    except KeyError:
-      raise Exception, "Socket closed"
-
-    except Exception, e:
-      # Determine if the socket is closed
-      if _is_terminated_connection_exception(e):
-        raise Exception("Socket closed")
-      
-      # Otherwise raise whatever we have
-      else:
-        raise
-
-
-
   def __del__(self):
     _cleanup_socket(self.commid)
 
-# End of emulated_socket class
+# End of EmulatedSocket class
 
 
 # Public: Class the behaves represents a listening UDP socket.
-class udpserversocket:
+class UDPServerSocket:
 
   # UDP listening socket interface
   def __init__(self, handle):
@@ -1656,11 +1640,11 @@ class udpserversocket:
 
     <Exceptions>
         LocalIPChanged if the local IP address has changed and the
-        udpserversocket is invalid
+        UDPServerSocket is invalid
 
         PortRestrictedException if the port number is no longer allowed.
 
-        SocketClosedLocal if udpserversocket.close() was called.
+        SocketClosedLocal if UDPServerSocket.close() was called.
 
     <Side Effects>
         None
@@ -1675,7 +1659,7 @@ class udpserversocket:
 
     if self._closed:
       raise SocketClosedLocal("getmessage() was called on a closed " + \
-          "udpserversocket.")
+          "UDPServerSocket.")
 
     mycommid = self._commid
     socketinfo = comminfo[mycommid]
@@ -1717,7 +1701,7 @@ class udpserversocket:
         None.
 
     <Side Effects>
-        The IP address and port can be reused by other udpserversockets after
+        The IP address and port can be reused by other UDPServerSockets after
         this.
 
     <Resource Consumption>
@@ -1811,14 +1795,17 @@ class TCPServerSocket (object):
 
       # Try to accept
       new_socket, remote_host_info = socket.accept()
-      remote_host_ip, remote_host_port = remote_host_info
+      remote_ip, remote_port = remote_host_info
+
+      # Create an entry for the socket
+      new_identity = ("TCP", self.identity[1], self.identity[2], remote_ip, remote_port)
+      OPEN_SOCKET_INFO[new_identity] = (threading.Lock(), new_socket)
 
       # Wrap the socket
-      # TODO: Update this with emulated_socket
-      wrapped_socket = emulated_socket(new_socket)
+      wrapped_socket = EmulatedSocket(new_identity)
 
       # Return everything
-      return (remote_host_ip, remote_host_port, wrapped_socket)
+      return (remote_ip, remote_port, wrapped_socket)
 
     except KeyError:
       # Socket is closed
