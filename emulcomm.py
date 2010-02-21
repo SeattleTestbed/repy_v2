@@ -1433,6 +1433,10 @@ class EmulatedSocket:
       <Side Effects>
         Pending local recv calls will either return or have an exception.
 
+      <Resource Consumption>
+        If the connection is closed, no resources are consumed. This operation
+        uses 64 bytes of netrecv. This call also stops consuming an outsocket.
+
       <Returns>
         True if this is the first close call to this socket, False otherwise.
     """
@@ -1766,6 +1770,7 @@ class TCPServerSocket (object):
     <Exceptions>
       Raises SocketClosedLocal if close() has been called.
       Raises SocketWouldBlockError if the operation would block.
+      Raises ResourcesExhaustedError if there are no free outsockets.
 
     <Resource Consumption>
       If successful, consumes 128 bytes of netrecv (64 bytes for
@@ -1782,6 +1787,10 @@ class TCPServerSocket (object):
       # Socket closed
       raise SocketClosedLocal("The socket has been closed!")
 
+    # Wait for netsend and netrecv resources
+    nanny.tattle_quantity('netrecv',0)
+    nanny.tattle_quantity('netsend',0)
+
     # Acquire the lock
     socket_lock.acquire()
     try:
@@ -1796,9 +1805,20 @@ class TCPServerSocket (object):
       # Try to accept
       new_socket, remote_host_info = socket.accept()
       remote_ip, remote_port = remote_host_info
+      new_identity = ("TCP", self.identity[1], self.identity[2], remote_ip, remote_port)
+
+      # Do some resource accounting
+      nanny.tattle_quantity('netrecv', 128)
+      nanny.tattle_quantity('netsend', 64)
+      try:
+        gc.collect()
+        nanny.tattle_add_item('outsockets', new_identity)
+      except ResourceExhaustedError:
+        # Close the socket, and raise
+        new_socket.close()
+        raise
 
       # Create an entry for the socket
-      new_identity = ("TCP", self.identity[1], self.identity[2], remote_ip, remote_port)
       OPEN_SOCKET_INFO[new_identity] = (threading.Lock(), new_socket)
 
       # Wrap the socket
@@ -1811,6 +1831,10 @@ class TCPServerSocket (object):
       # Socket is closed
       raise SocketClosedLocal("The socket has been closed!")
   
+    except RepyException:
+      # Let these through from the inner block
+      raise
+
     except Exception, e:
       # Check if this is a would-block error
       if _is_recoverable_network_exception(e):
