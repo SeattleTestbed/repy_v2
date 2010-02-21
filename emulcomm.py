@@ -136,7 +136,7 @@ def _ip_is_allowed(ip):
 
 
 # Only appends the elem to lst if the elem is unique
-def unique_append(lst, elem):
+def _unique_append(lst, elem):
   if elem not in lst:
     lst.append(elem)
       
@@ -164,7 +164,7 @@ def update_ip_cache():
     for (is_ip_addr, value) in user_specified_ip_interface_list:
       # Handle normal IP's
       if is_ip_addr:
-        unique_append(allowed_list, value)
+        _unique_append(allowed_list, value)
     
       # Handle interfaces
       else:
@@ -172,7 +172,7 @@ def update_ip_cache():
           # Get the IP's associated with the NIC
           interface_ips = nonportable.os_api.get_interface_ip_addresses(value)
           for interface_ip in interface_ips:
-            unique_append(allowed_list, interface_ip)
+            _unique_append(allowed_list, interface_ip)
         except:
           # Catch exceptions if the NIC does not exist
           pass
@@ -193,7 +193,7 @@ def update_ip_cache():
         sock.close()
 
     # Add loopback
-    unique_append(bindable_list, "127.0.0.1")
+    _unique_append(bindable_list, "127.0.0.1")
   
     # Update the global cache
     allowediplist = bindable_list
@@ -205,7 +205,7 @@ def update_ip_cache():
 
 ############## General Purpose socket functions ##############
 
-def is_already_connected_exception(exceptionobj):
+def _is_already_connected_exception(exceptionobj):
   """
   <Purpose>
     Determines if a given error number indicates that the socket
@@ -241,7 +241,7 @@ def is_already_connected_exception(exceptionobj):
   return (errname in connected_errors)
 
 
-def is_addr_in_use_exception(exceptionobj):
+def _is_addr_in_use_exception(exceptionobj):
   """
   <Purpose>
     Determines if a given error number indicates that the provided
@@ -278,7 +278,7 @@ def is_addr_in_use_exception(exceptionobj):
   return (errname in in_use_errors)
 
 
-def is_recoverable_network_exception(exceptionobj):
+def _is_recoverable_network_exception(exceptionobj):
   """
   <Purpose>
     Determines if a given error number is recoverable or fatal.
@@ -320,7 +320,7 @@ def is_recoverable_network_exception(exceptionobj):
 
 
 # Determines based on exception if the connection has been terminated
-def is_terminated_connection_exception(exceptionobj):
+def _is_terminated_connection_exception(exceptionobj):
   """
   <Purpose>
     Determines if the exception is indicated the connection is terminated.
@@ -436,7 +436,7 @@ def _is_valid_network_port(port):
 
 # Used to decide if an IP is the loopback IP or not.   This is needed for 
 # accounting
-def is_loopback(host):
+def _is_loopback_ipaddr(host):
   if not host.startswith('127.'):
     return False
   if len(host.split('.')) != 4:
@@ -458,14 +458,14 @@ def is_loopback(host):
 
 # Checks if binding to the local port is allowed
 # type should be "TCP" or "UDP".
-def is_allowed_localport(type, localport):
+def _is_allowed_localport(type, localport):
   # Switch to the proper resource
   if type == "TCP":
     resource = "connport"
   elif type == "UDP":
     resource = "messport"
   else:
-    raise InternalRepyError("Bad type specified for is_allowed_localport()")
+    raise InternalRepyError("Bad type specified for _is_allowed_localport()")
 
   # Check what is allowed by nanny
   allowed_ports = nanny_resource_limits.resource_limit(resource)
@@ -568,7 +568,7 @@ def getmyip():
         # Try to resolve using the current connection type and 
         # stable IP, using port 80 since some platforms panic
         # when given 0 (FreeBSD)
-        myip = get_localIP_to_remoteIP(conn_type, ip_addr, 80)
+        myip = _get_localIP_to_remoteIP(conn_type, ip_addr, 80)
       except (socket.error, socket.timeout):
         # We can ignore any networking related errors, since we want to try 
         # the other connection types and IP addresses. If we fail,
@@ -586,7 +586,7 @@ def getmyip():
 
 
 
-def get_localIP_to_remoteIP(connection_type, external_ip, external_port=80):
+def _get_localIP_to_remoteIP(connection_type, external_ip, external_port=80):
   """
   <Purpose>
     Resolve the local ip used when connecting outbound to an external ip.
@@ -634,7 +634,7 @@ def get_localIP_to_remoteIP(connection_type, external_ip, external_port=80):
 RETRY_INTERVAL = 0.2 # In seconds
 
 # Private
-def cleanup(handle):
+def _cleanup_socket(handle):
   # Armon: lock the cleanup so that only one thread will do the cleanup, but
   # all the others will block as well
   try:
@@ -796,7 +796,7 @@ def sendmessage(destip, destport, message, localip, localport):
   if commhandle:
 
     # block in case we're oversubscribed
-    if is_loopback(destip):
+    if _is_loopback_ipaddr(destip):
       nanny.tattle_quantity('loopsend', 0)
     else:
       nanny.tattle_quantity('netsend', 0)
@@ -812,7 +812,7 @@ def sendmessage(destip, destport, message, localip, localport):
       # should I really fall through here?
     else:
       # send succeeded, let's wait and return
-      if is_loopback(destip):
+      if _is_loopback_ipaddr(destip):
         nanny.tattle_quantity('loopsend', 64 + bytessent)
       else:
         nanny.tattle_quantity('netsend', 64 + bytessent)
@@ -833,14 +833,14 @@ def sendmessage(destip, destport, message, localip, localport):
         raise AddressBindingError(str(e))
 
     # wait if already oversubscribed
-    if is_loopback(destip):
+    if _is_loopback_ipaddr(destip):
       nanny.tattle_quantity('loopsend', 0)
     else:
       nanny.tattle_quantity('netsend', 0)
 
     bytessent = s.sendto(message, (destip, destport))
 
-    if is_loopback(destip):
+    if _is_loopback_ipaddr(destip):
       nanny.tattle_quantity('loopsend', 64 + bytessent)
     else:
       nanny.tattle_quantity('netsend', 64 + bytessent)
@@ -1090,7 +1090,7 @@ def openconnection(destip, destport,localip, localport, timeout):
 
   
   try:
-    s = get_real_socket(localip,localport)
+    s = _get_tcp_socket(localip,localport)
 
   
     # add the socket to the comminfo table
@@ -1121,11 +1121,11 @@ def openconnection(destip, destport,localip, localport, timeout):
         break
       except Exception,e:
         # Check if the socket is already connected (EISCONN or WSAEISCONN)
-        if is_already_connected_exception(e):
+        if _is_already_connected_exception(e):
           break
 
         # Check if this is recoverable, only continue if it is
-        elif not is_recoverable_network_exception(e):
+        elif not _is_recoverable_network_exception(e):
           raise
 
         else:
@@ -1143,7 +1143,7 @@ def openconnection(destip, destport,localip, localport, timeout):
     comminfo[handle]['remoteport']=destport
   
   except:
-    cleanup(handle)
+    _cleanup_socket(handle)
     raise
   else:
     # and restore the old timeout...
@@ -1201,7 +1201,7 @@ def listenforconnection(localip, localport):
   if not _ip_is_allowed(localip):
     raise ResourceForbiddenError("Provided localip is not allowed!")
 
-  if not is_allowed_localport("TCP", localport):
+  if not _is_allowed_localport("TCP", localport):
     raise ResourceForbiddenError("Provided localport is not allowed!")
 
   # Check if the localip is valid
@@ -1231,7 +1231,7 @@ def listenforconnection(localip, localport):
 
     try:
       # Get the socket
-      sock = get_real_socket(localip,localport)
+      sock = _get_tcp_socket(localip,localport)
 
       # NOTE: Should this be anything other than a hardcoded number?
       sock.listen(5)
@@ -1239,7 +1239,7 @@ def listenforconnection(localip, localport):
       nanny.tattle_remove_item('insockets',identity)
 
       # Check if this an already in use error
-      if is_addr_in_use_exception(e):
+      if _is_addr_in_use_exception(e):
         raise PortInUseError("Provided Local IP and Local Port is already in use!")
       
       # Unknown error...
@@ -1267,7 +1267,7 @@ def listenforconnection(localip, localport):
 # to a localip and localport.
 # 
 # The socket is automatically set to non-blocking mode
-def get_real_socket(localip, localport):
+def _get_tcp_socket(localip, localport):
   # Create the TCP socket
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -1289,7 +1289,7 @@ def get_real_socket(localip, localport):
 
 
 # Checks if the given real socket would block
-def socket_state(realsock, waitfor="rw", timeout=0.0):
+def _check_socket_state(realsock, waitfor="rw", timeout=0.0):
   """
   <Purpose>
     Checks if the given socket would block on a send() or recv().
@@ -1314,8 +1314,8 @@ def socket_state(realsock, waitfor="rw", timeout=0.0):
     A tuple, (read_will_block, write_will_block).
 
   <Exceptions>
-    As with select.select(). Probably best to wrap this with is_recoverable_network_exception
-    and is_terminated_connection_exception. Throws an exception if waitfor is not in ["r","w","rw"]
+    As with select.select(). Probably best to wrap this with _is_recoverable_network_exception
+    and _is_terminated_connection_exception. Throws an exception if waitfor is not in ["r","w","rw"]
   """
   # Check that waitfor is valid
   if waitfor not in ["rw","r","w"]:
@@ -1458,7 +1458,7 @@ class emulated_socket:
         realsocket = comminfo[mycommid]['socket']
 	
         # Check if the socket is ready for reading
-        (read_will_block, write_will_block) = socket_state(realsocket, "r", 0.2)	
+        (read_will_block, write_will_block) = _check_socket_state(realsocket, "r", 0.2)	
         if not read_will_block:
           datarecvd = realsocket.recv(bytes)
           break
@@ -1470,13 +1470,13 @@ class emulated_socket:
       # Catch all other exceptions, check if they are recoverable
       except Exception, e:
         # Check if this error is recoverable
-        if is_recoverable_network_exception(e):
+        if _is_recoverable_network_exception(e):
           continue
 
         # Otherwise, raise the exception
         else:
           # Check if this is a connection termination
-          if is_terminated_connection_exception(e):
+          if _is_terminated_connection_exception(e):
             raise Exception("Socket closed")
           else:
             raise
@@ -1549,7 +1549,7 @@ class emulated_socket:
         realsocket = comminfo[mycommid]['socket']
 	
         # Check if the socket is ready for writing, wait 0.2 seconds
-        (read_will_block, write_will_block) = socket_state(realsocket, "w", 0.2)
+        (read_will_block, write_will_block) = _check_socket_state(realsocket, "w", 0.2)
         if not write_will_block:
           bytessent = realsocket.send(message)
           break
@@ -1559,11 +1559,11 @@ class emulated_socket:
 
       except Exception,e:
         # Determine if the exception is fatal
-        if is_recoverable_network_exception(e):
+        if _is_recoverable_network_exception(e):
           continue
         else:
           # Check if this is a conn. term., and give a more specific exception.
-          if is_terminated_connection_exception(e):
+          if _is_terminated_connection_exception(e):
             raise Exception("Socket closed")
           else:
             raise
@@ -1594,8 +1594,8 @@ class emulated_socket:
       # Get the real socket
       realsocket = comminfo[self.commid]['socket']
 
-      # Call into socket_state with no timout to return instantly
-      return socket_state(realsocket)
+      # Call into _check_socket_state with no timout to return instantly
+      return _check_socket_state(realsocket)
     
     # The socket is closed or in the process of being closed...
     except KeyError:
@@ -1603,7 +1603,7 @@ class emulated_socket:
 
     except Exception, e:
       # Determine if the socket is closed
-      if is_terminated_connection_exception(e):
+      if _is_terminated_connection_exception(e):
         raise Exception("Socket closed")
       
       # Otherwise raise whatever we have
@@ -1613,7 +1613,7 @@ class emulated_socket:
 
 
   def __del__(self):
-    cleanup(self.commid)
+    _cleanup_socket(self.commid)
 
 # End of emulated_socket class
 
@@ -1665,12 +1665,12 @@ class udpserversocket:
 
     update_ip_cache()
     if socketinfo['localip'] not in allowediplist and \
-       not is_loopback(socketinfo['localip']):
+       not _is_loopback_ipaddr(socketinfo['localip']):
       raise LocalIPChanged("The local ip " + socketinfo['localip'] + \
           " is no longer present on a system interface.")
 
     # Wait if we're oversubscribed.
-    if is_loopback(socketinfo['localip']):
+    if _is_loopback_ipaddr(socketinfo['localip']):
       nanny.tattle_quantity('looprecv', 0)
     else:
       nanny.tattle_quantity('netrecv', 0)
@@ -1678,7 +1678,7 @@ class udpserversocket:
     data, addr = s.recvfrom(4096)
 
     # Report resource consumption:
-    if is_loopback(socketinfo['localip']):
+    if _is_loopback_ipaddr(socketinfo['localip']):
       nanny.tattle_quantity('looprecv', 64 + len(data))
     else:
       nanny.tattle_quantity('netrecv', 64 + len(data))

@@ -6,7 +6,7 @@ This unit test checks the file.readat() call works and returns expected data.
 #pragma repy
 
 # Open ourself
-fileh = openfile("ut_repyv2api_listfilesperformsresourceaccounting.py", False)
+fileh = openfile("ut_repyv2api_filereadatbasictest.py", False)
 
 # Try to read the string at the top
 data = fileh.readat(14, 2)
