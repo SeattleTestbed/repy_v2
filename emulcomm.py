@@ -639,7 +639,9 @@ RETRY_INTERVAL = 0.2 # In seconds
 def _cleanup_socket(identity):
   """
   <Purpose>
-    Internal cleanup method for open sockets.
+    Internal cleanup method for open sockets. The socket
+    lock for the socket should be acquired prior to
+    calling.
 
   <Arguments>
     identity: An identity tuple for the socket to cleanup
@@ -649,7 +651,8 @@ def _cleanup_socket(identity):
     be closed, and a insocket/outsocket handle will be released.
 
   <Exceptions>
-    None
+    InternalRepyError is raised if the socket lock is not held
+    prior to calling the function.
 
   <Returns>
     None
@@ -661,8 +664,12 @@ def _cleanup_socket(identity):
     # Socket is already closed, ignore
     return
 
-  # Acquire the lock
-  socket_lock.acquire()
+  # Make sure the lock is already acquired
+  acquired = socket_lock.acquire(False)
+  if acquired:
+    socket_lock.release()
+    raise InternalRepyError("Socket lock should be help before calling _cleanup_socket!")
+
   try:
     # De-compose and get the socket
     sock = OPEN_SOCKET_INFO[self.identity][1]
@@ -704,10 +711,6 @@ def _cleanup_socket(identity):
   except KeyError:
     # Already cleaned up
     return
-
-  finally:
-    # Release the lock
-    socket_lock.release()
 
 
 
@@ -1382,7 +1385,11 @@ class EmulatedSocket:
   #
   # send_buffer_size: The size of the send buffer. We send less than
   #                  this to avoid a bug.
-  __slots__ = ["identity", "send_buffer_size"]
+  #
+  # on_loopback: True if the remote IP is a loopback address.
+  #              This is used for resource accounting.
+  #
+  __slots__ = ["identity", "send_buffer_size", "on_loopback"]
 
   
   def __init__(self, identity):
@@ -1412,10 +1419,36 @@ class EmulatedSocket:
       sock_lock.acquire()
       self.send_buffer_size = sock.getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF)
       sock_lock.release()
+
+      # Check if we are on loopback, check the remote ip
+      self.on_loopback = _is_loopback_ipaddr(self.identity[3])
    
     # Shouldn't happen because my caller should create the table entry first
     except KeyError:
       raise InteralRepyError("Internal Error. No table entry for new socket!")
+
+
+  def _close(self):
+    """
+    <Purpose>
+      Private close method. Called when socket lock is held.
+      Does not perform any accounting / locking. Those should
+      be done by the public methods.
+
+    <Arguments>
+      None
+
+    <Side Effects>
+      Closes the socket
+
+    <Returns>
+      None
+    """
+    # Clean up the socket
+    _cleanup_socket(self.identity)
+
+    # Replace the identity
+    self.identity = None
 
 
   def close(self):
@@ -1435,18 +1468,38 @@ class EmulatedSocket:
 
       <Resource Consumption>
         If the connection is closed, no resources are consumed. This operation
-        uses 64 bytes of netrecv. This call also stops consuming an outsocket.
+        uses 64 bytes of netrecv, and 128 bytes of netsend.
+        This call also stops consuming an outsocket.
 
       <Returns>
         True if this is the first close call to this socket, False otherwise.
     """
-    # prevent TOCTOU race with client changing the object's properties
-    mycommid = self.commid
-    restrictions.assertisallowed('socket.close')
-    
-    # Armon: Semantic update, return whatever stopcomm does.
-    # This will result in socket.close() returning a True/False indicator
-    return stopcomm(mycommid)
+    # Get the socket lock
+    try:
+      socket_lock = OPEN_SOCKET_INFO[self.identity][0]
+    except KeyError:
+      # Socket is already closed, ignore
+      return False
+
+    # Wait for resources
+    nanny.tattle_quantity('netrecv', 0)
+    nanny.tattle_quantity('netsend', 0)
+
+    # Acquire the lock
+    socket_lock.acquire()
+    try:
+      # Internal close
+      self._close()
+
+      # Tattle the resources
+      nanny.tattle_quantity('netrecv',64)
+      nanny.tattle_quantity('netsend',128)
+
+      # Done
+      return True
+
+    finally:
+      socket_lock.release()
 
 
 
@@ -1461,82 +1514,89 @@ class EmulatedSocket:
            The maximum number of bytes to read.   
 
       <Exceptions>
-        Exception if the socket is closed either locally or remotely.
+        SocketClosedLocal is raised if the socket was closed locally.
+        SocketClosedRemote is raised if the socket was closed remotely.
+        SocketWouldBlockError is raised if the socket operation would block.
 
       <Side Effects>
-        This call will block the thread until the other side calls send.
+        None.
 
+      <Resource Consumptions>
+        This operations consumes 64 + amount of data  in bytes
+        worth of netrecv, and 64 bytes of netsend.
+  
       <Returns>
         The data received from the socket (as a string).   If '' is returned,
         the other side has closed the socket and no more data will arrive.
     """
-    # prevent TOCTOU race with client changing the object's properties
-    mycommid = self.commid
-    restrictions.assertisallowed('socket.recv',bytes)
-
-    # I set this here so that I don't screw up accounting with a keyerror later
+    # Get the socket lock
     try:
-      this_is_loopback = is_loopback(comminfo[mycommid]['remotehost'])
-    # they likely closed the connection
+      socket_lock = OPEN_SOCKET_INFO[self.identity][0]
     except KeyError:
-      raise Exception, "Socket closed"
+      # Closed
+      raise SocketClosedLocal("The socket is closed!")
 
-    # wait if already oversubscribed
-    if this_is_loopback:
+    # Wait if already oversubscribed
+    if self.on_loopback:
       nanny.tattle_quantity('looprecv',0)
+      nanny.tattle_quantity('loopsend',0)
     else:
       nanny.tattle_quantity('netrecv',0)
+      nanny.tattle_quantity('netsend',0)
 
-    datarecvd = 0
-    # loop until we recv the information (looping is needed for Windows)
-    while True:
-      try:
-        # the timeout is needed so that if the socket is closed in another 
-        # thread, we notice it
-        # BUG: What should the timeout be?   What is the right value?
-        #comminfo[mycommid]['socket'].settimeout(0.2)
-        
-        # Armon: Get the real socket
-        realsocket = comminfo[mycommid]['socket']
-	
-        # Check if the socket is ready for reading
-        (read_will_block, write_will_block) = _check_socket_state(realsocket, "r", 0.2)	
-        if not read_will_block:
-          datarecvd = realsocket.recv(bytes)
-          break
 
-      # they likely closed the connection
-      except KeyError:
-        raise Exception, "Socket closed"
+    # Acquire the socket lock
+    socket_lock.acquire()
+    try:
+      # Get the socket
+      sock = OPEN_SOCKET_INFO[self.identity][1]
+      if sock is None:
+        raise KeyError # Socket is closed locally
 
-      # Catch all other exceptions, check if they are recoverable
-      except Exception, e:
-        # Check if this error is recoverable
-        if _is_recoverable_network_exception(e):
-          continue
+      # Try to recieve the data
+      data_recieved = sock.recv(bytes)
 
-        # Otherwise, raise the exception
-        else:
-          # Check if this is a connection termination
-          if _is_terminated_connection_exception(e):
-            raise Exception("Socket closed")
-          else:
-            raise
+      # Calculate the length of the data
+      data_length = len(data_recieved)
+      
+      # Raise an exception if there was no data
+      if data_length == 0:
+        self._close()
+        raise SocketClosedRemote("The socket has been closed remotely!")
 
-    # Armon: Calculate the length of the data
-    data_length = len(datarecvd)
-    
-    # Raise an exception if there was no data
-    if data_length == 0:
-      raise Exception("Socket closed")
+      if self.on_loopback:
+        nanny.tattle_quantity('looprecv',data_length+64)
+        nanny.tattle_quantity('loopsend',64)
+      else:
+        nanny.tattle_quantity('netrecv',data_length+64)
+        nanny.tattle_quantity('netsend',64)
 
-    # do accounting here...
-    if this_is_loopback:
-      nanny.tattle_quantity('looprecv',data_length)
-    else:
-      nanny.tattle_quantity('netrecv',data_length)
+      return data_recieved
 
-    return datarecvd
+    except KeyError:
+      raise SocketClosedLocal("The socket is closed!")
+  
+    except RepyException:
+      raise # Pass up from inner block
+
+    except Exception, e:
+      # Check if this a recoverable error
+      if _is_recoverable_network_exception(e):
+        # Operation would block
+        raise SocketWouldBlockError("There is no data! recv() would block.")
+
+      elif _is_terminated_connection_exception(e):
+        # Remote close
+        self._close()
+        raise SocketClosedRemote("The socket has been closed remotely!")
+
+      else:
+        # Unknown error
+        self._close()
+        raise SocketClosedLocal("The socket has encountered an unexpected error! Error:"+str(e))
+
+    finally:
+      socket_lock.release()
 
 
 
@@ -1550,76 +1610,89 @@ class EmulatedSocket:
           The string to send.
 
       <Exceptions>
-        Exception if the socket is closed either locally or remotely.
+        SocketClosedLocal is raised if the socket is closed locally.
+        SocketClosedRemote is raised if the socket is closed remotely.
+        SocketWouldBlockError is raised if the operation would block.
 
       <Side Effects>
-        This call may block the thread until the other side calls recv.
+        None.
+
+      <Resource Consumption>
+        This operations consumes 64 + size of sent data of netsend and
+        64 bytes of netrecv.
 
       <Returns>
         The number of bytes sent.   Be sure not to assume this is always the 
         complete amount!
     """
-    # prevent TOCTOU race with client changing the object's properties
-    mycommid = self.commid
-    restrictions.assertisallowed('socket.send',message)
-
-    # I factor this out because we must do the accounting at the bottom of this
-    # function and I want to make sure we account properly even if they close 
-    # the socket right after their data is sent
+    # Get the socket lock
     try:
-      this_is_loopback = is_loopback(comminfo[mycommid]['remotehost'])
+      socket_lock = OPEN_SOCKET_INFO[self.identity][0]
     except KeyError:
-      raise Exception, "Socket closed!"
+      # Closed
+      raise SocketClosedLocal("The socket is closed!")
 
-    # wait if already oversubscribed
-    if this_is_loopback:
+    # Wait if already oversubscribed
+    if self.on_loopback:
       nanny.tattle_quantity('loopsend',0)
+      nanny.tattle_quantity('looprecv',0)
     else:
       nanny.tattle_quantity('netsend',0)
+      nanny.tattle_quantity('netrecv',0)
 
+    # Trim the message size to be less than the send buffer size.
+    # This is a fix for http://support.microsoft.com/kb/823764
+    message = message[:self.send_buffer_size-1]
+
+    # Acquire the socket lock
+    socket_lock.acquire()
     try:
-      # Trim the message size to be less than the sendbuffersize.
-      # This is a fix for http://support.microsoft.com/kb/823764
-      message = message[:comminfo[mycommid]['sendbuffersize']-1]
-    except KeyError:
-      raise Exception, "Socket closed!"
+      # Get the socket
+      sock = OPEN_SOCKET_INFO[self.identity][1]
+      if sock is None:
+        raise KeyError # Socket is closed locally
 
-    # loop until we send the information (looping is needed for Windows)
-    while True:
-      try:
-        # Armon: Get the real socket
-        realsocket = comminfo[mycommid]['socket']
-	
-        # Check if the socket is ready for writing, wait 0.2 seconds
-        (read_will_block, write_will_block) = _check_socket_state(realsocket, "w", 0.2)
-        if not write_will_block:
-          bytessent = realsocket.send(message)
-          break
+      # Try to send the data
+      bytes_sent = sock.send(message)
       
-      except KeyError:
-        raise Exception, "Socket closed"
+      if self.on_loopback:
+        nanny.tattle_quantity('looprecv', 64)
+        nanny.tattle_quantity('loopsend', 64 + bytes_sent)
+      else:
+        nanny.tattle_quantity('netrecv', 64)
+        nanny.tattle_quantity('netsend', 64 + bytes_sent)
 
-      except Exception,e:
-        # Determine if the exception is fatal
-        if _is_recoverable_network_exception(e):
-          continue
-        else:
-          # Check if this is a conn. term., and give a more specific exception.
-          if _is_terminated_connection_exception(e):
-            raise Exception("Socket closed")
-          else:
-            raise
+      # Return the number of bytes sent
+      return bytes_sent
 
-    if this_is_loopback:
-      nanny.tattle_quantity('loopsend',bytessent)
-    else:
-      nanny.tattle_quantity('netsend',bytessent)
 
-    return bytessent
+    except KeyError:
+      raise SocketClosedLocal("The socket is closed!")
+  
+    except Exception, e:
+      # Check if this a recoverable error
+      if _is_recoverable_network_exception(e):
+        # Operation would block
+        raise SocketWouldBlockError("send() would block.")
+
+      elif _is_terminated_connection_exception(e):
+        # Remote close
+        self._close()
+        raise SocketClosedRemote("The socket has been closed remotely!")
+
+      else:
+        # Unknown error
+        self._close()
+        raise SocketClosedLocal("The socket has encountered an unexpected error! Error:"+str(e))
+
+    finally:
+      socket_lock.release()
 
 
   def __del__(self):
-    _cleanup_socket(self.commid)
+    # Private close
+    self._close()
+
 
 # End of EmulatedSocket class
 
