@@ -30,6 +30,7 @@ _EXPORTED_EXCEPTIONS = ["RepyException",
                         "SocketClosedLocal",
                         "SocketClosedRemote",
                         "SocketWouldBlockError",
+                        "TimeoutError",
                        ]
 
 
@@ -51,6 +52,13 @@ class RepyArgumentError (RepyException):
   """
   This Exception indicates that an argument was provided
   to a repy API as an in-appropriate type or value.
+  """
+  pass
+
+class TimeoutError (RepyException):
+  """
+  This generic error indicates that a timeout has
+  occurred.
   """
   pass
 
