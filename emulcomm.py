@@ -317,6 +317,43 @@ def _is_addr_unavailable_exception(exceptionobj):
   return (errname in not_avail_errors)
 
 
+def _is_conn_refused_exception(exceptionobj):
+  """
+  <Purpose>
+    Determines if a given error number indicates that the remote
+    host has actively refused the connection. E.g.
+    ECONNREFUSED
+
+  <Arguments>
+    An exception object from a network call.
+
+  <Returns>
+    True if the error indicates the connection was refused, false otherwise
+  """
+  # Get the type
+  exception_type = type(exceptionobj)
+
+  # Only continue if the type is socket.error
+  if exception_type is not socket.error:
+    return False
+
+  # Get the error number
+  errnum = exceptionobj[0]
+
+  # Store a list of error messages meaning the host refused
+  refused_errors = ["ECONNREFUSED", "WSAECONNREFUSED"]
+
+  # Convert the errno to and error string name
+  try:
+    errname = errno.errorcode[errnum]
+  except Exception,e:
+    # The error is unknown for some reason...
+    errname = None
+  
+  # Return if the error name is in our white list
+  return (errname in refused_errors)
+
+
 def _is_recoverable_network_exception(exceptionobj):
   """
   <Purpose>
@@ -730,17 +767,18 @@ def _cleanup_socket(identity):
     # Re-store resources
     if listening_sock:
       nanny.tattle_remove_item('insockets', identity)
+
+      # Loop until the socket no longer exists
+      # BUG: There exists a potential race condition here. The problem is that
+      # the socket may be cleaned up and then before we are able to check for it again
+      # another process binds to the ip/port we are checking. This would cause us to detect
+      # the socket from the other process and we would block indefinately while that socket
+      # is open.
+      while nonportable.os_api.exists_listening_network_socket(localip, localport, is_tcp):
+        time.sleep(RETRY_INTERVAL)
+
     else:
       nanny.tattle_remove_item('outsockets', identity)
-
-    # Loop until the socket no longer exists
-    # BUG: There exists a potential race condition here. The problem is that
-    # the socket may be cleaned up and then before we are able to check for it again
-    # another process binds to the ip/port we are checking. This would cause us to detect
-    # the socket from the other process and we would block indefinately while that socket
-    # is open.
-    while nonportable.os_api.exists_listening_network_socket(localip, localport, is_tcp):
-      time.sleep(RETRY_INTERVAL)
 
     # Cleanup the socket
     del OPEN_SOCKET_INFO[identity]
@@ -1022,6 +1060,115 @@ def listenformessage(localip, localport):
 ####################### Connection oriented #############################
 
 
+def _timed_conn_cleanup_wait(identity, timeout):
+  """
+  <Purpose>
+    This private function waits until a previous openconn
+    is cleaned up.
+
+  <Arguments>
+    identity: A tuple to wait for cleanup
+    timeout: Maximum time to wait for cleanup
+
+  <Exceptions>
+    Raises PortInUseError if there is a conflicting error
+    Raises TimeoutError if we timeout waiting for cleanup.
+
+  <Returns>
+    None
+  """
+  # Decompose the tuple
+  type, localip, localport, desthost, destport = identity
+
+  # Store our start time
+  starttime = nonportable.getruntime()
+
+  # Armon: Check for any pre-existing sockets. If they are being closed, wait for them.
+  # This will also serve to check if repy has a pre-existing socket open on this same tuple
+  exists = True
+  while exists and nonportable.getruntime() - starttime < timeout:
+    # Update the status
+    (exists, status) = nonportable.os_api.exists_outgoing_network_socket(localip,localport,desthost,destport)
+    if exists:
+      # Check the socket state
+      if "ESTABLISH" in status or "CLOSE_WAIT" in status:
+        raise PortInUseError("There is a duplicate connection which conflicts with the request!")
+      else:
+        # Wait for socket cleanup
+        time.sleep(RETRY_INTERVAL)
+  else:
+    # Check if a socket exists still and we timed out
+    if exists:
+      raise TimeoutError, "Timed out checking for socket cleanup!"
+
+
+def _timed_conn_initialize(identity, timeout):
+  """
+  <Purpose> 
+    Tries to initialize an outgoing socket to match
+    the given identity.
+
+  <Arguments>
+    identity: The socket to create
+    timeout: Maximum time to try
+
+  <Exceptions>
+    Raises TimeoutError if we timed out trying to connect.
+    Raises ConnectionRefusedError if the connection was refused.
+
+    Raises any errors encountered calling _get_tcp_socket,
+    or any non-recoverable network exception.
+
+  <Returns>
+    A Python socket object connected to the dest,
+    from the specified local tuple.
+  """
+  # Decompose the tuple
+  type, localip, localport, destip, destport = identity
+
+  # Store our start time
+  starttime = nonportable.getruntime()
+
+  # Get a TCP socket bound to the local ip / port
+  sock = _get_tcp_socket(localip, localport)
+
+  try:
+    # Try to connect until we timeout
+    connected = False
+    while nonportable.getruntime() - starttime < timeout:
+      try:
+        sock.connect((destip, destport))
+        connected = True
+        break
+      except Exception, e:
+        # Check if we are already connected
+        if _is_already_connected_exception(e):
+          connected = True
+          break
+
+        # Check if the connection was refused
+        if _is_conn_refused_exception(e):
+          raise ConnectionRefusedError("The connection was refused!") 
+
+        # Check if this is recoverable (try again, timeout, etc)
+        elif not _is_recoverable_network_exception(e):
+          raise
+
+        # Sleep and retry, avoid busy waiting
+        time.sleep(RETRY_INTERVAL)
+
+    # Check if we timed out
+    if not connected:
+      raise TimeoutError("Timed-out connecting to the remote host!")
+
+    # Return the socket
+    return sock
+
+  except:
+    # Close the socket, and raise
+    sock.close()
+    raise
+
 
 # Public interface!!!
 def openconnection(destip, destport,localip, localport, timeout):
@@ -1051,7 +1198,7 @@ def openconnection(destip, destport,localip, localport, timeout):
       AddressBindingError (descends NetworkError) if the localip isn't 
       associated with the local system or is not allowed.
 
-      PortRestrictedError (descends ResourceError) if the localport isn't 
+      ResourceFobiddenError (descends ResourceError) if the localport isn't 
       allowed.
 
       PortInUseError (descends NetworkError) if the (localip, localport, 
@@ -1077,137 +1224,124 @@ def openconnection(destip, destport,localip, localport, timeout):
       A socket-like object that can be used for communication. Use send, 
       recv, and close just like you would an actual socket object in python.
   """
+  # Check the input arguments (type)
+  if type(destip) is not str:
+    raise RepyArgumentError("Provided destip must be a string!")
+  if type(localip) is not str:
+    raise RepyArgumentError("Provided localip must be a string!")
 
-  # check the validity of the IP addresses
+  if type(destport) is not int:
+    raise RepyArgumentError("Provided destport must be an int!")
+  if type(localport) is not int:
+    raise RepyArgumentError("Provided localport must be an int!")
+
+  if type(timeout) not in [float, int]:
+    raise RepyArgumentError("Provided timeout must be an int or float!")
+
+
+  # Check the input arguments (sanity)
   if not _is_valid_ip_address(destip):
-    raise RepyArgumentError("Invalid IP address listed for destip: '"+destip+"'")
+    raise RepyArgumentError("Provided destip is not valid! IP: '"+destip+"'")
   if not _is_valid_ip_address(localip):
-    raise RepyArgumentError("Invalid IP address listed for localip: '"+localip+"'")
-
-  # Timeout must be positive (of course)
-  if timeout < 0:
-    raise RepyArgumentError("Invalid timeout '"+str(timeout)+"'.   Must be positive.")
-
-  # check the port arguments
-  if not _is_valid_network_port(localport):
-    raise RepyArgumentError("Invalid localport '"+str(localport)+"'.   Must be between 1 and 65535, inclusive.")
+    raise RepyArgumentError("Provided localip is not valid! IP: '"+localip+"'")
 
   if not _is_valid_network_port(destport):
-    raise RepyArgumentError("Invalid destport '"+str(localport)+"'.   Must be between 1 and 65535, inclusive.")
+    raise RepyArgumentError("Provided destport is not valid! Port: "+str(destport))
+  if not _is_valid_network_port(localport):
+    raise RepyArgumentError("Provided localport is not valid! Port: "+str(localport))
+
+  if timeout < 0:
+    raise RepyArgumentError("Provided timeout is not valid, must be non-negative! Timeout: "+str(timeout))
 
 
-  # Check if the specified local ip is allowed.   
-  # TODO: We may need to do something different to check if the localip is 
-  # actually a local IP.
+  # Check the input arguments (permission)
+  update_ip_cache()
   if not _ip_is_allowed(localip):
-    raise AddressBindingError("Cannot bind to IP '"+str(localip)+"'.   Is not local or is disallowed.")
+    raise ResourceForbiddenError("Provided localip is not allowed! IP: "+localip)
+
+  if not _is_allowed_localport("TCP", localport):
+    raise ResourceForbiddenError("Provided localport is not allowed! Port: "+str(localport))
 
 
-  # Get our start time
-  starttime = nonportable.getruntime()
 
-  # Armon: Check for any pre-existing sockets. If they are being closed, wait for them.
-  # This will also serve to check if repy has a pre-existing socket open on this same tuple
-  exists = True
-  while exists and nonportable.getruntime() - starttime < timeout:
-    # Update the status
-    (exists, status) = nonportable.os_api.exists_outgoing_network_socket(localip,localport,desthost,destport)
-    if exists:
-      # Check the socket state
-      if "ESTABLISH" in status or "CLOSE_WAIT" in status:
-        # Check if the socket is from this repy vessel
-        handle = find_outgoing_tcp_commhandle(localip, localport, desthost, destport)
-        
-        message = "Network socket is in use by an external process!"
-        if handle != None:
-          message = " Duplicate handle exists with name: "+str(handle)
-        
-        raise Exception, message
-      else:
-        # Wait for socket cleanup
-        time.sleep(RETRY_INTERVAL)
-  else:
-    # Check if a socket exists still and we timed out
-    if exists:
-      raise Exception, "Timed out checking for socket cleanup!"
-        
+  # Check if the tuple is in use
+  identity = ("TCP", localip, localport, destip, destport)
+  listen_identity = ("TCP", localip, localport, None, None)
 
-  if localport:
-    nanny.tattle_check('connport',localport)
+  if identity in OPEN_SOCKET_INFO:
+    raise PortInUseError("There is a duplicate connection which conflicts with the request!")
 
-  handle = generate_commhandle()
+  # Check for a listening socket on the same ip/port
+  if listen_identity in OPEN_SOCKET_INFO:
+    raise PortInUseError("There is a listening socket on the provided localip and localport!")
 
-  # If allocation of an outsocket fails, we garbage collect and try again
-  # -- this forces destruction of unreferenced objects, which is how we
-  # free resources.
+  # Check if the tuple is pending
+  PENDING_SOCKETS_LOCK.acquire()
   try:
-    nanny.tattle_add_item('outsockets',handle)
-  except:
-    gc.collect()
-    nanny.tattle_add_item('outsockets',handle)
-
-  
-  try:
-    s = _get_tcp_socket(localip,localport)
-
-  
-    # add the socket to the comminfo table
-    comminfo[handle] = {'type':'TCP','remotehost':None, 'remoteport':None,'localip':localip,'localport':localport,'socket':s, 'outgoing':True, 'closing_lock':threading.Lock()}
-  except:
-    # the socket wasn't passed to the user prog...
-    nanny.tattle_remove_item('outsockets',handle)
-    raise
-
-
-  try:
-    thissock = EmulatedSocket(handle)
-    # We set a timeout before we connect.  This allows us to timeout slow 
-    # connections...
-    oldtimeout = comminfo[handle]['socket'].gettimeout()
- 
-    # Set the new timeout
-    comminfo[handle]['socket'].settimeout(timeout)
-
-    # Store exceptions until we exit the loop, default to timed out
-    # in case we are given a very small timeout
-    connect_exception = Exception("Connection timed out!")
-
-    # Ignore errors and retry if we have not yet reached the timeout
-    while nonportable.getruntime() - starttime < timeout:
-      try:
-        comminfo[handle]['socket'].connect((desthost,destport))
-        break
-      except Exception,e:
-        # Check if the socket is already connected (EISCONN or WSAEISCONN)
-        if _is_already_connected_exception(e):
-          break
-
-        # Check if this is recoverable, only continue if it is
-        elif not _is_recoverable_network_exception(e):
-          raise
-
-        else:
-          # Store the exception
-          connect_exception = e
-
-        # Sleep a bit, avoid excessive iterations of the loop
-        time.sleep(0.2)
+    if identity in PENDING_SOCKETS:
+      raise PortInUseError("Concurrent openconnection with the same parameters in progress!")
+    elif listen_identity in PENDING_SOCKETS:
+      raise PortInUseError("Concurrent listenforconnection with the localip and localport in progress!")
     else:
-      # Raise any exception that was raised
-      if connect_exception != None:
-        raise connect_exception
+      # No pending operation, add us to the pending list
+      PENDING_SOCKETS.add(identity)
+  finally:
+    PENDING_SOCKETS_LOCK.release()
 
-    comminfo[handle]['remotehost']=desthost
-    comminfo[handle]['remoteport']=destport
   
-  except:
-    _cleanup_socket(handle)
-    raise
-  else:
-    # and restore the old timeout...
-    comminfo[handle]['socket'].settimeout(oldtimeout)
+  # Wait for netsend / netrecv
+  nanny.tattle_quantity('netsend', 0)
+  nanny.tattle_quantity('netrecv', 0)
 
-  return thissock
+  try:
+    # Register this identity as an outsocket
+    gc.collect()
+    nanny.tattle_add_item('outsockets',identity)
+
+    try:
+      # Get the time we need to terminate by
+      stoptime = timeout + nonportable.getruntime()
+
+      # Wait for cleanup of any conflicting open's
+      _timed_conn_cleanup_wait(identity, timeout)
+    
+      # Get the socket, adjust the timeout for time spent waiting for cleanup
+      sock = _timed_conn_initialize(identity, stoptime - nonportable.getruntime())
+
+    except Exception, e:
+      nanny.tattle_remove_item('outsockets',identity)
+
+      # Check if this an already in use error
+      if _is_addr_in_use_exception(e):
+        raise PortInUseError("There is a duplicate connection which conflicts with the request!")
+ 
+      # Check if this is a binding error
+      if _is_addr_unavailable_exception(e):
+        raise AddressBindingError("Cannot bind to the specified local ip, invalid!")
+
+      # Unknown error...
+      else:
+        raise
+
+    # Create entry with a lock and the socket object
+    OPEN_SOCKET_INFO[identity] = (threading.Lock(), sock)
+
+    # Create an EmulatedSocket
+    emul_sock = EmulatedSocket(identity)
+
+    # Tattle the resources used
+    nanny.tattle_quantity('netsend', 128)
+    nanny.tattle_quantity('netrecv', 64)
+
+    # Return the EmulatedSocket
+    return emul_sock
+
+  finally:
+    # Remove us from the pending operations list
+    PENDING_SOCKETS_LOCK.acquire()
+    PENDING_SOCKETS.remove(identity)
+    PENDING_SOCKETS_LOCK.release()
+
 
 
 
@@ -1248,22 +1382,25 @@ def listenforconnection(localip, localport):
   if type(localport) is not int:
     raise RepyArgumentError("Provided localport must be a int!")
 
+
   # Check the input arguments (sanity)
   if not _is_valid_ip_address(localip):
-    raise RepyArgumentError("Provided localip is not valid!")
+    raise RepyArgumentError("Provided localip is not valid! IP: '"+localip+"'")
 
   if not _is_valid_network_port(localport):
-    raise RepyArgumentError("Provided localport is not valid!")
+    raise RepyArgumentError("Provided localport is not valid! Port: "+str(localport))
+
 
   # Check the input arguments (permission)
   update_ip_cache()
   if not _ip_is_allowed(localip):
-    raise ResourceForbiddenError("Provided localip is not allowed!")
+    raise ResourceForbiddenError("Provided localip is not allowed! IP: '"+localip+"'")
 
   if not _is_allowed_localport("TCP", localport):
-    raise ResourceForbiddenError("Provided localport is not allowed!")
+    raise ResourceForbiddenError("Provided localport is not allowed! Port: "+str(localport))
 
-  
+
+
   # Check if the tuple is in use
   identity = ("TCP", localip, localport, None, None)
   if identity in OPEN_SOCKET_INFO:
@@ -1280,8 +1417,11 @@ def listenforconnection(localip, localport):
   finally:
     PENDING_SOCKETS_LOCK.release()
 
+
+
   try:
     # Register this identity as an insocket
+    gc.collect()
     nanny.tattle_add_item('insockets',identity)
 
     try:
@@ -1290,6 +1430,7 @@ def listenforconnection(localip, localport):
 
       # NOTE: Should this be anything other than a hardcoded number?
       sock.listen(5)
+
     except Exception, e:
       nanny.tattle_remove_item('insockets',identity)
 
@@ -1518,10 +1659,12 @@ class EmulatedSocket:
     except KeyError:
       # Socket is already closed, ignore
       return False
+   
 
     # Wait for resources
     nanny.tattle_quantity('netrecv', 0)
     nanny.tattle_quantity('netsend', 0)
+
 
     # Acquire the lock
     socket_lock.acquire()
