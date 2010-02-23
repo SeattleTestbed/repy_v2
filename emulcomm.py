@@ -1929,8 +1929,9 @@ class TCPServerSocket (object):
         new_socket.close()
         raise
 
-      # Create an entry for the socket
+      # Create an entry for the socket, set it to non-blocking
       OPEN_SOCKET_INFO[new_identity] = (threading.Lock(), new_socket)
+      new_socket.setblocking(0)
 
       # Wrap the socket
       wrapped_socket = EmulatedSocket(new_identity)
