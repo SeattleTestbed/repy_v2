@@ -158,7 +158,7 @@ _type = type
 
 def safe_type(*args, **kwargs):
   if len(args) != 1 or kwargs:
-    raise safety_exceptions.RunBuiltinException(
+    raise exception_hierarchy.RunBuiltinException(
       'type() may only take exactly one non-keyword argument.')
   return _type(args[0])
 
