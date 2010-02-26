@@ -24,9 +24,6 @@ socket.setattr = setattr
 # needed to set threads for recvmess and waitforconn
 import threading
 
-# to force destruction of old sockets
-import gc
-
 # So I can exit all threads when an error occurs or do select
 import harshexit
 
@@ -1295,7 +1292,6 @@ def openconnection(destip, destport,localip, localport, timeout):
 
   try:
     # Register this identity as an outsocket
-    gc.collect()
     nanny.tattle_add_item('outsockets',identity)
 
     try:
@@ -1421,7 +1417,6 @@ def listenforconnection(localip, localport):
 
   try:
     # Register this identity as an insocket
-    gc.collect()
     nanny.tattle_add_item('insockets',identity)
 
     try:
@@ -2065,7 +2060,6 @@ class TCPServerSocket (object):
       nanny.tattle_quantity('netrecv', 128)
       nanny.tattle_quantity('netsend', 64)
       try:
-        gc.collect()
         nanny.tattle_add_item('outsockets', new_identity)
       except ResourceExhaustedError:
         # Close the socket, and raise

@@ -20,9 +20,6 @@ import os.path
 # Used to handle a fatal exception
 import tracebackrepy
 
-# Used to force Garbage collection to free resources
-import gc
-
 # Used to get a lock object
 import threading
 
@@ -332,16 +329,8 @@ class emulated_file (object):
       assert(self.abs_filename is not None)
 
       # Here is where we try to allocate a "file" resource from the
-      # nanny system. If that fails, we garbage collect and try again
-      # (this forces __del__() methods to be called on objects with
-      # no references, which is how we automatically free up
-      # file resources).
-      try:
-        nanny.tattle_add_item('filesopened', self.abs_filename)
-      except ResourceExhaustedError:
-        # Ok, maybe we can free up a file by garbage collecting.
-        gc.collect()
-        nanny.tattle_add_item('filesopened', self.abs_filename)
+      # nanny system.
+      nanny.tattle_add_item('filesopened', self.abs_filename)
 
       # If the file does not exist, and we should create or throw an exception
       if not exists and create:
