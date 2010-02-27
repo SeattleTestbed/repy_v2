@@ -75,14 +75,12 @@ def listfiles():
    <Returns>
       A list of strings (file names)
   """
-  # Wait for available fileread resources
-  nanny.tattle_quantity('fileread',0)
+  # We will consume 4K of fileread
+  nanny.tattle_quantity('fileread', 4096)
 
   # Get the list of files from the current directory
   files = os.listdir(repy_constants.REPY_CURRENT_DIR)
 
-  # Consume 4K
-  nanny.tattle_quantity('fileread', 4096)
 
   # Return the files
   return files
@@ -99,32 +97,43 @@ def removefile(filename):
       the empty string.
 
    <Exceptions>
-      FileNotFoundError is raised if the file does not exist
       RepyArgumentError is raised if the filename is invalid.
       FileInUseError is raised if the file is already open.
+      FileNotFoundError is raised if the file does not exist
 
    <Side Effects>
       None
 
   <Resource Consumption>
-      Consumes 4K of fileread, and 4K of filewrite if successful.
+      Consumes 4K of fileread.   If successful, also consumes 4K of filewrite.
 
    <Returns>
       None
   """
+
+  # raise an RepyArgumentError if the filename isn't valid
+  _assert_is_allowed_filename(filename)
+
   OPEN_FILES_LOCK.acquire()
   try:
-    # Check that the filename can be used
-    filename, exists = _check_can_use_filename(filename, True)
+    # Check if the file is in use
+    if filename in OPEN_FILES:
+      raise FileInUseError('Cannot remove file "'+filename+'" because it is in use!')
 
-    # Wait for available filewrite resources
-    nanny.tattle_quantity('filewrite',0)
+    # Get the absolute file name
+    absolute_filename = os.path.abspath(os.path.join(repy_constants.REPY_CURRENT_DIR, filename))
 
-    # Try to remove the file
-    os.remove(filename)
+    # Check if the file exists
+    nanny.tattle_quantity('fileread', 4096)
+    if not os.path.isfile(absolute_filename):
+      raise FileNotFoundError('Cannot remove non-existent file "'+filename+'".')
 
     # Consume the filewrite resources
     nanny.tattle_quantity('filewrite',4096)
+
+    # Remove the file (failure is an internal error)
+    os.remove(absolute_filename)
+
   
   finally:
     OPEN_FILES_LOCK.release()
@@ -133,8 +142,7 @@ def removefile(filename):
 def emulated_open(filename, create):
   """
    <Purpose>
-      Allows the user program to open a file safely. This function is meant
-      to resemble the builtin "open".
+      Allows the user program to open a file safely. 
 
    <Arguments>
       filename:
@@ -148,9 +156,9 @@ def emulated_open(filename, create):
 
    <Exceptions>
       RepyArgumentError is raised if the filename is invalid.
-      FileNotFoundError is raised if the filename is not found, and create is False.
       FileInUseError is raised if a handle to the file is already open.
       ResourceExhaustedError is raised if there are no available file handles.
+      FileNotFoundError is raised if the filename is not found, and create is False.
 
    <Side Effects>
       Opens a file on disk, uses a file descriptor.
@@ -168,57 +176,6 @@ def emulated_open(filename, create):
 
 
 ##### Private functions
-
-def _check_can_use_filename(filename, err_no_exist):
-  """
-  <Purpose>
-    Private method to check:
-      1) If a filename is allowed
-      2) If this filename is already in use
-      3) If a file with the given name exists
-
-    The OPEN_FILES_LOCK should be acquired prior to
-    calling this method.
-
-  <Arguments>
-    filename:
-      The filename to check.
-
-    err_no_exist:
-      A boolean flag, which specifies if it is an error
-      if the file does not exist.
-
-  <Exceptions>
-    Raises RepyArgumentError if the filename is not allowed.
-    Raises FileNotFoundError if the filename does not exist and err_no_exist is True.
-    Raises FileInUseError if the file is in use.
-
-  <Resource Consumption>
-    Consumes 4K worth of fileread.
-
-  <Returns>
-    A tuple of ( The absolute path to the file , (BOOL) If the file exists )
-  """
-  # Check that the filename is allowed
-  _assert_is_allowed_filename(filename)
-  
-  # Check if the file is in use
-  if filename in OPEN_FILES:
-    raise FileInUseError('File "'+filename+'" is in use!')
-
-  # Get the absolute file path
-  absolute_path = os.path.abspath(os.path.join(repy_constants.REPY_CURRENT_DIR, filename))
-
-  # Wait for available fileread resources, then check if the file exists
-  nanny.tattle_quantity('fileread',0)
-  exists = os.path.isfile(absolute_path)
-  nanny.tattle_quantity('fileread', 4096)
-
-  if not exists and err_no_exist:
-    raise FileNotFoundError('File "'+filename+'" does not exist!')
-
-  # Return the absolute path and if the file exists
-  return absolute_path,exists
 
 
 def _assert_is_allowed_filename(filename):
@@ -277,34 +234,7 @@ class emulated_file (object):
 
   def __init__(self, filename, create):
     """
-     <Purpose>
-        This is an internal initializer.
-
-     <Arguments>
-        filename:
-          The file that should be operated on. It must not contain 
-          characters other than 'a-zA-Z0-9.-_' and cannot be '.', '..' or
-          the empty string.
-
-        create:
-           A Boolean flag which specifies if the file should be created
-           if it does not exist.
-
-     <Exceptions>
-        RepyArgumentError is raised if the filename is invalid.
-        FileNotFoundError is raised if the filename is not found, and create is False.
-        FileInUseError is raised if a handle to the file is already open.
-        ResourceExhaustedError is raised if there are no available file handles.
-
-     <Side Effects>
-        Opens a file on disk, uses a file descriptor.
-
-     <Resource Consumption>
-        Consumes 4K of fileread. If the file is created, then 4K of filewrite is used.
-        If a handle to the object is created, then a file descriptor is used.
-
-     <Returns>
-        A file-like object 
+      This is an internal initializer.   See emulated_open for details.
     """
     # Initialize the fields, otherwise __del__ gets confused
     # when we throw an exception. This was not a problem when the
@@ -316,28 +246,42 @@ class emulated_file (object):
     self.seek_lock = threading.Lock()
     self.filesize = 0
 
+    # raise an RepyArgumentError if the filename isn't valid
+    _assert_is_allowed_filename(filename)
+
     # Check the  type of create
     if type(create) is not bool:
       raise RepyArgumentError("Create argument type is invalid! Must be a Boolean!")
 
     OPEN_FILES_LOCK.acquire()
     try:
-      # Check that the filename can be used. The err_no_exist is set to
-      # not create. So that if create is False, then it is an error if the
-      # file does not exist.
-      self.abs_filename, exists = _check_can_use_filename(filename, not create)
-      assert(self.abs_filename is not None)
+      # Check if the file is in use
+      if filename in OPEN_FILES:
+        raise FileInUseError('Cannot open file "'+filename+'" because it is already open!')
+
+      # Get the absolute file name
+      self.abs_filename = os.path.abspath(os.path.join(repy_constants.REPY_CURRENT_DIR, filename))
+      
 
       # Here is where we try to allocate a "file" resource from the
-      # nanny system.
+      # nanny system.   We will restore this below if there is an exception
+      # This may raise a ResourceExhautedError
       nanny.tattle_add_item('filesopened', self.abs_filename)
 
-      # If the file does not exist, and we should create or throw an exception
-      if not exists and create:
-        # Wait for available filewrite resources, then create
-        nanny.tattle_quantity('filewrite',0)
-        safe_open(self.abs_filename, "w").close() # Forces file creation
+      
+      # charge for checking if the file exists.
+      nanny.tattle_quantity('fileread', 4096)
+      exists = os.path.isfile(self.abs_filename)
+
+      # if there isn't a file already...
+      if not exists:
+        # if we shouldn't create it, it's an error
+        if not create:
+          raise FileNotFoundError('Cannot openfile non-existent file "'+filename+'" without creating it!')
+
+        # okay, we should create it...
         nanny.tattle_quantity('filewrite', 4096)
+        safe_open(self.abs_filename, "w").close() # Forces file creation
 
       # Store a file handle
       # Always open in mode r+b, this avoids Windows text-mode
@@ -485,9 +429,10 @@ class emulated_file (object):
       offset: An absolute offset into the file to write
 
     <Exceptions>
+      RepyArgumentError is raised if the offset is negative or the data is not
+      a string.
       FileClosedError is raised if the file is already closed.
       SeekPastEndOfFileError is raised if trying to write past the EOF.
-      RepyArgumentError is raised if the offset is negative.
 
     <Side Effects>
       Writes to persistent storage.
