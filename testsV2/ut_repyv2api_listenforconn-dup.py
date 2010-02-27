@@ -1,5 +1,5 @@
 """
-This unit test checks that we get a PortInUseError if you
+This unit test checks that we get a AlreadyListeningError if you
 try to listen on an IP/Port pair that is already in use.
 """
 #pragma repy
@@ -11,7 +11,7 @@ listen_sock = listenforconnection(ip, port)
 
 try:
   listen_sock_2 = listenforconnection(ip, port)
-  print "Should get PortInUseError!"
-except PortInUseError:
+  print "Should get AlreadyListeningError!"
+except AlreadyListeningError:
   pass
 

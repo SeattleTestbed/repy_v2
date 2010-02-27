@@ -51,6 +51,8 @@ import errno
 # Armon: Used for getting the constant IP values for resolving our external IP
 import repy_constants 
 
+# Get the exceptions
+from exception_hierarchy import *
 
 ###### Module Data
 
@@ -965,11 +967,11 @@ def listenformessage(localip, localport):
             The port to listen on.
 
     <Exceptions>
-        PortInUseException (descends NetworkError) if the port cannot be
+        DuplicateTupleError (descends NetworkError) if the port cannot be
         listened on because some other process on the system is listening on
         it.
 
-        PortInUseException if there is already a UDPServerSocket with the same
+        AlreadyListeningError if there is already a UDPServerSocket with the same
         IP and port.
 
         RepyArgumentError if the port number or ip is wrong type or obviously
@@ -1021,7 +1023,7 @@ def listenformessage(localip, localport):
   oldhandle = find_tipo_commhandle('UDP', localip, localport, False)
   if oldhandle:
     # if it was already there, update the function and return
-    raise PortInUseException("UDPServerSocket for this (ip, port) " + \
+    raise AlreadyListeningError("UDPServerSocket for this (ip, port) " + \
         "already exists")
     
   # we'll need to add it, so add a socket...
@@ -1057,46 +1059,43 @@ def listenformessage(localip, localport):
 ####################### Connection oriented #############################
 
 
-def _timed_conn_cleanup_wait(identity, timeout):
+def _conn_cleanup_check(identity):
   """
   <Purpose>
-    This private function waits until a previous openconn
-    is cleaned up.
+    This private function checks if a socket that
+    got EADDRINUSE is because the socket is active,
+    or because the socket is being cleaned up.
 
   <Arguments>
-    identity: A tuple to wait for cleanup
-    timeout: Maximum time to wait for cleanup
+    identity: A tuple to check for cleanup
 
   <Exceptions>
-    Raises PortInUseError if there is a conflicting error
-    Raises TimeoutError if we timeout waiting for cleanup.
+    Raises DuplicateTupleError if the socket is actively being used.
+
+    Raises CleanupInProgressError if the socket is being cleaned up
+    or if the socket does not appear to exist. This is because there
+    may be a race between getting EADDRINUSE and the call to this
+    function.
 
   <Returns>
     None
   """
   # Decompose the tuple
   type, localip, localport, desthost, destport = identity
+  
+  # Check the sockets status
+  (exists, status) = nonportable.os_api.exists_outgoing_network_socket(localip,localport,desthost,destport)
 
-  # Store our start time
-  starttime = nonportable.getruntime()
+  # Check if the socket is actively being used
+  # If the socket is these states:
+  #  ESTABLISHED : Connection is active
+  #  CLOSE_WAIT : Connection is closed, but waiting on local program to close
+  #  SYN_SENT (SENT) : Connection is just being established
+  if exists and ("ESTABLISH" in status or "CLOSE_WAIT" in status or "SENT" in status):
+    raise DuplicateTupleError("There is a duplicate connection which conflicts with the request!")
 
-  # Armon: Check for any pre-existing sockets. If they are being closed, wait for them.
-  # This will also serve to check if repy has a pre-existing socket open on this same tuple
-  exists = True
-  while exists and nonportable.getruntime() - starttime < timeout:
-    # Update the status
-    (exists, status) = nonportable.os_api.exists_outgoing_network_socket(localip,localport,desthost,destport)
-    if exists:
-      # Check the socket state
-      if "ESTABLISH" in status or "CLOSE_WAIT" in status:
-        raise PortInUseError("There is a duplicate connection which conflicts with the request!")
-      else:
-        # Wait for socket cleanup
-        time.sleep(RETRY_INTERVAL)
-  else:
-    # Check if a socket exists still and we timed out
-    if exists:
-      raise TimeoutError, "Timed out checking for socket cleanup!"
+  # Otherwise, the socket is being cleaned up
+  raise CleanupInProgressError("The socket is being cleaned up by the operating system!")
 
 
 def _timed_conn_initialize(identity, timeout):
@@ -1198,9 +1197,15 @@ def openconnection(destip, destport,localip, localport, timeout):
       ResourceFobiddenError (descends ResourceError) if the localport isn't 
       allowed.
 
-      PortInUseError (descends NetworkError) if the (localip, localport, 
+      DuplicateTupleError (descends NetworkError) if the (localip, localport, 
       destip, destport) tuple is already used.   This will also occur if the 
       operating system prevents the local IP / port from being used.
+
+      AlreadyListeningError if the (localip, localport) tuple is already used
+      for a listening TCP socket.
+
+      CleanupInProgress if the (localip, localport, destip, destport) tuple is
+      still being cleaned up by the OS.
 
       ConnectionRefusedError (descends NetworkError) if the connection cannot 
       be established because the destination port isn't being listened on.
@@ -1266,19 +1271,19 @@ def openconnection(destip, destport,localip, localport, timeout):
   listen_identity = ("TCP", localip, localport, None, None)
 
   if identity in OPEN_SOCKET_INFO:
-    raise PortInUseError("There is a duplicate connection which conflicts with the request!")
+    raise DuplicateTupleError("There is a duplicate connection which conflicts with the request!")
 
   # Check for a listening socket on the same ip/port
   if listen_identity in OPEN_SOCKET_INFO:
-    raise PortInUseError("There is a listening socket on the provided localip and localport!")
+    raise AlreadyListeningError("There is a listening socket on the provided localip and localport!")
 
   # Check if the tuple is pending
   PENDING_SOCKETS_LOCK.acquire()
   try:
     if identity in PENDING_SOCKETS:
-      raise PortInUseError("Concurrent openconnection with the same parameters in progress!")
+      raise DuplicateTupleError("Concurrent openconnection with the same parameters in progress!")
     elif listen_identity in PENDING_SOCKETS:
-      raise PortInUseError("Concurrent listenforconnection with the localip and localport in progress!")
+      raise AlreadyListeningError("Concurrent listenforconnection with the localip and localport in progress!")
     else:
       # No pending operation, add us to the pending list
       PENDING_SOCKETS.add(identity)
@@ -1295,21 +1300,19 @@ def openconnection(destip, destport,localip, localport, timeout):
     nanny.tattle_add_item('outsockets',identity)
 
     try:
-      # Get the time we need to terminate by
-      stoptime = timeout + nonportable.getruntime()
-
-      # Wait for cleanup of any conflicting open's
-      _timed_conn_cleanup_wait(identity, timeout)
-    
-      # Get the socket, adjust the timeout for time spent waiting for cleanup
-      sock = _timed_conn_initialize(identity, stoptime - nonportable.getruntime())
+      # Get the socket
+      sock = _timed_conn_initialize(identity, timeout)
 
     except Exception, e:
       nanny.tattle_remove_item('outsockets',identity)
 
       # Check if this an already in use error
       if _is_addr_in_use_exception(e):
-        raise PortInUseError("There is a duplicate connection which conflicts with the request!")
+        # Call _conn_cleanup_check to determine if this is because
+        # the socket is being cleaned up or if it is actively being used
+        # This will always raise DuplicateTupleError or
+        # CleanupInProgressError
+        _conn_cleanup_check()
  
       # Check if this is a binding error
       if _is_addr_unavailable_exception(e):
@@ -1354,8 +1357,11 @@ def listenforconnection(localip, localport):
         The local port to listen on
 
   <Exceptions>
-    Raises PortInUseError if another TCPServerSocket or process has bound
+    Raises AlreadyListeningError if another TCPServerSocket or process has bound
     to the provided localip and localport.
+
+    Raises DuplicateTupleError if another process has bound to the
+    provided localip and localport.
 
     Raises RepyArgumentError if the localip or localport are invalid
     Raises ResourceForbiddenError if the ip or port is not allowed.
@@ -1400,13 +1406,13 @@ def listenforconnection(localip, localport):
   # Check if the tuple is in use
   identity = ("TCP", localip, localport, None, None)
   if identity in OPEN_SOCKET_INFO:
-    raise PortInUseError("The provided localip and localport are already in use!")
+    raise AlreadyListeningError("The provided localip and localport are already in use!")
 
   # Check if the tuple is pending
   PENDING_SOCKETS_LOCK.acquire()
   try:
     if identity in PENDING_SOCKETS:
-      raise PortInUseError("Concurrent listenforconnection with the localip and localport in progress!")
+      raise AlreadyListeningError("Concurrent listenforconnection with the localip and localport in progress!")
     else:
       # No pending operation, add us to the pending list
       PENDING_SOCKETS.add(identity)
@@ -1431,7 +1437,7 @@ def listenforconnection(localip, localport):
 
       # Check if this an already in use error
       if _is_addr_in_use_exception(e):
-        raise PortInUseError("Provided Local IP and Local Port is already in use!")
+        raise DuplicateTupleError("Provided Local IP and Local Port is already in use!")
  
       # Check if this is a binding error
       if _is_addr_unavailable_exception(e):
@@ -1866,8 +1872,19 @@ class EmulatedSocket:
 
 
   def __del__(self):
-    # Private close
-    self._close()
+    # Get the socket lock
+    try:
+      socket_lock = OPEN_SOCKET_INFO[self.identity][0]
+    except KeyError:
+      # Closed, done
+      return
+
+    # Acquire the lock and close
+    socket_lock.acquire()
+    try:
+      self._close()
+    finally:
+      socket_lock.release()
 
 
 # End of EmulatedSocket class

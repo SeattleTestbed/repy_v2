@@ -1,5 +1,5 @@
 """
-This unit test checks that we do not get a PortInUseError if you
+This unit test checks that we do not get a DuplicateTupleError if you
 try to listen on an IP/Port pair that is was in use, but was
 closed.
 """

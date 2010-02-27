@@ -22,7 +22,9 @@ _EXPORTED_EXCEPTIONS = ["RepyException",
                         "FileClosedError",
                         "LockDoubleReleaseError",
                         "NetworkError",
-                        "PortInUseError",
+                        "AlreadyListeningError",
+                        "DuplicateTupleError",
+                        "CleanupInProgressError",
                         "InternetConnectivityError",
                         "AddressBindingError",
                         "ConnectionRefusedError",
@@ -180,9 +182,25 @@ class NetworkError (RepyException):
   """
   pass
 
-class PortInUseError (NetworkError):
+class AlreadyListeningError (NetworkError):
   """
-  This exception gets raised when a port is already being used.
+  This exception indicates that there is an existing
+  listen on the local IP / Port pair that are specified.
+  """
+  pass
+
+class DuplicateTupleError (NetworkError):
+  """
+  This exception indicates that there is another socket
+  which has a duplicate tuple (local ip, local port, remote ip, remote port)
+  """
+  pass
+
+class CleanupInProgressError (NetworkError):
+  """
+  This exception indicates that the socket is still
+  being cleaned up by the operating system, and that
+  it is unavailable.
   """
   pass
 
