@@ -1253,8 +1253,8 @@ def openconnection(destip, destport,localip, localport, timeout):
   if not _is_valid_network_port(localport):
     raise RepyArgumentError("Provided localport is not valid! Port: "+str(localport))
 
-  if timeout < 0:
-    raise RepyArgumentError("Provided timeout is not valid, must be non-negative! Timeout: "+str(timeout))
+  if timeout <= 0:
+    raise RepyArgumentError("Provided timeout is not valid, must be positive! Timeout: "+str(timeout))
 
 
   # Check the input arguments (permission)
