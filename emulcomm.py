@@ -1127,6 +1127,7 @@ def _timed_conn_initialize(identity, timeout):
 
   # Get a TCP socket bound to the local ip / port
   sock = _get_tcp_socket(localip, localport)
+  sock.settimeout(timeout)
 
   try:
     # Try to connect until we timeout
@@ -1312,7 +1313,7 @@ def openconnection(destip, destport,localip, localport, timeout):
         # the socket is being cleaned up or if it is actively being used
         # This will always raise DuplicateTupleError or
         # CleanupInProgressError
-        _conn_cleanup_check()
+        _conn_cleanup_check(identity)
  
       # Check if this is a binding error
       if _is_addr_unavailable_exception(e):
@@ -1467,7 +1468,6 @@ def listenforconnection(localip, localport):
 # Private method to create a TCP socket and bind
 # to a localip and localport.
 # 
-# The socket is automatically set to non-blocking mode
 def _get_tcp_socket(localip, localport):
   # Create the TCP socket
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1482,9 +1482,6 @@ def _get_tcp_socket(localip, localport):
       # don't leak sockets
       s.close()
       raise
-
-  # Make the socket non-blocking
-  s.setblocking(0)
 
   return s
 
@@ -1595,9 +1592,12 @@ class EmulatedSocket:
     try:
       sock_lock, sock = OPEN_SOCKET_INFO[self.identity]
 
-      # Store the socket send buffer size
+      # Store the socket send buffer size and set to non-blocking
       sock_lock.acquire()
+      
       self.send_buffer_size = sock.getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF)
+      sock.setblocking(0)
+
       sock_lock.release()
 
       # Check if we are on loopback, check the remote ip
@@ -2024,6 +2024,20 @@ class TCPServerSocket (object):
     # Store our identity
     self.identity = identity
 
+    # Get the socket
+    try:
+      sock_lock, sock = OPEN_SOCKET_INFO[self.identity]
+
+      # Set the socket to non-blocking
+      sock_lock.acquire()
+      sock.setblocking(0)
+      sock_lock.release()
+
+    # Shouldn't happen because my caller should create the table entry first
+    except KeyError:
+      raise InteralRepyError("Internal Error. No table entry for new socket!")
+
+
 
   def getconnection(self):
     """
@@ -2083,9 +2097,8 @@ class TCPServerSocket (object):
         new_socket.close()
         raise
 
-      # Create an entry for the socket, set it to non-blocking
+      # Create an entry for the socket
       OPEN_SOCKET_INFO[new_identity] = (threading.Lock(), new_socket)
-      new_socket.setblocking(0)
 
       # Wrap the socket
       wrapped_socket = EmulatedSocket(new_identity)
