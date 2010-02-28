@@ -1430,8 +1430,11 @@ def listenforconnection(localip, localport):
       # Get the socket
       sock = _get_tcp_socket(localip,localport)
 
-      # NOTE: Should this be anything other than a hardcoded number?
-      sock.listen(5)
+      # Get the maximum number of outsockets
+      max_outsockets = nanny_resource_limits.resource_limit("outsockets")
+
+      # Set the backlog to be the maximum number of outsockets
+      sock.listen(max_outsockets)
 
     except Exception, e:
       nanny.tattle_remove_item('insockets',identity)
