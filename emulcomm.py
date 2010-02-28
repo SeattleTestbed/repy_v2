@@ -353,6 +353,42 @@ def _is_conn_refused_exception(exceptionobj):
   return (errname in refused_errors)
 
 
+def _is_network_down_exception(exceptionobj):
+  """
+  <Purpose>
+    Determines if a given error number indicates that the
+    network is down.
+
+  <Arguments>
+    An exception object from a network call.
+
+  <Returns>
+    True if the network is down, false otherwise
+  """
+  # Get the type
+  exception_type = type(exceptionobj)
+
+  # Only continue if the type is socket.error
+  if exception_type is not socket.error:
+    return False
+
+  # Get the error number
+  errnum = exceptionobj[0]
+
+  # Store a list of error messages meaning we are disconnected
+  net_down_errors = ["ENETDOWN","ENETUNREACH","WSAENETDOWN", "WSAENETUNREACH"]
+
+  # Convert the errno to and error string name
+  try:
+    errname = errno.errorcode[errnum]
+  except Exception,e:
+    # The error is unknown for some reason...
+    errname = None
+  
+  # Return if the error name is in our white list
+  return (errname in net_down_errors)
+
+
 def _is_recoverable_network_exception(exceptionobj):
   """
   <Purpose>
@@ -581,9 +617,6 @@ def gethostbyname(name):
    <Returns>
      The IPv4 address as a string.
   """
-
-  restrictions.assertisallowed('gethostbyname', name)
-
   # charge 4K for a look up...   I don't know the right number, but we should
   # charge something.   We'll always charge to the netsend interface...
   nanny.tattle_quantity('netsend', 1024) 
@@ -1111,6 +1144,7 @@ def _timed_conn_initialize(identity, timeout):
   <Exceptions>
     Raises TimeoutError if we timed out trying to connect.
     Raises ConnectionRefusedError if the connection was refused.
+    Raises InternetConnectivityError if the network is down.
 
     Raises any errors encountered calling _get_tcp_socket,
     or any non-recoverable network exception.
@@ -1142,6 +1176,10 @@ def _timed_conn_initialize(identity, timeout):
         if _is_already_connected_exception(e):
           connected = True
           break
+
+        # Check if the network is down
+        if _is_network_down_exception(e):
+          raise InternetConnectivityError("The network is down or cannot be reached from the local IP!")
 
         # Check if the connection was refused
         if _is_conn_refused_exception(e):
@@ -1213,6 +1251,9 @@ def openconnection(destip, destport,localip, localport, timeout):
 
       TimeoutError (common to all API functions that timeout) if the 
       connection times out
+
+      InternetConnectivityError if the network is down, or if the host
+      cannot be reached from the local IP that has been bound to.
 
 
     <Side Effects>

@@ -22,6 +22,7 @@ _EXPORTED_EXCEPTIONS = ["RepyException",
                         "FileClosedError",
                         "LockDoubleReleaseError",
                         "NetworkError",
+                        "NetworkAddressError",
                         "AlreadyListeningError",
                         "DuplicateTupleError",
                         "CleanupInProgressError",
@@ -179,6 +180,12 @@ class LockDoubleReleaseError(RepyException):
 class NetworkError (RepyException):
   """
   This exception parent-classes all of the networking exceptions.
+  """
+  pass
+
+class NetworkAddressError (NetworkError):
+  """
+  This exception is raised when a DNS lookup fails.
   """
   pass
 
