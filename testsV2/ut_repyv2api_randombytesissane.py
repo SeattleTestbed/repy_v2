@@ -11,10 +11,10 @@ We check:
 #pragma repy
 
 # Get the random data
-data = randombytes() + randombytes()
+data = randombytes() + randombytes() + randombytes() + randombytes()
 
 # Check the length
-if len(data) != 2048:
+if len(data) != 4096:
   print "Length is incorrect! Is: "+str(len(data))
 
 # Initialize the occur count to 0
@@ -32,6 +32,6 @@ for x in xrange(256):
   count = occur_count[x]
   if count < 1:
     print "Character with value '"+str(x)+"' occurs only "+str(count)+" times. Min 1"
-  if count > 20:
+  if count > 40:
      print "Character with value '"+str(x)+"' occurs "+str(count)+" times. Max 20"   
 
