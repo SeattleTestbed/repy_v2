@@ -1953,12 +1953,13 @@ class UDPServerSocket:
         None.
 
     <Exceptions>
+        SocketClosedLocal if UDPServerSocket.close() was called.
+
         LocalIPChanged if the local IP address has changed and the
         UDPServerSocket is invalid
 
         PortRestrictedException if the port number is no longer allowed.
 
-        SocketClosedLocal if UDPServerSocket.close() was called.
 
     <Side Effects>
         None
