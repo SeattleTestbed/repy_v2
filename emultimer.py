@@ -20,6 +20,9 @@ import tracebackrepy
 # for harshexit
 import harshexit
 
+# For getruntime()
+import nonportable
+
 # Import the exception hierarchy
 from exception_hierarchy import *
 
