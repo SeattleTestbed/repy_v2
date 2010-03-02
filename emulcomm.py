@@ -1233,7 +1233,7 @@ def openconnection(destip, destport,localip, localport, timeout):
       AddressBindingError (descends NetworkError) if the localip isn't 
       associated with the local system or is not allowed.
 
-      ResourceFobiddenError (descends ResourceError) if the localport isn't 
+      ResourceForbiddenError (descends ResourceError) if the localport isn't 
       allowed.
 
       DuplicateTupleError (descends NetworkError) if the (localip, localport, 
@@ -1981,7 +1981,7 @@ class UDPServerSocket:
 
     update_ip_cache()
     if socketinfo['localip'] not in allowediplist and \
-       not _is_loopback_ipaddr(socketinfo['localip']):
+        not _is_loopback_ipaddr(socketinfo['localip']):
       raise LocalIPChanged("The local ip " + socketinfo['localip'] + \
           " is no longer present on a system interface.")
 
