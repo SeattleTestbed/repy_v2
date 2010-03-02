@@ -604,6 +604,7 @@ def gethostbyname(name):
          The host name to translate.
 
    <Exceptions>
+     RepyArgumentError (descends from NetworkError) if the name is not a string
      NetworkAddressError (descends from NetworkError) if the address cannot
      be resolved.
 
@@ -617,6 +618,10 @@ def gethostbyname(name):
    <Returns>
      The IPv4 address as a string.
   """
+
+  if type(name) is not str:
+    raise RepyArgumentError("gethostbyname() takes a string as argument.")
+
   # charge 4K for a look up...   I don't know the right number, but we should
   # charge something.   We'll always charge to the netsend interface...
   nanny.tattle_quantity('netsend', 1024) 
@@ -625,9 +630,7 @@ def gethostbyname(name):
   try:
     return socket.gethostbyname(name)
   except socket.gaierror:
-    raise NetworkAddressError("The name '%s' could not be resolved." % name)
-  except TypeError:
-    raise ArgumentError("gethostbyname() takes a string as argument.")
+    raise NetworkAddressError("The hostname '"+name+"' could not be resolved.")
 
 
 
