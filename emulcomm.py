@@ -644,17 +644,21 @@ def getmyip():
       None
 
    <Exceptions>
-      As from socket.gethostbyname_ex()
+    InternetConnectivityError is the host is not connected to the internet.
 
    <Side Effects>
       None.
 
+   <Resource Consumption>
+    This operations consumes 128 netsend and 128 netrecv.
+
    <Returns>
       The localhost's IP address
-      python docs for socket.gethostbyname_ex()
   """
+  # Charge for the resources
+  nanny.tattle_quantity("netsend", 128)
+  nanny.tattle_quantity("netrecv", 128)
 
-  restrictions.assertisallowed('getmyip')
   # I got some of this from: http://groups.google.com/group/comp.lang.python/browse_thread/thread/d931cdc326d7032b?hl=en
   
   # Update the cache and return the first allowed IP
@@ -663,7 +667,7 @@ def getmyip():
     update_ip_cache()
     # Return the first allowed ip, there is always at least 1 element (loopback)
     return allowediplist[0]
-  
+
   # Initialize these to None, so we can detect a failure
   myip = None
   
@@ -693,7 +697,7 @@ def getmyip():
 
   # Since we haven't returned yet, we must have failed.
   # Raise an exception, we must not be connected to the internet
-  raise Exception("Cannot detect a connection to the Internet.")
+  raise InternetConnectivityError("Cannot detect a connection to the Internet.")
 
 
 
