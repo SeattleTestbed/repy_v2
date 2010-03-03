@@ -1235,7 +1235,8 @@ def openconnection(destip, destport,localip, localport, timeout):
     <Exceptions>
 
       RepyArgumentError if the arguments are invalid.   This includes both
-      the types and values of arguments.
+      the types and values of arguments. If the localip matches the destip,
+      and the localport matches the destport this will also be raised.
 
       AddressBindingError (descends NetworkError) if the localip isn't 
       associated with the local system or is not allowed.
@@ -1304,6 +1305,9 @@ def openconnection(destip, destport,localip, localport, timeout):
   if timeout <= 0:
     raise RepyArgumentError("Provided timeout is not valid, must be positive! Timeout: "+str(timeout))
 
+  # Check that if localip == destip, then localport != destport
+  if localip == destip and localport == destport:
+    raise RepyArgumentError("Local socket name cannot match destination socket name! Local/Dest IP and Port match.")
 
   # Check the input arguments (permission)
   update_ip_cache()
