@@ -23,6 +23,9 @@ import harshexit
 # For getruntime()
 import nonportable
 
+# For sleep
+import time
+
 # Import the exception hierarchy
 from exception_hierarchy import *
 
