@@ -644,19 +644,19 @@ def getmyip():
       None
 
    <Exceptions>
-    InternetConnectivityError is the host is not connected to the internet.
+      InternetConnectivityError is the host is not connected to the internet.
 
    <Side Effects>
       None.
 
    <Resource Consumption>
-    This operations consumes 128 netsend and 128 netrecv.
+      This operations consumes 256 netsend and 128 netrecv.
 
    <Returns>
       The localhost's IP address
   """
   # Charge for the resources
-  nanny.tattle_quantity("netsend", 128)
+  nanny.tattle_quantity("netsend", 256)
   nanny.tattle_quantity("netrecv", 128)
 
   # I got some of this from: http://groups.google.com/group/comp.lang.python/browse_thread/thread/d931cdc326d7032b?hl=en
