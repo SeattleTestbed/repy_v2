@@ -781,50 +781,50 @@ def _cleanup_socket(identity):
   acquired = socket_lock.acquire(False)
   if acquired:
     socket_lock.release()
-    raise InternalRepyError("Socket lock should be help before calling _cleanup_socket!")
+    raise InternalRepyError("Socket lock should be acquired before calling _cleanup_socket!")
 
   try:
     # De-compose and get the socket
     sock = OPEN_SOCKET_INFO[identity][1]
-    type, localip, localport, remoteip, remoteport = identity
-    listening_sock = remoteip is None # Check if this is a listening sock`
-    is_tcp = type == "TCP" # Check if it is TCP
-  
-    # Shutdown the socket for writing prior to close
-    # to unblock any threads that are writing
-    try:
-      sock.shutdown(socket.SHUT_WR)
-    except:
-      pass
-
-    # Close the socket
-    try:
-      sock.close()
-    except:
-      pass
-
-    # Re-store resources
-    if listening_sock:
-      nanny.tattle_remove_item('insockets', identity)
-
-      # Loop until the socket no longer exists
-      # BUG: There exists a potential race condition here. The problem is that
-      # the socket may be cleaned up and then before we are able to check for it again
-      # another process binds to the ip/port we are checking. This would cause us to detect
-      # the socket from the other process and we would block indefinately while that socket
-      # is open.
-      while nonportable.os_api.exists_listening_network_socket(localip, localport, is_tcp):
-        time.sleep(RETRY_INTERVAL)
-
-    else:
-      nanny.tattle_remove_item('outsockets', identity)
-
-    # Cleanup the socket
-    del OPEN_SOCKET_INFO[identity]
-
   except KeyError:
     # Already cleaned up
     return
+
+  type, localip, localport, remoteip, remoteport = identity
+  listening_sock = remoteip is None # Check if this is a listening sock
+  is_tcp = type == "TCP" # Check if it is TCP
+
+  # Shutdown the socket for writing prior to close
+  # to unblock any threads that are writing
+  try:
+    sock.shutdown(socket.SHUT_WR)
+  except:
+    pass
+
+  # Close the socket
+  try:
+    sock.close()
+  except:
+    pass
+
+  # Re-store resources
+  if listening_sock:
+    nanny.tattle_remove_item('insockets', identity)
+
+    # Loop until the socket no longer exists
+    # BUG: There exists a potential race condition here. The problem is that
+    # the socket may be cleaned up and then before we are able to check for it again
+    # another process binds to the ip/port we are checking. This would cause us to detect
+    # the socket from the other process and we would block indefinately while that socket
+    # is open.
+    while nonportable.os_api.exists_listening_network_socket(localip, localport, is_tcp):
+      time.sleep(RETRY_INTERVAL)
+
+  else:
+    nanny.tattle_remove_item('outsockets', identity)
+
+  # Cleanup the socket
+  del OPEN_SOCKET_INFO[identity]
 
 
 
@@ -870,80 +870,39 @@ def sendmessage(destip, destport, message, localip, localport):
    <Returns>
       The number of bytes sent on success
   """
-
-  # Check that if either localip or local port is specified, that both are
-  if localport is None or localip is None:
-    raise RepyArgumentError("Localip and localport must be specified.")
+  # Sanity check arguments
   if type(destip) is not str or type(destport) is not int or type(message) \
-      is not str or type(localip) is not str or type(localport) is not int:
+      is not str:
         raise RepyArgumentError("Invalid type of one or more arguments " + \
             "to sendmessage().")
 
-  if not localip or localip == '0.0.0.0':
-    raise RepyArgumentError("Can only bind to a single local ip.")
-# JAC: removed since this breaks semantics
-#  else:
-#    if not is_valid_ip_address(localip):
-#      raise Exception("Local IP address is invalid.")
-
-# JAC: removed since this breaks semantics
-#  if not is_valid_ip_address(destip):
-#    raise Exception("Destination host IP address is invalid.")
-  
   if not _is_valid_network_port(destport):
     raise RepyArgumentError("Destination port number must be an " + \
         "integer, between 1 and 65535.")
 
-  if not _is_valid_network_port(localport):
-    raise RepyArgumentError("Local port number must be an integer, " + \
-        "between 1 and 65535.")
-
-  try:
-    restrictions.assertisallowed('sendmess', destip, destport, message, \
-        localip, localport)
-  except Exception, e:
-    raise ResourceForbiddenError(str(e))
-
-  if localport:
-    nanny.tattle_check('messport', localport)
-
-  # Armon: Check if the specified local ip is allowed
-  # this check only makes sense if the localip is specified
-  if localip and not _ip_is_allowed(localip):
-    raise ResourceForbiddenError("IP '" + str(localip) + "' is not allowed.")
-  
-  # If there is a preference, but no localip, then get one
-  elif user_ip_interface_preferences and not localip:
-    # Use whatever getmyip returns
-    localip = getmyip()
-
   # this is used to track errors when trying to resend data
   firsterror = None
 
-  if localip and localport:
-    # let's see if the socket already exists...
-    commtableentry, commhandle = find_tip_entry('UDP', localip, localport)
+  # Sanity check local address and bind to it
+  sock_identity = _bind_udp_socket(localip, localport, 'outsockets')
+
+  lock, sockobj = OPEN_SOCKET_INFO[sock_identity]
+
+  # wait if already oversubscribed
+  if _is_loopback_ipaddr(destip):
+    nanny.tattle_quantity('loopsend', 0)
   else:
-    # no, we'll skip
-    commhandle = None
+    nanny.tattle_quantity('netsend', 0)
 
-  # yes it does! let's use the existing socket
-  if commhandle:
-
-    # block in case we're oversubscribed
-    if _is_loopback_ipaddr(destip):
-      nanny.tattle_quantity('loopsend', 0)
-    else:
-      nanny.tattle_quantity('netsend', 0)
-
-    # try to send using this socket
+  # try to send using this socket (try twice)
+  for i in range(2):
     try:
-      bytessent = commtableentry['socket'].sendto(message, \
-          (destip, destport))
+      bytessent = sockobj.sendto(message, (destip, destport))
     except socket.error, e:
       # we're going to save this error in case we also get an error below.
       # This is likely to be the error we actually want to raise
-      firsterror = e
+      if firsterror is None:
+        firsterror = e
       # should I really fall through here?
     else:
       # send succeeded, let's wait and return
@@ -952,46 +911,100 @@ def sendmessage(destip, destport, message, localip, localport):
       else:
         nanny.tattle_quantity('netsend', 64 + bytessent)
       return bytessent
-  
 
-  # open a new socket
-  s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
- 
+
+
+def _bind_udp_socket(localip, localport, tattle_item):
+  # Conrad: entirely stolen from listenforconnection(). Some of this input
+  # verification stuff especially could probably be combined as a shared
+  # function. Even the rest of the functions are similar enough to be worth
+  # consolidating.
+
+  # Check the input arguments (type)
+  if type(localip) is not str:
+    raise RepyArgumentError("Provided localip must be a string!")
+
+  if type(localport) is not int:
+    raise RepyArgumentError("Provided localport must be a int!")
+
+
+  # Check the input arguments (sanity)
+  if not _is_valid_ip_address(localip):
+    raise RepyArgumentError("Provided localip is not valid! IP: '"+localip+"'")
+
+  if not _is_valid_network_port(localport):
+    raise RepyArgumentError("Provided localport is not valid! Port: "+str(localport))
+
+
+  # Check the input arguments (permission)
+  update_ip_cache()
+  if not _ip_is_allowed(localip):
+    raise ResourceForbiddenError("Provided localip is not allowed! IP: '"+localip+"'")
+
+  if not _is_allowed_localport("UDP", localport):
+    raise ResourceForbiddenError("Provided localport is not allowed! Port: "+str(localport))
+
+
+
+  # Check if the tuple is in use
+  normal_identity = ("UDP", localip, localport, False, None)
+  listen_identity = ("UDP", localip, localport, None, None)
+  if normal_identity in OPEN_SOCKET_INFO or listen_identity in OPEN_SOCKET_INFO:
+    raise AlreadyListeningError("The provided localip and localport are already in use!")
+
+  is_listensock = tattle_item == "insockets"
+  if is_listensock:
+    identity = listen_identity
+  else:
+    identity = normal_identity
+
+  # Check if the tuple is pending
+  PENDING_SOCKETS_LOCK.acquire()
+  try:
+    if normal_identity in PENDING_SOCKETS or listen_identity in PENDING_SOCKETS:
+      raise AlreadyListeningError("Concurrent listenformessage with the localip and localport in progress!")
+    else:
+      # No pending operation, add us to the pending list
+        PENDING_SOCKETS.add(identity)
+  finally:
+    PENDING_SOCKETS_LOCK.release()
+
+
 
   try:
-    if localip:
-      try:
-        s.bind((localip,localport))
-      except socket.error, e:
-        if firsterror:
-          raise AddressBindingError(str(firsterror))
-        raise AddressBindingError(str(e))
+    # Register this identity with nanny
+    nanny.tattle_add_item(tattle_item, identity)
 
-    # wait if already oversubscribed
-    if _is_loopback_ipaddr(destip):
-      nanny.tattle_quantity('loopsend', 0)
-    else:
-      nanny.tattle_quantity('netsend', 0)
+    try:
+      # Get the socket
+      sock = _get_udp_socket(localip, localport)
 
-    bytessent = s.sendto(message, (destip, destport))
+    except Exception, e:
+      nanny.tattle_remove_item(tattle_item, identity)
 
-    if _is_loopback_ipaddr(destip):
-      nanny.tattle_quantity('loopsend', 64 + bytessent)
-    else:
-      nanny.tattle_quantity('netsend', 64 + bytessent)
+      # Check if this an already in use error
+      if _is_addr_in_use_exception(e):
+        raise DuplicateTupleError("Provided Local IP and Local Port is already in use!")
+ 
+      # Check if this is a binding error
+      if _is_addr_unavailable_exception(e):
+        raise AddressBindingError("Cannot bind to the specified local ip, invalid!")
 
-    return bytessent
+      # Unknown error...
+      else:
+        raise
+
+    # Create entry with a lock and the socket object
+    OPEN_SOCKET_INFO[identity] = (threading.Lock(), sock)
+
+    # Return the identity
+    return identity
 
   finally:
-    # close no matter what
-    try:
-      s.close()
-    except:
-      pass
-
-
-
-
+    # Remove us from the pending operations list
+    PENDING_SOCKETS_LOCK.acquire()
+    PENDING_SOCKETS.remove(identity)
+    PENDING_SOCKETS_LOCK.release()
 
 
 # Public interface!!!
@@ -1020,7 +1033,7 @@ def listenformessage(localip, localport):
         AddressBindingError (descends NetworkError) if the IP address isn't a
         local IP.
 
-        ResourceForbiddenError if the port is restricted.
+        ResourceForbiddenError if the port is not allowed.
 
         SocketWouldBlockException if the call would block.
 
@@ -1034,64 +1047,14 @@ def listenformessage(localip, localport):
         The UDPServerSocket.
 
   """
-  if not localip or localip == '0.0.0.0':
-    raise RepyArgumentError("Must specify a local IP address")
+  # If this returns, we've successfully created a socket and bound it to
+  # (localip, localport):
+  identity = _bind_udp_socket(localip, localport, 'insockets')
 
-# JAC: removed since this breaks semantics
-#  if not is_valid_ip_address(localip):
-#    raise Exception("Local IP address is invalid.")
+  # Create a UDPServerSocket
+  server_sock = UDPServerSocket(identity)
 
-  if not _is_valid_network_port(localport):
-    raise RepyArgumentError("Local port number must be an integer, " + \
-        "between 1 and 65535.")
-
-  nanny.tattle_check('messport', localport)
-  
-  # Armon: Check if the specified local ip is allowed
-  if not _ip_is_allowed(localip):
-    raise PortRestrictedException("IP '" + localip + "' is not allowed.")
-  
-  # Armon: Generate the new handle since we need it 
-  # to replace the old handle if it exists
-  handle = generate_commhandle()
-
-  # check if I'm already listening on this port / ip
-  # NOTE: I check as though there might be a socket open that is sending a
-  # message.   This is nonsense since sendmess doesn't result in a socket 
-  # persisting.   This is done so that if sockets for sendmess are cached 
-  # later (as seems likely) the resulting code will not break.
-  oldhandle = find_tipo_commhandle('UDP', localip, localport, False)
-  if oldhandle:
-    # if it was already there, update the function and return
-    raise AlreadyListeningError("UDPServerSocket for this (ip, port) " + \
-        "already exists")
-    
-  # we'll need to add it, so add a socket...
-  nanny.tattle_add_item('insockets', handle)
-
-  # get the socket
-  try:
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.bind((localip, localport))
-
-    nonportable.preparesocket(s)
-  except:
-    try:
-      s.close()
-    except:
-      pass
-    nanny.tattle_remove_item('insockets', handle)
-    raise
-
-  # set up our table entry
-  comminfo[handle] = {'type': 'UDP', 'localip': localip, \
-      'localport': localport, 'socket': s, 'outgoing': False, \
-      'closing_lock': threading.Lock()}
-
-  # start the selector if it's not running already
-  check_selector()
-
-  return UDPServerSocket(handle)
+  return server_sock
 
 
 
@@ -1534,6 +1497,25 @@ def _get_tcp_socket(localip, localport):
     try:
       s.bind((localip,localport))
     except: # Raise the exception un-tainted
+      # don't leak sockets
+      s.close()
+      raise
+
+  return s
+
+
+
+# Private method to create a UDP socket and bind
+# to a localip and localport.
+# 
+def _get_udp_socket(localip, localport):
+  # Create the UDP socket
+  s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+  if localip and localport:
+    try:
+      s.bind((localip, localport))
+    except:
       # don't leak sockets
       s.close()
       raise
@@ -1987,18 +1969,19 @@ class UDPServerSocket:
       raise SocketClosedLocal("getmessage() was called on a closed " + \
           "UDPServerSocket.")
 
+    # Prevent TOCTOU:
     mycommid = self._commid
-    socketinfo = comminfo[mycommid]
-    s = socketinfo['socket']
+    socketinfo = OPEN_SOCKET_INFO[mycommid]
+    s = socketinfo[1]
+    localip = mycommid[1]
 
     update_ip_cache()
-    if socketinfo['localip'] not in allowediplist and \
-        not _is_loopback_ipaddr(socketinfo['localip']):
-      raise LocalIPChanged("The local ip " + socketinfo['localip'] + \
+    if localip not in allowediplist and not _is_loopback_ipaddr(localip):
+      raise LocalIPChanged("The local ip " + localip + \
           " is no longer present on a system interface.")
 
     # Wait if we're oversubscribed.
-    if _is_loopback_ipaddr(socketinfo['localip']):
+    if _is_loopback_ipaddr(localip):
       nanny.tattle_quantity('looprecv', 0)
     else:
       nanny.tattle_quantity('netrecv', 0)
@@ -2006,7 +1989,7 @@ class UDPServerSocket:
     data, addr = s.recvfrom(4096)
 
     # Report resource consumption:
-    if _is_loopback_ipaddr(socketinfo['localip']):
+    if _is_loopback_ipaddr(localip):
       nanny.tattle_quantity('looprecv', 64 + len(data))
     else:
       nanny.tattle_quantity('netrecv', 64 + len(data))
@@ -2039,7 +2022,34 @@ class UDPServerSocket:
 
     """
     self._closed = True
-    return stopcomm(self._commid)
+    # Get the socket lock
+    identity = self._commid
+    try:
+      socket_lock = OPEN_SOCKET_INFO[identity][0]
+    except KeyError:
+      # Socket is already closed, ignore
+      return False
+
+    # Acquire the lock
+    socket_lock.acquire()
+    try:
+      # Clean up the socket
+      _cleanup_socket(identity)
+
+      # Replace the identity
+      self._commid = None
+
+      # Done
+      return True
+
+    finally:
+      socket_lock.release()
+ 
+
+
+  def __del__(self):
+    # Clean up global resources on garbage collection.
+    self.close()
 
 
 
