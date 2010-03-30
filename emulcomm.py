@@ -1,5 +1,5 @@
 """
-   Author: Justin Cappos
+   Author: Justin Cappos, Armon Dadgar
 
    Start Date: 27 June 2008
 
@@ -870,98 +870,58 @@ def sendmessage(destip, destport, message, localip, localport):
    <Returns>
       The number of bytes sent on success
   """
-  # Sanity check arguments
-  if type(destip) is not str or type(destport) is not int or type(message) \
-      is not str:
-        raise RepyArgumentError("Invalid type of one or more arguments " + \
-            "to sendmessage().")
-
-  if not _is_valid_network_port(destport):
-    raise RepyArgumentError("Destination port number must be an " + \
-        "integer, between 1 and 65535.")
-
-  # this is used to track errors when trying to resend data
-  firsterror = None
-
-  # Sanity check local address and bind to it
-  sock_identity = _bind_udp_socket(localip, localport, 'outsockets')
-
-  lock, sockobj = OPEN_SOCKET_INFO[sock_identity]
-
-  # wait if already oversubscribed
-  if _is_loopback_ipaddr(destip):
-    nanny.tattle_quantity('loopsend', 0)
-  else:
-    nanny.tattle_quantity('netsend', 0)
-
-  # try to send using this socket (try twice)
-  for i in range(2):
-    try:
-      bytessent = sockobj.sendto(message, (destip, destport))
-    except socket.error, e:
-      # we're going to save this error in case we also get an error below.
-      # This is likely to be the error we actually want to raise
-      if firsterror is None:
-        firsterror = e
-      # should I really fall through here?
-    else:
-      # send succeeded, let's wait and return
-      if _is_loopback_ipaddr(destip):
-        nanny.tattle_quantity('loopsend', 64 + bytessent)
-      else:
-        nanny.tattle_quantity('netsend', 64 + bytessent)
-      return bytessent
-
-
-
-def _bind_udp_socket(localip, localport, tattle_item):
-  # Conrad: entirely stolen from listenforconnection(). Some of this input
-  # verification stuff especially could probably be combined as a shared
-  # function. Even the rest of the functions are similar enough to be worth
-  # consolidating.
-
   # Check the input arguments (type)
+  if type(destip) is not str:
+    raise RepyArgumentError("Provided destip must be a string!")
   if type(localip) is not str:
     raise RepyArgumentError("Provided localip must be a string!")
 
+  if type(destport) is not int:
+    raise RepyArgumentError("Provided destport must be an int!")
   if type(localport) is not int:
-    raise RepyArgumentError("Provided localport must be a int!")
+    raise RepyArgumentError("Provided localport must be an int!")
+
+  if type(message) is not str:
+    raise RepyArgumentError("Provided message must be a string!")
 
 
   # Check the input arguments (sanity)
+  if not _is_valid_ip_address(destip):
+    raise RepyArgumentError("Provided destip is not valid! IP: '"+destip+"'")
   if not _is_valid_ip_address(localip):
     raise RepyArgumentError("Provided localip is not valid! IP: '"+localip+"'")
 
+  if not _is_valid_network_port(destport):
+    raise RepyArgumentError("Provided destport is not valid! Port: "+str(destport))
   if not _is_valid_network_port(localport):
     raise RepyArgumentError("Provided localport is not valid! Port: "+str(localport))
 
 
+  # Check that if localip == destip, then localport != destport
+  if localip == destip and localport == destport:
+    raise RepyArgumentError("Local socket name cannot match destination socket name! Local/Dest IP and Port match.")
+
   # Check the input arguments (permission)
   update_ip_cache()
   if not _ip_is_allowed(localip):
-    raise ResourceForbiddenError("Provided localip is not allowed! IP: '"+localip+"'")
+    raise ResourceForbiddenError("Provided localip is not allowed! IP: "+localip)
 
   if not _is_allowed_localport("UDP", localport):
     raise ResourceForbiddenError("Provided localport is not allowed! Port: "+str(localport))
 
 
-
   # Check if the tuple is in use
-  normal_identity = ("UDP", localip, localport, False, None)
+  identity = ("UDP", localip, localport, destip, destport)
   listen_identity = ("UDP", localip, localport, None, None)
-  if normal_identity in OPEN_SOCKET_INFO or listen_identity in OPEN_SOCKET_INFO:
+  if identity in OPEN_SOCKET_INFO or listen_identity in OPEN_SOCKET_INFO:
     raise AlreadyListeningError("The provided localip and localport are already in use!")
-
-  is_listensock = tattle_item == "insockets"
-  if is_listensock:
-    identity = listen_identity
-  else:
-    identity = normal_identity
 
   # Check if the tuple is pending
   PENDING_SOCKETS_LOCK.acquire()
   try:
-    if normal_identity in PENDING_SOCKETS or listen_identity in PENDING_SOCKETS:
+    if identity in PENDING_SOCKETS:
+      raise AlreadyListeningError("Concurrent sendmessage with the localip and localport in progress!")
+    elif listen_identity in PENDING_SOCKETS:
       raise AlreadyListeningError("Concurrent listenformessage with the localip and localport in progress!")
     else:
       # No pending operation, add us to the pending list
@@ -970,17 +930,39 @@ def _bind_udp_socket(localip, localport, tattle_item):
     PENDING_SOCKETS_LOCK.release()
 
 
+  # Wait for netsend
+  if _is_loopback_ipaddr(destip):
+    nanny.tattle_quantity('loopsend', 0)
+  else:
+    nanny.tattle_quantity('netsend', 0)
 
   try:
     # Register this identity with nanny
-    nanny.tattle_add_item(tattle_item, identity)
+    nanny.tattle_add_item("outsockets", identity)
 
     try:
       # Get the socket
       sock = _get_udp_socket(localip, localport)
 
+      # Send the message
+      bytessent = sock.sendto(message, (destip, destport))
+
+      # Account for the resources
+      if _is_loopback_ipaddr(destip):
+        nanny.tattle_quantity('loopsend', bytessent + 64)
+      else:
+        nanny.tattle_quantity('netsend', bytessent + 64)
+
+      return bytessent
+
     except Exception, e:
-      nanny.tattle_remove_item(tattle_item, identity)
+      nanny.tattle_remove_item("outsockets", identity)
+
+      # Try to close the socket
+      try:
+        sock.close()
+      except:
+        pass
 
       # Check if this an already in use error
       if _is_addr_in_use_exception(e):
@@ -994,17 +976,12 @@ def _bind_udp_socket(localip, localport, tattle_item):
       else:
         raise
 
-    # Create entry with a lock and the socket object
-    OPEN_SOCKET_INFO[identity] = (threading.Lock(), sock)
-
-    # Return the identity
-    return identity
-
   finally:
     # Remove us from the pending operations list
     PENDING_SOCKETS_LOCK.acquire()
     PENDING_SOCKETS.remove(identity)
     PENDING_SOCKETS_LOCK.release()
+
 
 
 # Public interface!!!
@@ -1047,14 +1024,88 @@ def listenformessage(localip, localport):
         The UDPServerSocket.
 
   """
-  # If this returns, we've successfully created a socket and bound it to
-  # (localip, localport):
-  identity = _bind_udp_socket(localip, localport, 'insockets')
+  # Check the input arguments (type)
+  if type(localip) is not str:
+    raise RepyArgumentError("Provided localip must be a string!")
 
-  # Create a UDPServerSocket
-  server_sock = UDPServerSocket(identity)
+  if type(localport) is not int:
+    raise RepyArgumentError("Provided localport must be a int!")
 
-  return server_sock
+
+  # Check the input arguments (sanity)
+  if not _is_valid_ip_address(localip):
+    raise RepyArgumentError("Provided localip is not valid! IP: '"+localip+"'")
+
+  if not _is_valid_network_port(localport):
+    raise RepyArgumentError("Provided localport is not valid! Port: "+str(localport))
+
+
+  # Check the input arguments (permission)
+  update_ip_cache()
+  if not _ip_is_allowed(localip):
+    raise ResourceForbiddenError("Provided localip is not allowed! IP: '"+localip+"'")
+
+  if not _is_allowed_localport("UDP", localport):
+    raise ResourceForbiddenError("Provided localport is not allowed! Port: "+str(localport))
+
+
+
+  # Check if the tuple is in use
+  identity = ("UDP", localip, localport, None, None)
+  if identity in OPEN_SOCKET_INFO:
+    raise AlreadyListeningError("The provided localip and localport are already in use!")
+
+  # Check if the tuple is pending
+  PENDING_SOCKETS_LOCK.acquire()
+  try:
+    if identity in PENDING_SOCKETS:
+      raise AlreadyListeningError("Concurrent listenformessage with the localip and localport in progress!")
+    else:
+      # No pending operation, add us to the pending list
+      PENDING_SOCKETS.add(identity)
+  finally:
+    PENDING_SOCKETS_LOCK.release()
+
+
+
+  try:
+    # Register this identity as an insocket
+    nanny.tattle_add_item('insockets',identity)
+
+    try:
+      # Get the socket
+      sock = _get_udp_socket(localip,localport)
+
+    except Exception, e:
+      nanny.tattle_remove_item('insockets',identity)
+
+      # Check if this an already in use error
+      if _is_addr_in_use_exception(e):
+        raise DuplicateTupleError("Provided Local IP and Local Port is already in use!")
+ 
+      # Check if this is a binding error
+      if _is_addr_unavailable_exception(e):
+        raise AddressBindingError("Cannot bind to the specified local ip, invalid!")
+
+      # Unknown error...
+      else:
+        raise
+
+    # Create entry with a lock and the socket object
+    OPEN_SOCKET_INFO[identity] = (threading.Lock(), sock)
+
+    # Create a UDPServerSocket
+    server_sock = UDPServerSocket(identity)
+
+    # Return the UDPServerSocket
+    return server_sock
+
+  finally:
+    # Remove us from the pending operations list
+    PENDING_SOCKETS_LOCK.acquire()
+    PENDING_SOCKETS.remove(identity)
+    PENDING_SOCKETS_LOCK.release()
+
 
 
 
@@ -1308,8 +1359,12 @@ def openconnection(destip, destport,localip, localport, timeout):
 
   
   # Wait for netsend / netrecv
-  nanny.tattle_quantity('netsend', 0)
-  nanny.tattle_quantity('netrecv', 0)
+  if _is_loopback_ipaddr(destip):
+    nanny.tattle_quantity('loopsend', 0)
+    nanny.tattle_quantity('looprecv', 0)
+  else:
+    nanny.tattle_quantity('netsend', 0)
+    nanny.tattle_quantity('netrecv', 0)
 
   try:
     # Register this identity as an outsocket
@@ -1345,8 +1400,12 @@ def openconnection(destip, destport,localip, localport, timeout):
     emul_sock = EmulatedSocket(identity)
 
     # Tattle the resources used
-    nanny.tattle_quantity('netsend', 128)
-    nanny.tattle_quantity('netrecv', 64)
+    if _is_loopback_ipaddr(destip):
+      nanny.tattle_quantity('loopsend', 128)
+      nanny.tattle_quantity('looprecv', 64)
+    else:
+      nanny.tattle_quantity('netsend', 128)
+      nanny.tattle_quantity('netrecv', 64)
 
     # Return the EmulatedSocket
     return emul_sock
@@ -1600,8 +1659,8 @@ class EmulatedSocket:
   # send_buffer_size: The size of the send buffer. We send less than
   #                  this to avoid a bug.
   #
-  # on_loopback: True if the remote IP is a loopback address.
-  #              This is used for resource accounting.
+  # on_loopback: true if the remote ip is a loopback address.
+  #              this is used for resource accounting.
   #
   __slots__ = ["identity", "send_buffer_size", "on_loopback"]
 
@@ -1700,8 +1759,12 @@ class EmulatedSocket:
    
 
     # Wait for resources
-    nanny.tattle_quantity('netrecv', 0)
-    nanny.tattle_quantity('netsend', 0)
+    if self.on_loopback:
+      nanny.tattle_quantity('looprecv', 0)
+      nanny.tattle_quantity('loopsend', 0)
+    else:
+      nanny.tattle_quantity('netrecv', 0)
+      nanny.tattle_quantity('netsend', 0)
 
 
     # Acquire the lock
@@ -1711,8 +1774,12 @@ class EmulatedSocket:
       self._close()
 
       # Tattle the resources
-      nanny.tattle_quantity('netrecv',64)
-      nanny.tattle_quantity('netsend',128)
+      if self.on_loopback:
+        nanny.tattle_quantity('looprecv',64)
+        nanny.tattle_quantity('loopsend',128)
+      else:
+        nanny.tattle_quantity('netrecv',64)
+        nanny.tattle_quantity('netsend',128)
 
       # Done
       return True
@@ -1929,11 +1996,61 @@ class EmulatedSocket:
 
 # Public: Class the behaves represents a listening UDP socket.
 class UDPServerSocket:
+  """
+  This object is a wrapper around a listening
+  UDP socket. It allows for accepting incoming
+  messages, and closing the socket.
+
+  It operates in a strictly non-blocking mode,
+  and uses Exceptions to indicate when an
+  operation would result in blocking behavior.
+  """
+  # Fields:
+  # identity: This is a tuple which is our identity in the
+  #           OPEN_SOCKET_INFO dictionary. We use this to
+  #           perform the look-up for our info.
+  #
+  # on_loopback: True if the local IP is a loopback address.
+  #              This is used for resource accounting.
+  #
+  __slots__ = ["identity", "on_loopback"]
+
 
   # UDP listening socket interface
-  def __init__(self, handle):
-    self._commid = handle
-    self._closed = False
+  def __init__(self, identity):
+    """
+    <Purpose>
+      Initializes the UDPServerSocket. The socket
+      should already be established by listenformessage
+      prior to calling the initializer.
+
+    <Arguments>
+      identity: The identity tuple.
+
+    <Exceptions>
+      None
+
+    <Returns>
+      A UDPServerSocket
+    """
+    # Store our identity
+    self.identity = identity
+
+    # Get the socket
+    try:
+      sock_lock, sock = OPEN_SOCKET_INFO[self.identity]
+
+      # Set the socket to non-blocking
+      sock_lock.acquire()
+      sock.setblocking(0)
+      sock_lock.release()
+
+      # Check if we are on loopback, check the local ip
+      self.on_loopback = _is_loopback_ipaddr(self.identity[1])
+
+    # Shouldn't happen because my caller should create the table entry first
+    except KeyError:
+      raise InteralRepyError("Internal Error. No table entry for new socket!")
 
 
 
@@ -1947,12 +2064,7 @@ class UDPServerSocket:
 
     <Exceptions>
         SocketClosedLocal if UDPServerSocket.close() was called.
-
-        LocalIPChanged if the local IP address has changed and the
-        UDPServerSocket is invalid
-
-        PortRestrictedException if the port number is no longer allowed.
-
+        Raises SocketWouldBlockError if the operation would block.
 
     <Side Effects>
         None
@@ -1964,37 +2076,65 @@ class UDPServerSocket:
         A tuple consisting of the remote IP, remote port, and message.
 
     """
+    # Get the socket lock
+    try:
+      socket_lock = OPEN_SOCKET_INFO[self.identity][0]
+    except KeyError:
+      # Socket closed
+      raise SocketClosedLocal("The socket has been closed!")
 
-    if self._closed:
-      raise SocketClosedLocal("getmessage() was called on a closed " + \
-          "UDPServerSocket.")
-
-    # Prevent TOCTOU:
-    mycommid = self._commid
-    socketinfo = OPEN_SOCKET_INFO[mycommid]
-    s = socketinfo[1]
-    localip = mycommid[1]
-
-    update_ip_cache()
-    if localip not in allowediplist and not _is_loopback_ipaddr(localip):
-      raise LocalIPChanged("The local ip " + localip + \
-          " is no longer present on a system interface.")
-
-    # Wait if we're oversubscribed.
-    if _is_loopback_ipaddr(localip):
-      nanny.tattle_quantity('looprecv', 0)
+    # Wait for netrecv resources
+    if self.on_loopback:
+      nanny.tattle_quantity('looprecv',0)
     else:
-      nanny.tattle_quantity('netrecv', 0)
+      nanny.tattle_quantity('netrecv',0)
 
-    data, addr = s.recvfrom(4096)
+    # Acquire the lock
+    socket_lock.acquire()
+    try:
+      # Get the socket itself. This must be done after
+      # we acquire the lock because it is possible that the
+      # socket was closed/re-opened or that it was set to None,
+      # etc.
+      socket = OPEN_SOCKET_INFO[self.identity][1]
+      if socket is None:
+        raise KeyError # Indicates socket is closed
 
-    # Report resource consumption:
-    if _is_loopback_ipaddr(localip):
-      nanny.tattle_quantity('looprecv', 64 + len(data))
-    else:
-      nanny.tattle_quantity('netrecv', 64 + len(data))
+      # Try to get a message
+      message, addr = socket.recvfrom(4096)
+      remote_ip, remote_port = addr
 
-    return (addr[0], addr[1], data)
+      # Do some resource accounting
+      if self.on_loopback:
+        nanny.tattle_quantity('looprecv', 64 + len(message))
+      else:
+        nanny.tattle_quantity('netrecv', 64 + len(message))
+
+      # Return everything
+      return (remote_ip, remote_port, message)
+
+    except KeyError:
+      # Socket is closed
+      raise SocketClosedLocal("The socket has been closed!")
+  
+    except RepyException:
+      # Let these through from the inner block
+      raise
+
+    except Exception, e:
+      # Check if this is a would-block error
+      if _is_recoverable_network_exception(e):
+        raise SocketWouldBlockError("No messages currently available!")
+
+      else: 
+        # Unexpected, close the socket, and then raise SocketClosedLocal
+        _cleanup_socket(self.identity)
+        self.identity = None
+        raise SocketClosedLocal("Unexpected error, socket closed!")
+
+    finally:
+      # Release the lock
+      socket_lock.release()
 
 
 
@@ -2021,11 +2161,9 @@ class UDPServerSocket:
         True if this is the first close call to this socket, False otherwise.
 
     """
-    self._closed = True
     # Get the socket lock
-    identity = self._commid
     try:
-      socket_lock = OPEN_SOCKET_INFO[identity][0]
+      socket_lock = OPEN_SOCKET_INFO[self.identity][0]
     except KeyError:
       # Socket is already closed, ignore
       return False
@@ -2034,10 +2172,10 @@ class UDPServerSocket:
     socket_lock.acquire()
     try:
       # Clean up the socket
-      _cleanup_socket(identity)
+      _cleanup_socket(self.identity)
 
       # Replace the identity
-      self._commid = None
+      self.identity = None
 
       # Done
       return True
@@ -2045,7 +2183,6 @@ class UDPServerSocket:
     finally:
       socket_lock.release()
  
-
 
   def __del__(self):
     # Clean up global resources on garbage collection.
@@ -2069,7 +2206,10 @@ class TCPServerSocket (object):
   #           OPEN_SOCKET_INFO dictionary. We use this to
   #           perform the look-up for our info.
   #
-  __slots__ = ["identity"]
+  # on_loopback: true if the remote ip is a loopback address.
+  #              this is used for resource accounting.
+  #
+  __slots__ = ["identity", "on_loopback"]
 
   def __init__(self, identity):
     """
@@ -2098,6 +2238,9 @@ class TCPServerSocket (object):
       sock_lock.acquire()
       sock.setblocking(0)
       sock_lock.release()
+
+      # Check if we are on loopback, check the local ip
+      self.on_loopback = _is_loopback_ipaddr(self.identity[1])
 
     # Shouldn't happen because my caller should create the table entry first
     except KeyError:
@@ -2134,8 +2277,12 @@ class TCPServerSocket (object):
       raise SocketClosedLocal("The socket has been closed!")
 
     # Wait for netsend and netrecv resources
-    nanny.tattle_quantity('netrecv',0)
-    nanny.tattle_quantity('netsend',0)
+    if self.on_loopback:
+      nanny.tattle_quantity('looprecv',0)
+      nanny.tattle_quantity('loopsend',0)
+    else:
+      nanny.tattle_quantity('netrecv',0)
+      nanny.tattle_quantity('netsend',0)
 
     # Acquire the lock
     socket_lock.acquire()
@@ -2154,8 +2301,13 @@ class TCPServerSocket (object):
       new_identity = ("TCP", self.identity[1], self.identity[2], remote_ip, remote_port)
 
       # Do some resource accounting
-      nanny.tattle_quantity('netrecv', 128)
-      nanny.tattle_quantity('netsend', 64)
+      if self.on_loopback:
+        nanny.tattle_quantity('looprecv', 128)
+        nanny.tattle_quantity('loopsend', 64)
+      else:
+        nanny.tattle_quantity('netrecv', 128)
+        nanny.tattle_quantity('netsend', 64)
+
       try:
         nanny.tattle_add_item('outsockets', new_identity)
       except ResourceExhaustedError:
