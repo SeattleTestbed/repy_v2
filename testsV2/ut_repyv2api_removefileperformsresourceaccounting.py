@@ -15,11 +15,11 @@ try:
 except FileNotFoundError:
   pass
 else:
-  print "File: '"+FILE_NAME+"' should not exist!"
+  log("File: '"+FILE_NAME+"' should not exist!",'\n')
 
 lim, usage, stops = getresources()
 if usage["fileread"] != 4096:
-  print "File read should be 4096! Usage: "+str(usage)
+  log("File read should be 4096! Usage: "+str(usage),'\n')
 
 
 
@@ -35,5 +35,5 @@ lim, usage, stops = getresources()
 
 # Filewrite should be 4096
 if usage["filewrite"] != 4096:
-  print "File write should be 4096! Usage: "+str(usage)
+  log("File write should be 4096! Usage: "+str(usage),'\n')
 

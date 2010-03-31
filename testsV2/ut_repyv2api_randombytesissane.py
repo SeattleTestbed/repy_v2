@@ -15,7 +15,7 @@ data = randombytes() + randombytes() + randombytes() + randombytes()
 
 # Check the length
 if len(data) != 4096:
-  print "Length is incorrect! Is: "+str(len(data))
+  log("Length is incorrect! Is: "+str(len(data)),'\n')
 
 # Initialize the occur count to 0
 occur_count = {}
@@ -31,7 +31,7 @@ for char in data:
 for x in xrange(256):
   count = occur_count[x]
   if count < 1:
-    print "Character with value '"+str(x)+"' occurs only "+str(count)+" times. Min 1"
+    log("Character with value '"+str(x)+"' occurs only "+str(count)+" times. Min 1",'\n')
   if count > 40:
-     print "Character with value '"+str(x)+"' occurs "+str(count)+" times. Max 20"   
+     log("Character with value '"+str(x)+"' occurs "+str(count)+" times. Max 20"   ,'\n')
 

@@ -14,7 +14,7 @@ def tryit(sizelimit, offset):
   except RepyArgumentError:
     pass
   else:
-    print "Readat with sizelimit: "+str(sizelimit)+" and offset: "+str(offset)+" should have error!"
+    log("Readat with sizelimit: "+str(sizelimit)+" and offset: "+str(offset)+" should have error!",'\n')
 
 # Open a file
 fileh = openfile("repy.py", False)
@@ -28,7 +28,7 @@ tryit(1, None)
 # Try to seek past the end
 try:
   fileh.readat(8, 500000)
-  print "Read past then EOF!"
+  log("Read past then EOF!",'\n')
 except SeekPastEndOfFileError:
   pass
 

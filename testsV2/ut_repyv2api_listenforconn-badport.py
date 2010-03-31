@@ -9,7 +9,7 @@ ip = "127.0.0.1"
 def tryit(port):
   try:
     listenforconnection(ip,port)
-    print "Bad combination worked! IP:"+str(ip)+" Port: "+str(port)
+    log("Bad combination worked! IP:"+str(ip)+" Port: "+str(port),'\n')
   except ResourceForbiddenError:
     pass
 

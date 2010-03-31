@@ -19,7 +19,7 @@ r_data = fileh.readat(16,0)
 
 # Check that it matches the comment at the top
 if data != r_data:
-  print "Data does not match! Got: "+r_data
+  log("Data does not match! Got: "+r_data,'\n')
 
 fileh.close()
 

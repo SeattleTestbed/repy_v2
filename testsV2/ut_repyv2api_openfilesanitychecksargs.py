@@ -16,7 +16,7 @@ def tryit(arg, create=False):
   except RepyArgumentError:
     pass
   else:
-    print "openfile worked with bad file name: '"+str(arg)+"'"
+    log("openfile worked with bad file name: '"+str(arg)+"'",'\n')
 
 tryit(".")
 tryit("..")
@@ -41,14 +41,14 @@ try:
 except FileNotFoundError:
   pass
 else:
-  print "Opened handle to file that does not exist: "+str(BAD_FILE)
+  log("Opened handle to file that does not exist: "+str(BAD_FILE),'\n')
 
 # Create the file, this should work
 openfile(BAD_FILE, True)
 
 # Check that it exists
 if BAD_FILE not in listfiles():
-  print "File should exist! It was just created!"
+  log("File should exist! It was just created!",'\n')
 
 # Remove the file
 removefile(BAD_FILE)

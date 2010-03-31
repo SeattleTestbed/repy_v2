@@ -22,9 +22,9 @@ try:
 except ResourceExhaustedError:
   pass
 else:
-  print "Opened file with no handles available!"
+  log("Opened file with no handles available!",'\n')
 
 # Check if the file exists
 if TRY_FILE in listfiles():
-  print "The file was created with no handles available!"
+  log("The file was created with no handles available!",'\n')
 

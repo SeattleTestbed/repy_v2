@@ -19,7 +19,7 @@ try:
 except SocketWouldBlockError:
   pass
 else:
-  print "Did not get a SocketWould Block when reading a fresh client socket"
+  log("Did not get a SocketWould Block when reading a fresh client socket",'\n')
 
 
 (ip, port, serverconn) = tcpserversocket.getconnection()
@@ -35,7 +35,7 @@ try:
 except SocketWouldBlockError:
   pass
 else:
-  print "Did not get a SocketWould Block when reading a connected client socket"
+  log("Did not get a SocketWould Block when reading a connected client socket",'\n')
 
 
 
@@ -45,6 +45,6 @@ try:
 except SocketWouldBlockError:
   pass
 else:
-  print "Did not get a SocketWould Block when reading a server socket"
+  log("Did not get a SocketWould Block when reading a server socket",'\n')
 
 

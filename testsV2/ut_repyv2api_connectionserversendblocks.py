@@ -59,6 +59,6 @@ try:
 except SocketWouldBlockError:
   pass
 else:
-  print "Should not be able to recv more than was sent..."
+  log("Should not be able to recv more than was sent...",'\n')
 
 

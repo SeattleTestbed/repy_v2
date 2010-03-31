@@ -15,7 +15,7 @@ fileh.writeat("X",0)
 # Check the usage
 lim, usage, stops = getresources()
 if usage["filewrite"] != 4096:
-  print "We should be charged for an entire block! Usage: "+str(usage)
+  log("We should be charged for an entire block! Usage: "+str(usage),'\n')
 
 # Wait to flush
 sleep(.25)
@@ -26,7 +26,7 @@ fileh.writeat("N"*4098, 1)
 # Check the usage
 lim, usage, stops = getresources()
 if usage["filewrite"] != 4096*2:
-  print "We should be charged for 2 entire blocks! Usage: "+str(usage)
+  log("We should be charged for 2 entire blocks! Usage: "+str(usage),'\n')
 
 # Done
 fileh.close()

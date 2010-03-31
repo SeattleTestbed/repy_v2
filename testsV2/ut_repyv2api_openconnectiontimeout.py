@@ -10,7 +10,7 @@ timeout = 0.00001
 try:
   remoteip = gethostbyname('www.google.com')
 except NetworkAddressError:
-  print "Name lookup failed for www.google.com"
+  log("Name lookup failed for www.google.com",'\n')
   exitall()
 
 try:
@@ -19,6 +19,6 @@ try:
 except TimeoutError:
   pass
 else:
-  print "Did not have a TimeoutError when connecting to google in",timeout,"seconds"
+  log("Did not have a TimeoutError when connecting to google in",timeout,"seconds",'\n')
 
 

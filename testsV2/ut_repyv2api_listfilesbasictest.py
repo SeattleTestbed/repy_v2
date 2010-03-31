@@ -13,12 +13,12 @@ We check:
 files = set(listfiles())
 
 if "ut_repyv2api_listfilesbasictest.py" not in files:
-  print "This unit test is not in the list of files!"
+  log("This unit test is not in the list of files!",'\n')
 
 if "repy.py" not in files:
-  print "repy.py is not in the list of files!"
+  log("repy.py is not in the list of files!",'\n')
 
 if len(files) < 50:
-  print "There are less than 50 files!"
+  log("There are less than 50 files!",'\n')
 
 

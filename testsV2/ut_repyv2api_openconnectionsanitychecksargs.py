@@ -11,7 +11,7 @@ except RepyArgumentError:
   # expected
   pass
 else:
-  print "Bad argment 'foo.com' allowed for destip"
+  log("Bad argment 'foo.com' allowed for destip",'\n')
 
 
 try:
@@ -21,7 +21,7 @@ except RepyArgumentError:
   # expected
   pass
 else:
-  print "Bad argment '0.1.2.3' allowed for destip"
+  log("Bad argment '0.1.2.3' allowed for destip",'\n')
 
 
 try:
@@ -31,7 +31,7 @@ except RepyArgumentError:
   # expected
   pass
 else:
-  print "Bad argment '234.1.2.3' allowed for destip"
+  log("Bad argment '234.1.2.3' allowed for destip",'\n')
 
 
 try:
@@ -41,7 +41,7 @@ except RepyArgumentError:
   # expected
   pass
 else:
-  print "Bad argment '0.0.0.0' allowed for localip"
+  log("Bad argment '0.0.0.0' allowed for localip",'\n')
 
 
 try:
@@ -51,7 +51,7 @@ except RepyArgumentError:
   # expected
   pass
 else:
-  print "Bad argment '0' allowed for destport"
+  log("Bad argment '0' allowed for destport",'\n')
 
 
 try:
@@ -61,7 +61,7 @@ except RepyArgumentError:
   # expected
   pass
 else:
-  print "Bad argment '65536' allowed for destport"
+  log("Bad argment '65536' allowed for destport",'\n')
 
 try:
   # bad local port (can't be > 65535)
@@ -70,7 +70,7 @@ except RepyArgumentError:
   # expected
   pass
 else:
-  print "Bad argment '5423452' allowed for localport"
+  log("Bad argment '5423452' allowed for localport",'\n')
 
 try:
   # bad local port (can't be <=0)
@@ -79,7 +79,7 @@ except RepyArgumentError:
   # expected
   pass
 else:
-  print "Bad argment '-5' allowed for localport"
+  log("Bad argment '-5' allowed for localport",'\n')
 
 
 try:
@@ -89,7 +89,7 @@ except RepyArgumentError:
   # expected
   pass
 else:
-  print "Bad argment '-.0001' allowed for timeout"
+  log("Bad argment '-.0001' allowed for timeout",'\n')
 
 
 
@@ -100,7 +100,7 @@ except RepyArgumentError:
   # expected
   pass
 else:
-  print "Bad argment 'None' allowed for timeout"
+  log("Bad argment 'None' allowed for timeout",'\n')
 
 
 

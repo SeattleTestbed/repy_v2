@@ -15,6 +15,6 @@ try:
 except ConnectionRefusedError:
   pass
 else:
-  print "Did not get ConnectionRefusedError connecting to a non-existent listener."
+  log("Did not get ConnectionRefusedError connecting to a non-existent listener.",'\n')
 
 

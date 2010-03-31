@@ -13,7 +13,7 @@ data = fileh.readat(14, 2)
 
 # Check that it matches the comment at the top
 if data != "DO NOT REMOVE\n":
-  print "Data does not match! Got: "+data
+  log("Data does not match! Got: "+data,'\n')
 
 fileh.close()
 

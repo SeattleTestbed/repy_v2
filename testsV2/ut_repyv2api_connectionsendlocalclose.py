@@ -26,5 +26,5 @@ try:
 except SocketClosedLocal:
   pass
 else:
-  print "Should get an error if we closed the socket locally"
+  log("Should get an error if we closed the socket locally",'\n')
 

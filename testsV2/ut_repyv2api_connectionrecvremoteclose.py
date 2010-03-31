@@ -26,5 +26,5 @@ try:
 except SocketClosedRemote:
   pass
 else:
-  print "Should get an error if ther other side closed the socket"
+  log("Should get an error if ther other side closed the socket",'\n')
 

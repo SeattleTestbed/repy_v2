@@ -11,17 +11,17 @@ try:
 except AddressBindingError:
   pass
 except Exception, e:
-  print "wrong exception for binding to non-local ip"
-  print str(e)
+  log("wrong exception for binding to non-local ip",'\n')
+  log(str(e),'\n')
 else:
-  print "shouldn't be able to bind to non-local ip"
+  log("shouldn't be able to bind to non-local ip",'\n')
 
 try:
   sendmessage('127.0.0.1', 12345, "x", '8.8.4.4', 12347)
 except ResourceForbiddenError:
   pass
 except Exception, e:
-  print "wrong exception for binding to restricted port"
-  print str(e)
+  log("wrong exception for binding to restricted port",'\n')
+  log(str(e),'\n')
 else:
-  print "shouldn't be able to bind to restricted port"
+  log("shouldn't be able to bind to restricted port",'\n')

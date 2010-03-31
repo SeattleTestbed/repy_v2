@@ -14,7 +14,7 @@ debug_str = getlasterror()
 
 # We should get None
 if debug_str is not None:
-  print "Got a debug string without an exception! Got: "+debug_str
+  log("Got a debug string without an exception! Got: "+debug_str,'\n')
 
 # Try to do something and get the debug string
 try:
@@ -22,9 +22,9 @@ try:
 except:
   debug_str = getlasterror()
   if debug_str is None or len(debug_str) < 100:
-    print "Did not get a debug_str or too short! Got: "+str(debug_str)
+    log("Did not get a debug_str or too short! Got: "+str(debug_str),'\n')
 else:
-  print "Error! Failed to get an exception (1)"
+  log("Error! Failed to get an exception (1)",'\n')
 
 # Declare a function which raises an exception
 def badfunc():
@@ -36,9 +36,9 @@ try:
 except:
   debug_str = getlasterror()
   if "badfunc" not in debug_str:
-    print "Did not find stack entry for 'badfunc' in the debug string! Got: "+debug_str
+    log("Did not find stack entry for 'badfunc' in the debug string! Got: "+debug_str,'\n')
 else:
-    print "Error! Failed to get an exception (2)"
+    log("Error! Failed to get an exception (2)",'\n')
 
 
 # We should try to check that getlasterror() does not return the same string
@@ -46,7 +46,7 @@ else:
 debug_str_2 = getlasterror()
 
 if debug_str_2 is not None:
-  print "Did not get None, after exception was handled! Got: "+debug_str_2
-  print "Previous debug str: "+debug_str
+  log("Did not get None, after exception was handled! Got: "+debug_str_2,'\n')
+  log("Previous debug str: "+debug_str,'\n')
 
 

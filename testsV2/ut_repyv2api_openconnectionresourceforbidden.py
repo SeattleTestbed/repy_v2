@@ -16,6 +16,6 @@ try:
 except ResourceForbiddenError:
   pass
 else:
-  print "Did not get ResourceForbiddenError using a disallowed port"
+  log("Did not get ResourceForbiddenError using a disallowed port",'\n')
 
 

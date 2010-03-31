@@ -7,7 +7,7 @@ when providing bad arguments to listenforconnection.
 def tryit(ip,port):
   try:
     listenforconnection(ip,port)
-    print "Bad combination worked! IP:"+str(ip)+" Port: "+str(port)
+    log("Bad combination worked! IP:"+str(ip)+" Port: "+str(port),'\n')
   except:
     pass
 

@@ -5,7 +5,7 @@ This unit test checks that VirtualNamespace.evaluate() forbids an unsafe context
 #pragma repy 
 
 # Small code snippet
-code = "print 'Bad!'\n"
+code = "log('Bad!')\n"
 
 # Get a VN
 VN = createvirtualnamespace(code, "Bad VN")
@@ -19,6 +19,6 @@ try:
 except ContextUnsafeError:
   pass
 else:
-  print "Evaluated with unsafe context!"
+  log("Evaluated with unsafe context!\n")
 
 

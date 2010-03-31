@@ -11,12 +11,12 @@ def trylisten(args, expected, errstr):
     s = listenformessage(args[0], args[1])
   except Exception, e:
     if type(e) is not expected:
-      print "wrong exception for: " + errstr
-      print str(e)
-      print str(type(e))
+      log("wrong exception for: " + errstr,'\n')
+      log(str(e),'\n')
+      log(str(type(e)),'\n')
   else:
     s.close()
-    print "no exception for: " + errstr
+    log("no exception for: " + errstr,'\n')
 
 s1 = listenformessage('127.0.0.1', 12345)
 trylisten(('127.0.0.1', 12345), AlreadyListeningError, \

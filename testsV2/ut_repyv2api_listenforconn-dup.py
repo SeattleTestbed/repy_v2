@@ -11,7 +11,7 @@ listen_sock = listenforconnection(ip, port)
 
 try:
   listen_sock_2 = listenforconnection(ip, port)
-  print "Should get AlreadyListeningError!"
+  log("Should get AlreadyListeningError!",'\n')
 except AlreadyListeningError:
   pass
 

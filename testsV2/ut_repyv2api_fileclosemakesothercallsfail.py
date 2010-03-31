@@ -15,19 +15,19 @@ fileh.close()
 # All other operations should raise an error
 try:
   fileh.readat(1,0)
-  print "Read after close!"
+  log("Read after close!",'\n')
 except FileClosedError:
   pass
 
 try:
   fileh.writeat("",0)
-  print "Wrote after close!"
+  log("Wrote after close!",'\n')
 except FileClosedError:
   pass
 
 try:
   fileh.close()
-  print "Closed after close!"
+  log("Closed after close!",'\n')
 except FileClosedError:
   pass
 

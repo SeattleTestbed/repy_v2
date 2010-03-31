@@ -17,6 +17,6 @@ try:
 except ResourceExhaustedError:
   pass
 else:
-  print "Exceeded thread limit!"
+  log("Exceeded thread limit!",'\n')
 
 exitall()

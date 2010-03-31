@@ -14,9 +14,9 @@ data = randombytes()
 end = getruntime()
 
 if end-start < 1:
-  print "randombytes returned too quickly! Took: "+str(end-start)
+  log("randombytes returned too quickly! Took: "+str(end-start),'\n')
 
 if end-start > 1.5:
-  print "randombytes took too long to return! Took: "+str(end-start)
+  log("randombytes took too long to return! Took: "+str(end-start),'\n')
 
 

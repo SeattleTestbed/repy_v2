@@ -13,7 +13,7 @@ try:
 except FileInUseError:
   pass
 else:
-  print "Should get FileInUseError!"
+  log("Should get FileInUseError!",'\n')
 
 # Close the handle
 fileh.close()

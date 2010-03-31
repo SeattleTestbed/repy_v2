@@ -11,5 +11,5 @@ def thread():
 
 createthread(thread)
 sleep(.5)
-print 'Print after exitall is called!'
+log('Print after exitall is called!','\n')
 

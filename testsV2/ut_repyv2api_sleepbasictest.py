@@ -6,7 +6,7 @@ This unit test checks the 'sleep' call.
 
 try:
   sleep("abc")
-  print "Error! Accepted bad input!"
+  log("Error! Accepted bad input!",'\n')
 except:
   pass
 
@@ -19,9 +19,9 @@ sleep(1)
 end = getruntime()
 
 if end - start < 1:
-  print "Slept for less than 1 second!"
+  log("Slept for less than 1 second!",'\n')
 
 if end - start > 1.5:
-  print "Slept for more than 1.5 seconds!"
+  log("Slept for more than 1.5 seconds!",'\n')
 
 

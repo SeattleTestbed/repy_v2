@@ -20,6 +20,6 @@ try:
 except DuplicateTupleError:
   pass
 else:
-  print "Did not get DuplicateTupleError performing a redundant connection"
+  log("Did not get DuplicateTupleError performing a redundant connection",'\n')
 
 

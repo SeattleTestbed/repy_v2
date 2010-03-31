@@ -16,4 +16,4 @@ sendmessage('127.0.0.1', 12345, data, '127.0.0.1', 12346)
 s.close()
 
 if mess != data:
-  print "Mismatch!"
+  log("Mismatch!",'\n')

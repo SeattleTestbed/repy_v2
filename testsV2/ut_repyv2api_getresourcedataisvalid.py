@@ -37,19 +37,19 @@ expected = {"cpu":0.1,
 # Check everything
 for resource in expected.keys():
   if resource not in limits:
-    print "Resource '"+resource+"' not in limits!"
+    log("Resource '"+resource+"' not in limits!",'\n')
     continue
 
   expected_val = expected[resource]
   actual_val = limits[resource]
 
   if expected_val != actual_val:
-    print "Mis-match between expected and actual values for resource '"+resource+"'!"
-    print "Expected: "+str(expected_val)+" Actual: "+str(actual_val)
+    log("Mis-match between expected and actual values for resource '"+resource+"'!",'\n')
+    log("Expected: "+str(expected_val)+" Actual: "+str(actual_val),'\n')
 
 
 # Check for resources that we did not expect
 for resource in limits.keys():
   if resource not in expected:
-    print "getresources() limits provides '"+resource+"' which is not expected!"
+    log("getresources() limits provides '"+resource+"' which is not expected!",'\n')
 

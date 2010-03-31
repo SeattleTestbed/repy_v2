@@ -12,14 +12,14 @@ try:
 except RepyException:
   pass
 else:
-  print 'listenformessage shouldn\'t allow invalid ip/port types'
+  log('listenformessage shouldn\'t allow invalid ip/port types','\n')
 
 try:
   s = listenformessage('127.0.0.1', "str")
 except RepyException:
   pass
 else:
-  print 'listenformessage shouldn\'t allow invalid ip/port types'
+  log('listenformessage shouldn\'t allow invalid ip/port types','\n')
 
 s = listenformessage('127.0.0.1', 12345)
 
@@ -38,6 +38,6 @@ for attempt in [\
   except RepyException:
     pass
   else:
-    print "sendmessage shouldn't allow invalid types"
+    log("sendmessage shouldn't allow invalid types",'\n')
 
 s.close()

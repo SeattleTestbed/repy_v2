@@ -10,7 +10,7 @@ lock = createlock()
 # Exits after 2 second time out
 def timeout():
   sleep(2)
-  print "Timed Out!"
+  log("Timed Out!",'\n')
   exitall()
 
 # Launch the timeout thread
@@ -19,11 +19,11 @@ createthread(timeout)
 # Double acquire
 acquired = lock.acquire(False)
 if not acquired:
-  print "First acquire should work!"
+  log("First acquire should work!",'\n')
 
 acquired_2 = lock.acquire(False)
 if acquired_2:
-  print "Second acquire should fail!"
+  log("Second acquire should fail!",'\n')
 
 # Exit now
 exitall()

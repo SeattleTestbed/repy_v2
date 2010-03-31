@@ -14,7 +14,7 @@ def tryit(data, offset):
   except RepyArgumentError:
     pass
   else:
-    print "Writeat with data: "+str(data)+" and offset: "+str(offset)+" should have error!"
+    log("Writeat with data: "+str(data)+" and offset: "+str(offset)+" should have error!",'\n')
 
 # Open a file
 JUNK_FILE = "this.is.a.test.junk.file.123v912"
@@ -29,7 +29,7 @@ tryit(1, 0)
 # Try to seek past the end
 try:
   fileh.writeat("test", 500000)
-  print "Write past then EOF!"
+  log("Write past then EOF!",'\n')
 except SeekPastEndOfFileError:
   pass
 

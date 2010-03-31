@@ -10,7 +10,7 @@ fileh = openfile("repy.py", False)
 # Usage should be 1
 lim, usage, stops = getresources()
 if usage["filesopened"] != 1:
-  print "Only one file should be opened! Usage: "+str(usage)
+  log("Only one file should be opened! Usage: "+str(usage),'\n')
 
 # Close the handle
 fileh.close()
@@ -18,6 +18,6 @@ fileh.close()
 # Usage should be 0
 lim, usage, stops = getresources()
 if usage["filesopened"] != 0:
-  print "No files should be opened! Usage: "+str(usage)
+  log("No files should be opened! Usage: "+str(usage),'\n')
 
 

@@ -19,7 +19,7 @@ if FILE_NAME in listfiles():
   removefile(FILE_NAME)
 
 if FILE_NAME in listfiles():
-  print "File should not exist, we just checked and removed the file!"
+  log("File should not exist, we just checked and removed the file!",'\n')
 
 
 # We should get a FileNotFoundError now
@@ -28,7 +28,7 @@ try:
 except FileNotFoundError:
   pass
 else:
-  print "Did not get an error deleting a file which does not exist!"
+  log("Did not get an error deleting a file which does not exist!",'\n')
 
 
 # Try to create the file
@@ -36,7 +36,7 @@ fileh = openfile(FILE_NAME, True)
 
 # This should create it
 if FILE_NAME not in listfiles():
-  print "File should exist, we just created it!"
+  log("File should exist, we just created it!",'\n')
 
 
 # Try to remove it
@@ -45,7 +45,7 @@ try:
 except FileInUseError:
   pass
 else:
-  print "We should get a FileInUseError!"
+  log("We should get a FileInUseError!",'\n')
 
 
 # Close the handle, then remove the file
@@ -54,7 +54,7 @@ removefile(FILE_NAME)
 
 # Now, it should be gone
 if FILE_NAME in listfiles():
-  print "File should not exist, we just deleted it!"
+  log("File should not exist, we just deleted it!",'\n')
 
 
 # Function to try various bad arguments
@@ -64,7 +64,7 @@ def tryit(arg):
   except RepyArgumentError:
     pass
   else:
-    print "removefile on '"+str(arg)+"' should fail. Worked."
+    log("removefile on '"+str(arg)+"' should fail. Worked.",'\n')
 
 # Check some random arguments
 tryit(123)

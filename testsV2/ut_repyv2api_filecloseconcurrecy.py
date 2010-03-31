@@ -23,7 +23,7 @@ junkh.writeat(data, 0)
 # The file should be closed now
 try:
   junkh.readat(15, 0)
-  print "Read worked after close!"
+  log("Read worked after close!",'\n')
 except FileClosedError:
   pass
 
@@ -37,12 +37,12 @@ data = junkh.readat(150000, 0)
 
 # All the data should be read
 if len(data) != 150000:
-  print "Read less data than expected!"
+  log("Read less data than expected!",'\n')
 
 # It should be closed now
 try:
   junkh.readat(15, 0)
-  print "Read worked after close! (2)"
+  log("Read worked after close! (2)",'\n')
 except FileClosedError:
   pass
 

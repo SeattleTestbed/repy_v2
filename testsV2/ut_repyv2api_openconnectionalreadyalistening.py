@@ -18,6 +18,6 @@ try:
 except AlreadyListeningError:
   pass
 else:
-  print "Did not get AlreadyListeningError when connecting after a listen"
+  log("Did not get AlreadyListeningError when connecting after a listen",'\n')
 
 tcpserversocket.close()

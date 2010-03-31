@@ -24,13 +24,13 @@ def secondthread():
   lim, sec_usage, stoptimes = getresources()
 
   if sec_usage["events"] != init_usage["events"]+1:
-    print "Event accounting is incorrect! Reports:"+str(sec_usage["events"])
+    log("Event accounting is incorrect! Reports:"+str(sec_usage["events"]),'\n')
 
 
 # Check for input sanity
 try:
   createthread(None)
-  print "Bad input accepted!"
+  log("Bad input accepted!",'\n')
 except RepyArgumentError:
   pass
 
@@ -42,11 +42,11 @@ sleep(1)
 
 # Check the flag
 if not FLAG[0]:
-  print "Second thread not launched! Flag is still false!"
+  log("Second thread not launched! Flag is still false!",'\n')
 
 # Check that the event count is back to the init
 lim, third_usage, stoptimes = getresources()
 
 if third_usage["events"] != init_usage["events"]:
-  print "Event account is incorrect! Not restored to original value!"
+  log("Event account is incorrect! Not restored to original value!",'\n')
 

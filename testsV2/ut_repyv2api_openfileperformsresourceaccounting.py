@@ -29,10 +29,10 @@ except FileNotFoundError:
   # We should have used about an extra 4096.
   # Less is possible since it may have been restored
   if after_check["fileread"] - baseline["fileread"] < 4000:
-    print "We should have used 4096 more fileread! After: "+str(after_check["fileread"])+" Before: "+str(baseline["fileread"])
+    log("We should have used 4096 more fileread! After: "+str(after_check["fileread"])+" Before: "+str(baseline["fileread"]),'\n')
 
 else:
-  print "Opened handle to file that does not exist: "+str(BAD_FILE)
+  log("Opened handle to file that does not exist: "+str(BAD_FILE),'\n')
   exitall()
 
 # Create the file, this should work
@@ -43,14 +43,14 @@ lim, after_create, stops = getresources()
 
 # Check that it exists
 if BAD_FILE not in listfiles():
-  print "File should exist! It was just created!"
+  log("File should exist! It was just created!",'\n')
 
 # Remove the file
 removefile(BAD_FILE)
 
 # We should now use 4096 file write, plus more fileread
 if after_create["filewrite"] != 4096:
-  print "File write should be 4096! Is: "+str(after_create["filewrite"])
+  log("File write should be 4096! Is: "+str(after_create["filewrite"]),'\n')
 if after_create["fileread"] - after_check["fileread"] < 4000:
-  print "We should have used 4096 more fileread after create! Used: "+str(after_create["fileread"]) + " Before: "+str(after_check["fileread"])
+  log("We should have used 4096 more fileread after create! Used: "+str(after_create["fileread"]) + " Before: "+str(after_check["fileread"]),'\n')
 

@@ -16,6 +16,6 @@ try:
 except AddressBindingError:
   pass
 else:
-  print "Did not get AddressBindingError connecting to a non-local IP."
+  log("Did not get AddressBindingError connecting to a non-local IP.",'\n')
 
 

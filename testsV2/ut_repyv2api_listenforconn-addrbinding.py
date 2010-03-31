@@ -9,7 +9,7 @@ PORT = 12345
 def tryit(ip):
   try:
     listenforconnection(ip,PORT)
-    print "Bad combination worked! IP:"+str(ip)+" Port: "+str(port)
+    log("Bad combination worked! IP:"+str(ip)+" Port: "+str(port),'\n')
   except AddressBindingError:
     pass
 

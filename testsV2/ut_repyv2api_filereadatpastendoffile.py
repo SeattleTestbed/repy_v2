@@ -14,6 +14,6 @@ try:
 except SeekPastEndOfFileError:
   pass
 else:
-  print "Should get a seek error!"
+  log("Should get a seek error!",'\n')
 
 

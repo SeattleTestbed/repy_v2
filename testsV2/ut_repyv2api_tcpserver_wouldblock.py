@@ -10,7 +10,7 @@ port = 12345
 listen_sock = listenforconnection(ip, port)
 try:
   info = listen_sock.getconnection()
-  print "Did not get an exception! Got: "+str(info)
+  log("Did not get an exception! Got: "+str(info),'\n')
 except SocketWouldBlockError:
   pass
 

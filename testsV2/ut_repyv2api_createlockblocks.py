@@ -14,7 +14,7 @@ def thread():
 # Exits after 2 second time out
 def timeout():
   sleep(2)
-  print "Timed Out!"
+  log("Timed Out!",'\n')
   exitall()
 
 # Launch the timeout thread, then the unlock thread

@@ -19,17 +19,17 @@ limits, init_usage, stoptimes = getresources()
 max_time = getruntime() * limits["cpu"] * 2
 
 if init_usage["cpu"] > max_time:
-  print "Initial CPU use too high! Should be less than: "+str(max_time)+" is: "+str(init_usage["cpu"])
+  log("Initial CPU use too high! Should be less than: "+str(max_time)+" is: "+str(init_usage["cpu"]),'\n')
 if init_usage["threadcpu"] > max_time:
-  print "Initial Thread CPU use too high! Should be less than: "+str(max_time)+" is: "+str(init_usage["threadcpu"])
+  log("Initial Thread CPU use too high! Should be less than: "+str(max_time)+" is: "+str(init_usage["threadcpu"]),'\n')
 
 # Our initial memory should be reasonable. At least 4 MB?
 if init_usage["memory"] < 4000000:
-  print "Initial Memory Usage is unreasonably low! Expect at least 4MB, using: "+str(init_usage["memory"])
+  log("Initial Memory Usage is unreasonably low! Expect at least 4MB, using: "+str(init_usage["memory"]),'\n')
 
 # Our event usage should be 1
 if init_usage["events"] != 1:
-  print "Initial event usage should be 1! Using: "+str(init_usage["events"])
+  log("Initial event usage should be 1! Using: "+str(init_usage["events"]),'\n')
 
 # The other stuff should all be 0 now
 expected_zero = ["filewrite", "fileread", "filesopened", "insockets", "outsockets", "netsend",
@@ -38,7 +38,7 @@ expected_zero = ["filewrite", "fileread", "filesopened", "insockets", "outsocket
 for resource in expected_zero:
   usage = init_usage[resource]
   if type(usage) in [float,int] and usage != 0:
-    print "Resource '"+resource+"' utilization should be 0! Is: "+str(usage)
+    log("Resource '"+resource+"' utilization should be 0! Is: "+str(usage),'\n')
   if type(usage) in [set,list] and len(usage) != 0:
-     print "Resource '"+resource+"' utilization should be 0! Is: "+str(usage)
+     log("Resource '"+resource+"' utilization should be 0! Is: "+str(usage),'\n')
 
