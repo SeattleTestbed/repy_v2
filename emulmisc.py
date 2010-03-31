@@ -183,6 +183,24 @@ def getlasterror():
   return tracebackrepy.format_exception()
 
 
+def log(*args):
+  """
+  <Purpose>
+    Used to store program output. Prints output to console by default.
+
+  <Arguments>
+    Takes a variable number of arguments to print. They are wrapped in str(), so it is not necessarily a string.
+
+  <Exceptions>
+    None
+
+  <Returns>
+    Nothing
+  """
+  for arg in args:
+    print arg,
+
+
 ##### Class Declarations
 
 class emulated_lock (object):

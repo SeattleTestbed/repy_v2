@@ -621,11 +621,15 @@ USERCONTEXT_WRAPPER_INFO = {
        'return' : Str(maxlen=1024, minlen=1024)},
   'createthread' :
       {'func' : emultimer.createthread,
-       'args' : [Func(), NonCopiedVarArgs()],
+       'args' : [Func()],
        'return' : None},
   'sleep' :
       {'func' : emultimer.sleep,
        'args' : [Float()],
+       'return' : None},
+  'log' :
+      {'func' : emulmisc.log,
+       'args' : [NonCopiedVarArgs()],
        'return' : None},
   'getthreadname' :
       {'func' : emulmisc.getthreadname,
@@ -1030,16 +1034,23 @@ class NamespaceAPIFunctionWrapper(object):
     args_to_return = []
 
     for index in range(len(args)):
+      # Armon: If there are more arguments than there are type specifications
+      # and we are using NonCopiedVarArgs, then check against that.
+      if index >= len(self.__args) and isinstance(self.__args[-1], NonCopiedVarArgs):
+        arg_type = self.__args[-1]
+      else:
+        arg_type = self.__args[index]
+
       # We only copy simple types, which means we only copy ValueProcessor not
       # ObjectProcessor arguments.
-      if isinstance(self.__args[index], ValueProcessor):
-        temparg = self.__args[index].copy(args[index])
-      elif isinstance(self.__args[index], ObjectProcessor):
-        temparg = self.__args[index].unwrap(args[index])
+      if isinstance(arg_type, ValueProcessor):
+        temparg = arg_type.copy(args[index])
+      elif isinstance(arg_type, ObjectProcessor):
+        temparg = arg_type.unwrap(args[index])
       else:
         raise NamespaceInternalError("Unknown argument expectation.")
 
-      self.__args[index].check(temparg)
+      arg_type.check(temparg)
 
       args_to_return.append(temparg)
 
