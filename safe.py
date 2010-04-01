@@ -172,7 +172,7 @@ _BUILTIN_OK = [
     
     'ArithmeticError', 'AssertionError', 'AttributeError', 'DeprecationWarning', 'EOFError', 'Ellipsis', 'EnvironmentError', 'Exception', 'False', 'FloatingPointError', 'FutureWarning', 'IOError', 'ImportError', 'IndentationError', 'IndexError', 'KeyError', 'KeyboardInterrupt', 'LookupError', 'MemoryError', 'NameError', 'None', 'NotImplemented', 'NotImplementedError', 'OSError', 'OverflowError', 'OverflowWarning', 'PendingDeprecationWarning', 'ReferenceError', 'RuntimeError', 'RuntimeWarning', 'StandardError', 'StopIteration', 'SyntaxError', 'SyntaxWarning', 'SystemError', 'SystemExit', 'TabError', 'True', 'TypeError', 'UnboundLocalError', 'UnicodeDecodeError', 'UnicodeEncodeError', 'UnicodeError', 'UnicodeTranslateError', 'UserWarning', 'ValueError', 'Warning', 'ZeroDivisionError',
     
-    'abs', 'bool', 'cmp', 'complex', 'dict', 'divmod', 'filter', 'float', 'frozenset', 'hex', 'int', 'len', 'list', 'long', 'map', 'max', 'min', 'object', 'oct', 'pow', 'range', 'reduce', 'repr', 'round', 'set', 'slice', 'str', 'sum', 'tuple',  'xrange', 'zip',
+    'abs', 'bool', 'cmp', 'complex', 'dict', 'divmod', 'filter', 'float', 'frozenset', 'hex', 'int', 'len', 'list', 'long', 'map', 'max', 'min', 'object', 'oct', 'pow', 'range', 'reduce', 'repr', 'round', 'set', 'slice', 'str', 'sum', 'tuple',  'xrange', 'zip','id',
     ]
     
 #this is zope's list...
