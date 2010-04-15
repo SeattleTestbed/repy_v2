@@ -860,6 +860,12 @@ def sendmessage(destip, destport, message, localip, localport):
       RepyArgumentError when the local IP and port aren't valid types
         or values
 
+      AlreadyListeningError if there is an existing listening UDP socket
+      on the same local IP and port.
+
+      DuplicateTupleError if there is another sendmessage on the same
+      local IP and port to the same remote host.
+
    <Side Effects>
       None.
 
@@ -913,14 +919,16 @@ def sendmessage(destip, destport, message, localip, localport):
   # Check if the tuple is in use
   identity = ("UDP", localip, localport, destip, destport)
   listen_identity = ("UDP", localip, localport, None, None)
-  if identity in OPEN_SOCKET_INFO or listen_identity in OPEN_SOCKET_INFO:
-    raise AlreadyListeningError("The provided localip and localport are already in use!")
+  if identity in OPEN_SOCKET_INFO:
+    raise DuplicateTupleError("The provided localip and localport are already in use!")
+  elif listen_identity in OPEN_SOCKET_INFO:
+    raise AlreadyListeningError("The provided localip and localport are being listened on!")
 
   # Check if the tuple is pending
   PENDING_SOCKETS_LOCK.acquire()
   try:
     if identity in PENDING_SOCKETS:
-      raise AlreadyListeningError("Concurrent sendmessage with the localip and localport in progress!")
+      raise DuplicateTupleError("Concurrent sendmessage with the localip and localport in progress!")
     elif listen_identity in PENDING_SOCKETS:
       raise AlreadyListeningError("Concurrent listenformessage with the localip and localport in progress!")
     else:
@@ -1012,8 +1020,6 @@ def listenformessage(localip, localport):
 
         ResourceForbiddenError if the port is not allowed.
 
-        SocketWouldBlockException if the call would block.
-
     <Side Effects>
         Prevents other UDPServerSockets from using this port / IP
 
@@ -1022,7 +1028,6 @@ def listenformessage(localip, localport):
 
     <Returns>
         The UDPServerSocket.
-
   """
   # Check the input arguments (type)
   if type(localip) is not str:
