@@ -2105,8 +2105,9 @@ class UDPServerSocket:
       if socket is None:
         raise KeyError # Indicates socket is closed
 
-      # Try to get a message
-      message, addr = socket.recvfrom(4096)
+      # Try to get a message of any size.   (64K is the max that fits in the 
+      # UDP header)
+      message, addr = socket.recvfrom(65535)
       remote_ip, remote_port = addr
 
       # Do some resource accounting
