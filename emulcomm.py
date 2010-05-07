@@ -675,24 +675,23 @@ def getmyip():
   # 0.0.0.0 even when I have a public IP and the external IP is up. However, if
   # I get a real connection with SOCK_STREAM, then I should get the real
   # answer.
-  for conn_type in [socket.SOCK_DGRAM, socket.SOCK_STREAM]:
         
-    # Try each stable IP  
-    for ip_addr in repy_constants.STABLE_PUBLIC_IPS:  
-      try:
-        # Try to resolve using the current connection type and 
-        # stable IP, using port 80 since some platforms panic
-        # when given 0 (FreeBSD)
-        myip = _get_localIP_to_remoteIP(conn_type, ip_addr, 80)
-      except (socket.error, socket.timeout):
-        # We can ignore any networking related errors, since we want to try 
-        # the other connection types and IP addresses. If we fail,
-        # we will eventually raise an exception anyways.
-        pass
-      else:
-        # Return immediately if the IP address is good
-        if myip != None and myip != '' and myip != "0.0.0.0": 
-          return myip
+  # Try each stable IP  
+  for ip_addr in repy_constants.STABLE_PUBLIC_IPS:  
+    try:
+      # Try to resolve using the current connection type and 
+      # stable IP, using port 80 since some platforms panic
+      # when given 0 (FreeBSD)
+      myip = _get_localIP_to_remoteIP(socket.SOCK_STREAM, ip_addr, 80)
+    except (socket.error, socket.timeout):
+      # We can ignore any networking related errors, since we want to try 
+      # the other connection types and IP addresses. If we fail,
+      # we will eventually raise an exception anyways.
+      pass
+    else:
+      # Return immediately if the IP address is good
+      if _is_valid_ip_address(myip): 
+        return myip
 
 
   # Since we haven't returned yet, we must have failed.
