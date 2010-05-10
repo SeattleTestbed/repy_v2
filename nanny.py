@@ -19,9 +19,6 @@ import time
 # needed for cpu, disk, and memory handling
 import nonportable
 
-# needed for locking
-import threading
-
 # needed for handling internal errors
 import tracebackrepy
 
