@@ -165,16 +165,16 @@ def main(restrictionsfn, program, args):
 
   # BAD:REMOVE all API imports
   usercontext["getresources"] = nonportable.get_resources
-  usercontext["openfile"] = emulfile.emulated_open
-  usercontext["listfiles"] = emulfile.listfiles
-  usercontext["removefile"] = emulfile.removefile
-  usercontext["exitall"] = emulmisc.exitall
-  usercontext["createlock"] = emulmisc.createlock
-  usercontext["getruntime"] = emulmisc.getruntime
-  usercontext["randombytes"] = emulmisc.randombytes
-  usercontext["createthread"] = emultimer.createthread
-  usercontext["sleep"] = emultimer.sleep
-  usercontext["getthreadname"] = emulmisc.getthreadname
+  #usercontext["openfile"] = emulfile.emulated_open
+  #usercontext["listfiles"] = emulfile.listfiles
+  #usercontext["removefile"] = emulfile.removefile
+  #usercontext["exitall"] = emulmisc.exitall
+  #usercontext["createlock"] = emulmisc.createlock
+  #usercontext["getruntime"] = emulmisc.getruntime
+  #usercontext["randombytes"] = emulmisc.randombytes
+  #usercontext["createthread"] = emultimer.createthread
+  #usercontext["sleep"] = emultimer.sleep
+  #usercontext["getthreadname"] = emulmisc.getthreadname
   usercontext["createvirtualnamespace"] = virtual_namespace.createvirtualnamespace
   usercontext["getlasterror"] = emulmisc.getlasterror
       

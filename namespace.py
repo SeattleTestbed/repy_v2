@@ -453,7 +453,7 @@ class Lock(ObjectProcessor):
   """Allows Lock objects."""
 
   def check(self, val):
-    if not isinstance(val, thread.LockType):
+    if not isinstance(val, emulmisc.emulated_lock):
       raise RepyArgumentError("Invalid type %s" % type(val))
 
 
