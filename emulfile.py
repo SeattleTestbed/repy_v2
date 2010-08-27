@@ -353,11 +353,12 @@ class emulated_file (object):
     """
     <Purpose>
       Reads from a file handle. Reading 0 bytes informs you if you have read
-      pas the end-of-file, but returns no data.
+      past the end-of-file, but returns no data.
 
     <Arguments>
       sizelimit: 
-        The maximum number of bytes to read from the file. Reading EOF will read less.
+        The maximum number of bytes to read from the file. Reading EOF will 
+        read less.   By setting this value to None, the entire file is read.
       offset:
         Seek to a specific absolute offset before reading.
 
@@ -375,7 +376,7 @@ class emulated_file (object):
       end of the file, or if the sizelimit was 0.
     """
     # Check the arguments
-    if sizelimit < 0:
+    if sizelimit < 0 and sizelimit != None:
       raise RepyArgumentError("Negative sizelimit specified!")
     if offset < 0:
       raise RepyArgumentError("Negative read offset speficied!")
@@ -399,8 +400,12 @@ class emulated_file (object):
       # Wait for available file read resources
       nanny.tattle_quantity('fileread',0)
 
-      # Read the data
-      data = fobj.read(sizelimit)
+      if sizelimit != None:
+        # Read the data
+        data = fobj.read(sizelimit)
+      else:
+        # read all the data...
+        data = fobj.read()
 
     finally:
       # Release the seek lock

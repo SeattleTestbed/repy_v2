@@ -22,7 +22,7 @@ fileh = openfile("repy.py", False)
 # Try some stuff
 tryit(-1,0)
 tryit(0,-1)
-tryit(None, 0)
+tryit(False, 0)
 tryit(1, None)
 
 # Try to seek past the end

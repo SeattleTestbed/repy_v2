@@ -327,6 +327,16 @@ class Int(ValueProcessor):
       raise RepyArgumentError("Min value is %s." % self.min)
 
 
+class NoneOrInt(ValueProcessor):
+  """Allows a NoneType or an int. This doesn't enforce min limit on the
+  ints."""
+
+  def check(self, val):
+    if val is not None and not _is_in(type(val), [int, long]):
+      raise RepyArgumentError("Invalid type %s" % type(val))
+
+
+
 
 
 
@@ -652,11 +662,11 @@ FILE_OBJECT_WRAPPER_INFO = {
        'return' : None},
   'readat' :
       {'func' : emulfile.emulated_file.readat,
-       'args' : [Int(), Int()],
+       'args' : [NoneOrInt(), Int(min=0)],
        'return' : Str()},
   'writeat' :
       {'func' : emulfile.emulated_file.writeat,
-       'args' : [Str(), Int()],
+       'args' : [Str(), Int(min=0)],
        'return' : None},
 }
 
