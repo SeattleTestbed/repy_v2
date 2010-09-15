@@ -39,7 +39,7 @@ safe_open = open
 MAX_FILENAME_LENGTH = 120
 
 # This is the set of characters which are allowed in a file name
-ALLOWED_FILENAME_CHAR_SET = set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-')
+ALLOWED_FILENAME_CHAR_SET = set('abcdefghijklmnopqrstuvwxyz0123456789._-')
 
 # This is the set of filenames which are forbidden.
 ILLEGAL_FILENAMES = set(["", ".", ".."])
@@ -146,9 +146,9 @@ def emulated_open(filename, create):
 
    <Arguments>
       filename:
-        The file that should be operated on. It must not contain 
-        characters other than 'a-zA-Z0-9.-_' and cannot be '.', '..' or
-        the empty string.
+        The file that should be operated on. It must not contain characters 
+        other than 'a-z0-9.-_' and cannot be '.', '..', the empty string or 
+        begin with a period.
 
       create:
          A Boolean flag which specifies if the file should be created
@@ -210,6 +210,10 @@ def _assert_is_allowed_filename(filename):
   for char in filename:
     if char not in ALLOWED_FILENAME_CHAR_SET:
       raise RepyArgumentError("Filename has disallowed character '"+char+"'")
+
+  # Check to make sure the filename does not start with a period.
+  if filename.startswith('.'):
+    raise RepyArgumentError("Filename starts with a period, this is not allowed!")
 
 
 
