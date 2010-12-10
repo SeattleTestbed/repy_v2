@@ -48,8 +48,8 @@ import repy_constants
 # Get access to the status interface so we can start it
 import nmstatusinterface
 
-# This gives us our restrictions information
-import nanny_resource_limits
+# This allows us to meter resource use
+import nanny
 
 # This is used for IPC
 import marshal
@@ -132,7 +132,7 @@ def monitor_cpu_disk_and_mem():
     # Use an external CPU monitor for WinCE
     if ostype == 'WindowsCE':
       nannypath = "\"" + repy_constants.PATH_SEATTLE_INSTALL + 'win_cpu_nanny.py' + "\""
-      cmdline = str(os.getpid())+" "+str(nanny_resource_limits.resource_limit("cpu"))+" "+str(repy_constants.CPU_POLLING_FREQ_WINCE)
+      cmdline = str(os.getpid())+" "+str(nanny.get_resource_limit("cpu"))+" "+str(repy_constants.CPU_POLLING_FREQ_WINCE)
       windows_api.launch_python_script(nannypath, cmdline)
     else:
       WinCPUNannyThread().start()
@@ -266,18 +266,6 @@ def getruntime():
 # This lock is used to serialize calls to get_resouces
 get_resources_lock = threading.Lock()
 
-# These are the resources we expose in get_resources
-exposed_resources = set(["cpu","memory","diskused","events",
-                     "filewrite","fileread","filesopened",
-                     "insockets","outsockets","netsend",
-                     "netrecv","loopsend","looprecv",
-                     "lograte","random","messport","connport"])
-            
-# These are the resources that we don't flatten using
-# len() for the usage. For example, instead of given the
-# set of thread's, we flatten this into N number of threads.
-flatten_exempt_resources = set(["connport","messport"])
-
 # Cache the disk used from the external process
 cached_disk_used = 0L
 
@@ -316,84 +304,53 @@ def get_resources():
     The stop times array holds a fixed number of the last stop times.
     Currently, it holds the last 100 stop times.
   """
-  # Acquire the lock
+  # Acquire the lock...
   get_resources_lock.acquire()
 
-  # Construct the dictionaries as copies from nanny
-  limits = nanny_resource_limits.resource_restriction_table.copy()
-  usage = nanny_resource_limits.resource_consumption_table.copy()
+  # ...but always release it
+  try:
+    # Construct the dictionaries as copies from nanny
+    (limits,usage) = nanny.get_resource_information()
 
-  # These are the type we need to copy or flatten
-  check_types = set([list,dict,set])
 
-  # Check the limits dictionary for bad keys
-  for resource in limits.keys():
-    # Remove any resources we should not expose
-    if resource not in exposed_resources:
-      del limits[resource]
+    # Calculate all the usage's
+    pid = os.getpid()
 
-    # Check the type
-    if type(limits[resource]) in check_types:
-      # Copy the data structure
-      limits[resource] = limits[resource].copy()
-
-  # Check the usage dictionary
-  for resource in usage.keys():
-    # Remove any resources that are not exposed
-    if resource not in exposed_resources:
-      del usage[resource]
-
-    # Check the type, copy any data structures
-    # Flatten any structures using len() other than
-    # "connport" and "messport"
-    if type(usage[resource]) in check_types:
-      # Check if they are exempt from flattening, store a shallow copy
-      if resource in flatten_exempt_resources:
-        usage[resource] = usage[resource].copy()
-
-      # Store the size of the data set
-      else:
-        usage[resource] = len(usage[resource])
+    # Get CPU and memory, this is thread specific
+    if ostype in ["Linux", "Darwin"]:
     
+      # Get CPU first, then memory
+      usage["cpu"] = os_api.get_process_cpu_time(pid)
+
+      # This uses the cached PID data from the CPU check
+      usage["memory"] = os_api.get_process_rss()
+
+      # Get the thread specific CPU usage
+      usage["threadcpu"] = os_api.get_current_thread_cpu_time() 
 
 
-  # Calculate all the usage's
-  pid = os.getpid()
-
-  # Get CPU and memory, this is thread specific
-  if ostype in ["Linux", "Darwin"]:
+    # Windows Specific versions
+    elif ostype in ["Windows","WindowsCE"]:
     
-    # Get CPU first, then memory
-    usage["cpu"] = os_api.get_process_cpu_time(pid)
+      # Get the CPU time
+      usage["cpu"] = windows_api.get_process_cpu_time(pid)
 
-    # This uses the cached PID data from the CPU check
-    usage["memory"] = os_api.get_process_rss()
+      # Get the memory, use the resident set size
+      usage["memory"] = windows_api.process_memory_info(pid)['WorkingSetSize'] 
 
-    # Get the thread specific CPU usage
-    usage["threadcpu"] = os_api.get_current_thread_cpu_time() 
+      # Get thread-level CPU 
+      usage["threadcpu"] = windows_api.get_current_thread_cpu_time()
 
+    # Unknown OS
+    else:
+      raise EnvironmentError("Unsupported Platform!")
 
-  # Windows Specific versions
-  elif ostype in ["Windows","WindowsCE"]:
-    
-    # Get the CPU time
-    usage["cpu"] = windows_api.get_process_cpu_time(pid)
+    # Use the cached disk used amount
+    usage["diskused"] = cached_disk_used
 
-    # Get the memory, use the resident set size
-    usage["memory"] = windows_api.process_memory_info(pid)['WorkingSetSize'] 
-
-    # Get thread-level CPU 
-    usage["threadcpu"] = windows_api.get_current_thread_cpu_time()
-
-  # Unknown OS
-  else:
-    raise EnvironmentError("Unsupported Platform!")
-
-  # Use the cached disk used amount
-  usage["diskused"] = cached_disk_used
-
-  # Release the lock
-  get_resources_lock.release()
+  finally:
+    # Release the lock
+    get_resources_lock.release()
 
   # Copy the stop times
   stoptimes = process_stopped_timeline[:]
@@ -429,9 +386,9 @@ class WindowsNannyThread(threading.Thread):
         # Check memory use, get the WorkingSetSize or RSS
         memused = windows_api.process_memory_info(mypid)['WorkingSetSize']
         
-        if memused > nanny_resource_limits.resource_limit("memory"):
+        if memused > nanny.get_resource_limit("memory"):
           # We will be killed by the other thread...
-          raise Exception, "Memory use '"+str(memused)+"' over limit '"+str(nanny_resource_limits.resource_limit("memory"))+"'"
+          raise Exception, "Memory use '"+str(memused)+"' over limit '"+str(nanny.get_resource_limit("memory"))+"'"
         
         # Increment the interval we are on
         current_interval += 1
@@ -440,8 +397,8 @@ class WindowsNannyThread(threading.Thread):
         if (current_interval % disk_interval) == 0:
           # Check diskused
           diskused = compute_disk_use(repy_constants.REPY_CURRENT_DIR)
-          if diskused > nanny_resource_limits.resource_limit("diskused"):
-            raise Exception, "Disk use '"+str(diskused)+"' over limit '"+str(nanny_resource_limits.resource_limit("diskused"))+"'"
+          if diskused > nanny.get_resource_limit("diskused"):
+            raise Exception, "Disk use '"+str(diskused)+"' over limit '"+str(nanny.get_resource_limit("diskused"))+"'"
         
         if ostype == 'WindowsCE':
           time.sleep(repy_constants.CPU_POLLING_FREQ_WINCE)
@@ -497,7 +454,7 @@ def win_check_cpu_use(cpulim, pid):
   percentused = (usertime - oldusertime) / elapsedtime
 
   # Calculate amount of time to sleep for
-  stoptime = nanny_resource_limits.calculate_cpu_sleep_interval(cpulim, percentused,elapsedtime)
+  stoptime = nanny.calculate_cpu_sleep_interval(cpulim, percentused,elapsedtime)
 
   if stoptime > 0.0:
     # Try to timeout the process
@@ -546,7 +503,7 @@ class WinCPUNannyThread(threading.Thread):
         
         # Base amount of sleeping on return value of 
     	  # win_check_cpu_use to prevent under/over sleeping
-        slept = win_check_cpu_use(nanny_resource_limits.resource_limit("cpu"), self.pid)
+        slept = win_check_cpu_use(nanny.get_resource_limit("cpu"), self.pid)
         
         if slept == -1:
           # Something went wrong, try again
@@ -890,7 +847,7 @@ def resource_monitor(childpid, pipe_handle):
       last_CPU_time = totalCPU
       
     # Calculate stop time
-    stoptime = nanny_resource_limits.calculate_cpu_sleep_interval(nanny_resource_limits.resource_limit("cpu"), percentused, elapsedtime)
+    stoptime = nanny.calculate_cpu_sleep_interval(nanny.get_resource_limit("cpu"), percentused, elapsedtime)
     
     # If we are supposed to stop repy, then suspend, sleep and resume
     if stoptime > 0.0:
@@ -919,8 +876,8 @@ def resource_monitor(childpid, pipe_handle):
     memused = os_api.get_process_rss()
     
     # Check if it is using too much memory
-    if memused > nanny_resource_limits.resource_limit("memory"):
-      raise ResourceException, "Memory use '"+str(memused)+"' over limit '"+str(nanny_resource_limits.resource_limit("memory"))+"'."
+    if memused > nanny.get_resource_limit("memory"):
+      raise ResourceException, "Memory use '"+str(memused)+"' over limit '"+str(nanny.get_resource_limit("memory"))+"'."
     
     ########### End Check Memory ###########
     # 
@@ -937,8 +894,8 @@ def resource_monitor(childpid, pipe_handle):
       diskused = compute_disk_use(repy_constants.REPY_CURRENT_DIR)
 
       # Raise exception if we are over limit
-      if diskused > nanny_resource_limits.resource_limit("diskused"):
-        raise ResourceException, "Disk use '"+str(diskused)+"' over limit '"+str(nanny_resource_limits.resource_limit("diskused"))+"'."
+      if diskused > nanny.get_resource_limit("diskused"):
+        raise ResourceException, "Disk use '"+str(diskused)+"' over limit '"+str(nanny.get_resource_limit("diskused"))+"'."
 
       # Send the disk usage information, raw bytes used
       write_message_to_pipe(pipe_handle, "diskused", diskused)
@@ -1022,7 +979,3 @@ else:
   elapsedtime = 0
 
 
-# Conrad: initialize nanny (Prevents circular imports)
-# Note: nanny_resource_limits can be initialized at any time after getruntime()
-# is defined, this just seems the most appropriate place to put the call.
-nanny_resource_limits.init(getruntime)

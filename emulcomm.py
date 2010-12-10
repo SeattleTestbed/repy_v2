@@ -10,7 +10,6 @@
    highly restricted (but usable) environment.
 """
 
-import restrictions
 import socket
 
 # Armon: Used to check if a socket is ready
@@ -35,9 +34,6 @@ import tracebackrepy
 
 # accounting
 import nanny
-
-# Used to check restrictions
-import nanny_resource_limits
 
 # give me uniqueIDs for the comminfo table
 import idhelper
@@ -579,10 +575,8 @@ def _is_allowed_localport(type, localport):
     raise InternalRepyError("Bad type specified for _is_allowed_localport()")
 
   # Check what is allowed by nanny
-  allowed_ports = nanny_resource_limits.resource_limit(resource)
+  return nanny.is_item_allowed(resource, float(localport))
 
-  # Check if the port is in the list
-  return localport in allowed_ports
 
 
 
@@ -1509,7 +1503,7 @@ def listenforconnection(localip, localport):
       sock = _get_tcp_socket(localip,localport)
 
       # Get the maximum number of outsockets
-      max_outsockets = nanny_resource_limits.resource_limit("outsockets")
+      max_outsockets = nanny.get_resource_limit("outsockets")
 
       # Set the backlog to be the maximum number of outsockets
       sock.listen(max_outsockets)

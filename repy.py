@@ -18,7 +18,7 @@
   The CPU, memory, disk usage, and network bandwidth are all limited.
 
 <Usage>
-  Usage: repy.py [options] restrictionsfile.txt program_to_run.py [program args]
+  Usage: repy.py [options] resourcefn program_to_run.py [program args]
 
   Where [options] are some combination of the following:
 
@@ -51,7 +51,6 @@ import getopt
 import emulcomm
 import namespace
 import nanny
-import restrictions
 import time
 import threading
 import loggingrepy
@@ -129,9 +128,9 @@ if "fork" in dir(os):
 
 
 
-def main(restrictionsfn, program, args):
+def main(resourcefn, program, args):
 
-  # Armon: Initialize the circular logger before forking in init_restrictions()
+  # Armon: Initialize the circular logger before starting the nanny
   if logfile:
     # time to set up the circular logger
     loggerfo = loggingrepy.circular_logger(logfile)
@@ -142,8 +141,11 @@ def main(restrictionsfn, program, args):
     # let's make it so that the output (via print) is always flushed
     sys.stdout = loggingrepy.flush_logger(sys.stdout)
     
-  # start the nanny up and read the restrictions files.  
-  restrictions.init_restrictions(restrictionsfn)
+  # start the nanny up and read the resource file.  
+  nanny.start_resource_nanny(resourcefn)
+
+  # now, let's fire up the cpu / disk / memory monitor...
+  nonportable.monitor_cpu_disk_and_mem()
 
   # Armon: Update our IP cache
   emulcomm.update_ip_cache()
@@ -257,7 +259,7 @@ def usage(str_err=""):
   if str_err:
     print "Error:", str_err
   print """
-Usage: repy.py [options] restrictionsfile.txt program_to_run.py [program args]
+Usage: repy.py [options] resourcefile program_to_run.py [program args]
 
 Where [options] are some combination of the following:
 
@@ -344,7 +346,7 @@ if __name__ == '__main__':
   statusfile = None
 
   if len(fnlist) < 2:
-    usage("Must supply a restrictions file and a program file to execute")
+    usage("Must supply a resource file and a program file to execute")
     sys.exit(1)
 
   for option, value in optlist:
@@ -402,7 +404,7 @@ if __name__ == '__main__':
   # Write out our initial status
   statusstorage.write_status("Started")
 
-  restrictionsfn = fnlist[0]
+  resourcefn = fnlist[0]
   progname = fnlist[1]
   progargs = fnlist[2:]
 
@@ -412,7 +414,7 @@ if __name__ == '__main__':
   tracebackrepy.initialize(servicelog, absolute_repy_directory)
 
   try:
-    main(restrictionsfn, progname, progargs)
+    main(resourcefn, progname, progargs)
   except SystemExit:
     harshexit.harshexit(4)
   except:

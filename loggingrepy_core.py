@@ -159,7 +159,6 @@ class circular_logger_core:
 
   def write(self,writeitem):
     # they / we can always log info (or else what happens on exception?)
-    #restrictions.assertisallowed('log.write',writeitem)
 
     # acquire (and release later no matter what)
     self.writelock.acquire()
@@ -172,7 +171,6 @@ class circular_logger_core:
 
   def writelines(self,writelist):
     # we / they can always log info (or else what happens on exception?)
-    #restrictions.assertisallowed('log.writelines',writelist)
 
     # acquire (and release later no matter what)
     self.writelock.acquire()

@@ -21,7 +21,7 @@ myfile = loggingrepy_core.myfile
 class flush_logger(loggingrepy_core.flush_logger_core):
   """
     A file-like class that can be used in lieu of stdout.   It always flushes
-    data after a write. This one uses restrictions and nannying.
+    data after a write. This one uses nanny.
 
   """
 
@@ -80,7 +80,6 @@ class circular_logger(loggingrepy_core.circular_logger_core):
 
   def write(self, writeitem):
     # they / we can always log info (or else what happens on exception?)
-    #restrictions.assertisallowed('log.write',writeitem)
 
     # acquire (and release later no matter what)
     self.writelock.acquire()
@@ -102,7 +101,6 @@ class circular_logger(loggingrepy_core.circular_logger_core):
 
   def writelines(self, writelist):
     # we / they can always log info (or else what happens on exception?)
-    #restrictions.assertisallowed('log.writelines',writelist)
 
     # acquire (and release later no matter what)
     self.writelock.acquire()
