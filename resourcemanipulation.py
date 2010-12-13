@@ -390,28 +390,3 @@ def subtract_resourcedicts(dict1, dict2):
 
 
 
-# add vessels together
-def combine(resourcefilename1, resourcefilename2, offcutfilename, newfilename):
-
-
-  # first, read in the files.  
-  offcutresourcedict = read_resources_from_file(offcutfilename)
-  resourcefile1dict = read_resources_from_file(resourcefilename1)
-  resourcefile2dict = read_resources_from_file(resourcefilename2)
-
-  # combin2 the vessels
-  tempdict = add(resourcefile1dict, resourcefile2dict)
-  # add in the offcut resources
-  newdict = add(offcutresourcedict, tempdict)
-
-  # ensure there aren't negative resources here (how could there be?)
-  _check_for_negative_resources(newdict)
-  
-  # ensure the required resource limits are included. 
-  # (how could this not be?) -Brent
-  _check_for_required_resources(newdict)
-
-  # okay, now write out the new file...
-  write_resource_dict(newdict, newfilename)
-
-
