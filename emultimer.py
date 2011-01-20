@@ -51,7 +51,7 @@ def sleep(seconds):
          The number of seconds to sleep.   This can be a floating point value
 
    <Exceptions>
-      None.
+      RepyArgumentException if seconds is not an int/long/float.
 
    <Side Effects>
       None.
@@ -59,6 +59,11 @@ def sleep(seconds):
    <Returns>
       None.
   """
+
+  # Check seconds to ensure it is a valid type.
+  if type(seconds) not in [long, float, int]:
+    raise RepyArgumentError("Invalid type " + str(type(seconds)))
+
   # Using getruntime() in lieu of time.time() because we want elapsed time 
   # regardless of the oddities of NTP
   start = nonportable.getruntime()
