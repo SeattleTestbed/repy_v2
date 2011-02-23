@@ -1505,8 +1505,13 @@ def listenforconnection(localip, localport):
       # Get the maximum number of outsockets
       max_outsockets = nanny.get_resource_limit("outsockets")
 
-      # Set the backlog to be the maximum number of outsockets
-      sock.listen(max_outsockets)
+      # If we have restrictions, then we want to set the outsocket
+      # limit
+      if max_outsockets:
+        # Set the backlog to be the maximum number of outsockets
+        sock.listen(max_outsockets)
+      else:
+        sock.listen(5)
 
     except Exception, e:
       nanny.tattle_remove_item('insockets',identity)
@@ -2269,6 +2274,7 @@ class TCPServerSocket (object):
       A tuple containing: (remote ip, remote port, socket object)
     """
     # Get the socket lock
+    
     try:
       socket_lock = OPEN_SOCKET_INFO[self.identity][0]
     except KeyError:
