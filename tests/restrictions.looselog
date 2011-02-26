@@ -12,7 +12,7 @@ resource netrecv 10000
 resource loopsend 1000000
 resource looprecv 1000000
 resource lograte 100000
-resource random 100
+resource random 10000
 resource messport <messport>
 resource connport <connport>
 
