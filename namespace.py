@@ -398,6 +398,28 @@ class ListOfStr(ValueProcessor):
 
 
 
+class List(ValueProcessor):
+  """Allows lists. The list may contain anything."""
+  
+  def check(self, val):
+    if not type(val) is list:
+      raise RepyArgumentError("Invalid type %s" % type(val))
+
+
+
+
+
+class Dict(ValueProcessor):
+  """Allows dictionaries. The dictionaries may contain anything."""
+
+  def check(self, val):
+    if not type(val) is dict:
+      raise RepyArgumentError("Invalid type %s" % type(val))
+
+
+
+
+
 class DictOfStrOrInt(ValueProcessor):
   """
   Allows a tuple that contains dictionaries that only contain string keys
@@ -652,7 +674,7 @@ USERCONTEXT_WRAPPER_INFO = {
   'getresources' :
       {'func' : nonportable.get_resources,
        'args' : [],
-       'return' : (DictOfStrOrInt(), DictOfStrOrInt())},
+       'return' : (Dict(), Dict(), List())},
 }
 
 FILE_OBJECT_WRAPPER_INFO = {
@@ -1090,11 +1112,12 @@ class NamespaceAPIFunctionWrapper(object):
 
 
   def _process_retval(self, retval):
+
     try:
       # Allow the return value to be a tuple of processors.
       if type(retval) is tuple:
         if len(retval) != len(self.__return):
-          raise InternalRepyError("Returned tuple of wrong size: %s" % retval)
+          raise InternalRepyError("Returned tuple of wrong size: %s" % str(retval))
         tempretval = []
         for index in range(len(retval)):
           tempitem = self._process_retval_helper(self.__return[index], retval[index])
@@ -1107,6 +1130,7 @@ class NamespaceAPIFunctionWrapper(object):
       raise InternalRepyError(
           "Function '" + self.__func_name + "' returned with unallowed return type " +
           str(type(retval)) + " : " + str(e))
+
 
     return tempretval
 
@@ -1178,7 +1202,7 @@ class NamespaceAPIFunctionWrapper(object):
           args_to_use = [args[0]] + args_copy
         else:
           args_to_use = args_copy
-
+      
       retval = func_to_call(*args_to_use)
 
       return self._process_retval(retval)
