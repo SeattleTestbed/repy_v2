@@ -718,6 +718,10 @@ def _get_localIP_to_remoteIP(connection_type, external_ip, external_port=80):
   # Open a socket
   sockobj = socket.socket(socket.AF_INET, connection_type)
 
+  # Make sure that the socket obj doesn't hang forever in 
+  # case connect() is blocking. Fix to #1003
+  sockobj.settimeout(5.0)
+
   try:
     sockobj.connect((external_ip, external_port))
 
