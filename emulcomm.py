@@ -676,7 +676,7 @@ def getmyip():
       # Try to resolve using the current connection type and 
       # stable IP, using port 80 since some platforms panic
       # when given 0 (FreeBSD)
-      myip = _get_localIP_to_remoteIP(socket.SOCK_STREAM, ip_addr, 80)
+      myip = _get_localIP_to_remoteIP(socket.SOCK_DGRAM, ip_addr, 80)
     except (socket.error, socket.timeout):
       # We can ignore any networking related errors, since we want to try 
       # the other connection types and IP addresses. If we fail,
@@ -720,7 +720,7 @@ def _get_localIP_to_remoteIP(connection_type, external_ip, external_port=80):
 
   # Make sure that the socket obj doesn't hang forever in 
   # case connect() is blocking. Fix to #1003
-  sockobj.settimeout(5.0)
+  sockobj.settimeout(1.0)
 
   try:
     sockobj.connect((external_ip, external_port))
