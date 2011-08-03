@@ -482,6 +482,7 @@ def _is_valid_ip_address(ipaddr):
   <Purpose>
     Determines if ipaddr is a valid IP address.
     0.X and 224-255.X addresses are not allowed.
+    Additionally, 192.168.0.0 is not allowed.
 
   <Arguments>
     ipaddr: String to check for validity. (It will check that this is a string).
@@ -491,6 +492,9 @@ def _is_valid_ip_address(ipaddr):
   """
   # Argument must be of the string type
   if not type(ipaddr) == str:
+    return False
+
+  if ipaddr == '192.168.0.0':
     return False
 
   # A valid IP should have 4 segments, explode on the period
