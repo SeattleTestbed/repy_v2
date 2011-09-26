@@ -1,6 +1,7 @@
 """
 This test checks that randombytes throttles correctly.
-The restriction allows 512 bytes a second, but randombytes uses 1024 bytes.
+The restriction allows 10000 bytes a second.   Each call to randombytes uses 
+1024 bytes.
 
 Thus, it should always take a full second to return.
 """
@@ -9,7 +10,8 @@ Thus, it should always take a full second to return.
 
 start = getruntime()
 
-data = randombytes()
+for num in range(20):
+  data = randombytes()
 
 end = getruntime()
 
