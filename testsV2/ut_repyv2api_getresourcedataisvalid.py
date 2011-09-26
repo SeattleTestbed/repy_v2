@@ -29,7 +29,7 @@ expected = {"cpu":0.1,
             "loopsend":1000000,
             "looprecv":1000000,
             "lograte":30000,
-            "random":512,
+            "random":10000,
             "messport":set([12345]),
             "connport":set([12345]),
            }
