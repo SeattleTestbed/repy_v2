@@ -18,7 +18,7 @@
   The CPU, memory, disk usage, and network bandwidth are all limited.
 
 <Usage>
-  Usage: repy.py [options] resourcefn program_to_run.py [program args]
+  Usage: repy.py [options] resourcefn program_to_run.repy [program args]
 
   Where [options] are some combination of the following:
 
@@ -259,7 +259,7 @@ def usage(str_err=""):
   if str_err:
     print "Error:", str_err
   print """
-Usage: repy.py [options] resourcefile program_to_run.py [program args]
+Usage: repy.py [options] resourcefile program_to_run.repy [program args]
 
 Where [options] are some combination of the following:
 
