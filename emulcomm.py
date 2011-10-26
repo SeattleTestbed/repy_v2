@@ -647,7 +647,8 @@ def gethostbyname(name):
 def getmyip():
   """
    <Purpose>
-      Provides the external IP of this computer.   Does some clever trickery.
+      Provides the IP of this computer on its public facing interface.  
+      Does some clever trickery. 
 
    <Arguments>
       None
