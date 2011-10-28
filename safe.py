@@ -63,6 +63,7 @@ Known limitations:
 import UserDict     # This is to get DictMixin
 import threading    # This is to get a lock
 import time         # This is to sleep
+import sys          # This is to get the python executable to launch the external process
 import subprocess   # This is to start the external process
 import harshexit    # This is to kill the external process on timeout
 import nonportable  # This is to get the current runtime
@@ -273,7 +274,7 @@ def safe_check(code):
     path_to_safe_check = os.path.join(repy_constants.REPY_START_DIR, "safe_check.py")
     
     # Start a safety check process, reading from the user code and outputing to a pipe we can read
-    proc = subprocess.Popen(["python", path_to_safe_check],stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    proc = subprocess.Popen([sys.executable, path_to_safe_check],stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     
     # Write out the user code, close so the other end gets an EOF
     proc.stdin.write(code)
