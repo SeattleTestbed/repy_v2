@@ -564,13 +564,12 @@ def _is_loopback_ipaddr(host):
   if len(host.split('.')) != 4:
     return False
 
-  for number in host.split('.'):
-    for char in number:
-      if char not in '0123456789':
-        return False
-
+  octets = host.split('.')
+  if len(octets) != 4:
+    return False
+  for octet in octets:
     try:
-      if int(number) > 255 or int(number) < 0:
+      if int(octet) > 255 or int(octet) < 0:
         return False
     except ValueError:
       return False
