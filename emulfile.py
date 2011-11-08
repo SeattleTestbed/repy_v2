@@ -300,9 +300,8 @@ class emulated_file (object):
       # Add the filename to the open files
       OPEN_FILES.add(filename)
 
-      # Get the file's size, seek to the end.
-      self.fobj.seek(0, os.SEEK_END)
-      self.filesize = self.fobj.tell()
+      # Get the file's size
+      self.filesize = os.path.getsize(self.abs_filename)
 
     except RepyException:
       # Restore the file handle we tattled
