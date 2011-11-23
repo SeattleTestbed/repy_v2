@@ -12,7 +12,8 @@ We check for:
 
 def tryit(arg, create=False):
   try:
-    openfile(arg, create)
+    fd = openfile(arg, create)
+    fd.close()
   except RepyArgumentError:
     pass
   else:
@@ -40,14 +41,16 @@ while BAD_FILE in listfiles():
   BAD_FILE += ".abc"
 
 try:
-  openfile(BAD_FILE, False)
+  fd = openfile(BAD_FILE, False)
+  fd.close()
 except FileNotFoundError:
   pass
 else:
   log("Opened handle to file that does not exist: "+str(BAD_FILE),'\n')
 
 # Create the file, this should work
-openfile(BAD_FILE, True)
+fd = openfile(BAD_FILE, True)
+fd.close()
 
 # Check that it exists
 if BAD_FILE not in listfiles():
