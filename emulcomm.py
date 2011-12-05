@@ -1884,7 +1884,6 @@ class EmulatedSocket:
       
       # Raise an exception if there was no data
       if data_length == 0:
-        self._close()
         raise SocketClosedRemote("The socket has been closed remotely!")
 
       if self.on_loopback:
@@ -1974,6 +1973,19 @@ class EmulatedSocket:
       sock = OPEN_SOCKET_INFO[self.identity][1]
       if sock is None:
         raise KeyError # Socket is closed locally
+ 
+      # Detect Socket Closed Remote
+      # Fixes ticket#974
+      (readable, writable, exception) = select.select([sock],[],[],0)
+      # check if socket is readable.   This is true if the remote end closed.
+      if readable:
+
+         # if socket is readable but there was no data this means the remote end
+         # has closed the socket.   We peek so that we don't consume a character.
+         data_peeked = sock.recv(1,socket.MSG_PEEK)
+         if len(data_peeked) == 0:
+            # remote socket is closed
+            raise SocketClosedRemote("The socket has been closed by the remote end!")
 
       # Try to send the data
       bytes_sent = sock.send(message)
@@ -1991,7 +2003,8 @@ class EmulatedSocket:
 
     except KeyError:
       raise SocketClosedLocal("The socket is closed!")
-  
+    except RepyException:
+      raise # pass up from inner block
     except Exception, e:
       # Check if this a recoverable error
       if _is_recoverable_network_exception(e):
