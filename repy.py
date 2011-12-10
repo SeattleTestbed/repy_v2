@@ -12,7 +12,7 @@
   Restricted execution environment for python.  Should stop someone
   from doing "bad things" (which is also defined to include many
   useful things).  This module allows the user to define code that
-  gets called either on the reciept of a packet, when a timer fires,
+  gets called either on the receipt of a packet, when a timer fires,
   on startup, and on shutdown.  The restricted code can only do a few
   "external" things like send data packets and store data to disk.
   The CPU, memory, disk usage, and network bandwidth are all limited.
@@ -215,7 +215,7 @@ def main(resourcefn, program, args):
   try:
     nanny.tattle_add_item('events', event_id)
   except Exception, e:
-    tracebackrepy.handle_internalerror("Failed to aquire event for '" + \
+    tracebackrepy.handle_internalerror("Failed to acquire event for '" + \
               "initialize' event.\n(Exception was: %s)" % e.message, 140)
  
   try:

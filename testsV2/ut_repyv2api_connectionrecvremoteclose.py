@@ -1,5 +1,5 @@
 """
-Check what happens with send and close
+Check what happens when trying to recv from a socket that was closed on the remote end.
 """
 #pragma repy restrictions.twoports
 
@@ -26,5 +26,5 @@ try:
 except SocketClosedRemote:
   pass
 else:
-  log("Should get an error if ther other side closed the socket",'\n')
+  log("Should get an error that the other side closed the socket",'\n')
 

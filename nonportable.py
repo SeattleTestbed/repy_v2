@@ -263,7 +263,7 @@ def getruntime():
   return elapsedtime
  
 
-# This lock is used to serialize calls to get_resouces
+# This lock is used to serialize calls to get_resources
 get_resources_lock = threading.Lock()
 
 # Cache the disk used from the external process
@@ -280,7 +280,7 @@ process_stopped_max_entries = 100
 def get_resources():
   """
   <Purpose>
-    Returns the resouce utilization limits as well
+    Returns the resource utilization limits as well
     as the current resource utilization.
 
   <Arguments>
@@ -289,13 +289,13 @@ def get_resources():
   <Returns>
     A tuple of dictionaries and an array (limits, usage, stoptimes).
 
-    Limits is the dictionary which maps the resouce name
+    Limits is the dictionary which maps the resource name
     to its maximum limit.
 
     Usage is the dictionary which maps the resource name
     to its current usage.
 
-    Stoptimes is an array of tuples with the times which the Repy proces
+    Stoptimes is an array of tuples with the times which the Repy process
     was stopped and for how long, due to CPU over-use.
     Each entry in the array is a tuple (TOS, Sleep Time) where TOS is the
     time of stop (respective to getruntime()) and Sleep Time is how long the
@@ -419,7 +419,7 @@ class WindowsNannyThread(threading.Thread):
 # Windows specific CPU Nanny Stuff
 winlastcpuinfo = [0,0]
 
-# Enfoces CPU limit on Windows and Windows CE
+# Enforces CPU limit on Windows and Windows CE
 def win_check_cpu_use(cpulim, pid):
   global winlastcpuinfo
   
@@ -535,7 +535,7 @@ def IPC_handle_diskused(bytes):
   cached_disk_used = bytes
 
 
-# This method handles meessages on the "repystopped" channel from
+# This method handles messages on the "repystopped" channel from
 # the external process. When the external process stops repy, it sends
 # a tuple with (TOS, amount) where TOS is time of stop (getruntime()) and
 # amount is the amount of time execution was suspended.
@@ -625,7 +625,7 @@ def read_message_from_pipe(readhandle):
       # Read 8 bytes at a time
       mesg = os.read(readhandle,8)
       if len(mesg) == 0:
-        raise EnvironmentError, "Read returned emtpy string! Pipe broken!"
+        raise EnvironmentError, "Read returned empty string! Pipe broken!"
       data += mesg
 
     # Increment the index while there is data and we have not found a colon
@@ -644,7 +644,7 @@ def read_message_from_pipe(readhandle):
       while more_data > 0:
         mesg = os.read(readhandle, more_data)
         if len(mesg) == 0:
-          raise EnvironmentError, "Read returned emtpy string! Pipe broken!"
+          raise EnvironmentError, "Read returned empty string! Pipe broken!"
         data += mesg
         more_data -= len(mesg)
 
@@ -820,7 +820,7 @@ def resource_monitor(childpid, pipe_handle):
   # Run forever...
   while True:
     ########### Check CPU ###########
-    # Get elasped time
+    # Get elapsed time
     currenttime = getruntime()
     elapsedtime1 = currenttime - last_time     # Calculate against last run
     elapsedtime2 = currenttime - resume_time   # Calculate since we last resumed repy
