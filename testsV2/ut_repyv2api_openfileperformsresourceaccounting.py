@@ -3,8 +3,8 @@
 This unit test checks the resource consumption of openfile.
 
 We check for:
-  1) 4K file read on open
-  2) 4K file write on open w/create
+  1) 4K fileread on open without create
+  2) 4K fileread and 4K filewrite on open w/create
 """
 
 #pragma repy
@@ -16,41 +16,42 @@ BAD_FILE = "random.junk.file.does.not.exist"
 while BAD_FILE in listfiles():
   BAD_FILE += ".abc"
 
-
-# Get the baseline fileread usage
-lim, baseline, stops = getresources()
+# Clear any resources used from calls to listfiles()
+sleep(0.5)
 
 try:
   openfile(BAD_FILE, False)
 except FileNotFoundError:
-  # Check the usage again
+  # Check the usage
   lim, after_check, stops = getresources()
 
-  # We should have used about an extra 4096.
-  # Less is possible since it may have been restored
-  if after_check["fileread"] - baseline["fileread"] < 4000:
-    log("We should have used 4096 more fileread! After: "+str(after_check["fileread"])+" Before: "+str(baseline["fileread"]),'\n')
+  # We should have used 4096 fileread.
+  if after_check["fileread"] != 4096:
+    log("We should have used 4096 fileread! Used: " + str(after_check["fileread"]) + "\n")
 
 else:
   log("Opened handle to file that does not exist: "+str(BAD_FILE),'\n')
   exitall()
 
+# Clear any resources used from previous calls
+sleep(0.5)
+
 # Create the file, this should work
 openfile(BAD_FILE, True)
 
-# Get the usage now
+# Get the usage now. We don't want the later listfiles() to ruin our measurement
 lim, after_create, stops = getresources()
 
-# Check that it exists
+# Verify that the file exists
 if BAD_FILE not in listfiles():
   log("File should exist! It was just created!",'\n')
 
 # Remove the file
 removefile(BAD_FILE)
 
-# We should now use 4096 file write, plus more fileread
+# We should have used 4096 filewrite, 4096 fileread
 if after_create["filewrite"] != 4096:
-  log("File write should be 4096! Is: "+str(after_create["filewrite"]),'\n')
-if after_create["fileread"] - after_check["fileread"] < 4000:
-  log("We should have used 4096 more fileread after create! Used: "+str(after_create["fileread"]) + " Before: "+str(after_check["fileread"]),'\n')
+  log("File write should be 4096! Used: "+str(after_create["filewrite"]),'\n')
+if after_create["fileread"] != 4096:
+  log("We should have used 4096 fileread after create! Used: "+str(after_create["fileread"]) + '\n')
 
