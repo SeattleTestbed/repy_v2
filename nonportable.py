@@ -367,12 +367,13 @@ class WindowsNannyThread(threading.Thread):
     threading.Thread.__init__(self,name="NannyThread")
 
   def run(self):
-    # Calculate how often disk should be checked
-    if ostype == "WindowsCE":
-      disk_interval = int(repy_constants.RESOURCE_POLLING_FREQ_WINCE / repy_constants.CPU_POLLING_FREQ_WINCE)
-    else:
-      disk_interval = int(repy_constants.RESOURCE_POLLING_FREQ_WIN / repy_constants.CPU_POLLING_FREQ_WIN)
-    current_interval = 0 # What cycle are we on  
+    # How often the memory will be checked (seconds)
+    memory_check_interval = repy_constants.CPU_POLLING_FREQ_WIN
+    # The ratio of the disk polling time to memory polling time.
+    disk_to_memory_ratio = int(repy_constants.DISK_POLLING_HDD / memory_check_interval)
+      
+    # Which cycle number we're on  
+    counter = 0
     
     # Elevate our priority, above normal is higher than the usercode, and is enough for disk/mem
     windows_api.set_current_thread_priority(windows_api.THREAD_PRIORITY_ABOVE_NORMAL)
@@ -383,27 +384,25 @@ class WindowsNannyThread(threading.Thread):
     # run forever (only exit if an error occurs)
     while True:
       try:
+        # Increment the interval counter
+        counter += 1
+        
         # Check memory use, get the WorkingSetSize or RSS
         memused = windows_api.process_memory_info(mypid)['WorkingSetSize']
-        
+
         if memused > nanny.get_resource_limit("memory"):
           # We will be killed by the other thread...
           raise Exception, "Memory use '"+str(memused)+"' over limit '"+str(nanny.get_resource_limit("memory"))+"'"
-        
-        # Increment the interval we are on
-        current_interval += 1
 
         # Check if we should check the disk
-        if (current_interval % disk_interval) == 0:
+        if (counter % disk_to_memory_ratio) == 0:
           # Check diskused
           diskused = compute_disk_use(repy_constants.REPY_CURRENT_DIR)
           if diskused > nanny.get_resource_limit("diskused"):
             raise Exception, "Disk use '"+str(diskused)+"' over limit '"+str(nanny.get_resource_limit("diskused"))+"'"
-        
-        if ostype == 'WindowsCE':
-          time.sleep(repy_constants.CPU_POLLING_FREQ_WINCE)
-        else:
-          time.sleep(repy_constants.CPU_POLLING_FREQ_WIN)
+        # Sleep until the next iteration of checking the memory
+        time.sleep(memory_check_interval)
+
         
       except windows_api.DeadProcess:
         #  Process may be dead, or die while checking memory use
