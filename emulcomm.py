@@ -22,6 +22,9 @@ socket.setattr = setattr
 
 # needed to set threads for recvmess and waitforconn
 import threading
+# threading in python2.7 uses hasattr. It needs to be made available.
+threading.hasattr = hasattr
+
 
 # So I can exit all threads when an error occurs or do select
 import harshexit
