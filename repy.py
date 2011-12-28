@@ -182,7 +182,9 @@ def main(resourcefn, program, args):
       
   # grab the user code from the file
   try:
-    usercode = file(program).read()
+    filehandle = open(program)
+    usercode = filehandle.read()
+    filehandle.close()
   except:
     print "Failed to read the specified file: '"+program+"'"
     raise
