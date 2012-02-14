@@ -74,6 +74,9 @@ import compiler
 import platform # This is for detecting Nokia tablets
 import __builtin__
 
+# Fix to make repy compatible with Python 2.7.2 on Ubuntu 11.10 (ticket #1049)
+subprocess.getattr = getattr
+
 # Armon: This is how long we will wait for the external process
 # to validate the safety of the user code before we timeout, 
 # and exit with an exception
