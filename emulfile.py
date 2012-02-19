@@ -505,6 +505,14 @@ class emulated_file (object):
 
 
   def __del__(self):
+    # this ensures that during interpreter cleanup, that the order of 
+    # freed memory doesn't matter.   If we don't have this, then
+    # OPEN_FILES_LOCK and other objects might get cleaned up first and cause
+    # the close call below to print an exception
+    if OPEN_FILES_LOCK == None:
+      return
+
+
     # Make sure we are closed
     try:
       self.close()
