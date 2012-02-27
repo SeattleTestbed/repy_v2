@@ -80,44 +80,10 @@ import emulfile
 import emulmisc
 import emultimer
 
-# This block allows or denies different actions in the safe module.   I'm 
-# doing this here rather than the natural place in the safe module because
-# I want to keep that module unmodified to make upgrading easier.
-
-# Allow the user to do try, except, finally, etc.
-safe._NODE_CLASS_OK.append("TryExcept")
-safe._NODE_CLASS_OK.append("TryFinally")
-safe._NODE_CLASS_OK.append("Raise")
-safe._NODE_CLASS_OK.append("ExcepthandlerType")
-safe._NODE_CLASS_OK.append("Invert")
-
-# Armon: Repy V2, remove support for print()
-safe._NODE_CLASS_OK.remove("Print")
-safe._NODE_CLASS_OK.remove("Printnl")
-
-# needed for traceback
-# NOTE: still needed for tracebackrepy
-safe._BUILTIN_OK.append("isinstance")
-safe._BUILTIN_OK.append("BaseException")
-safe._BUILTIN_OK.append("WindowsError")
-safe._BUILTIN_OK.append("type")
-safe._BUILTIN_OK.append("issubclass")
-# needed to allow primitive marshalling to be built
-safe._BUILTIN_OK.append("ord")
-safe._BUILTIN_OK.append("chr")
-# should not be used!   Use exitall instead.
-safe._BUILTIN_OK.remove("exit")
-safe._BUILTIN_OK.remove("quit")
-
-safe._STR_OK.append("__repr__")
-safe._STR_OK.append("__str__")
-# allow __ in strings.   I'm 99% sure this is okay (do I want to risk it?)
-safe._NODE_ATTR_OK.append('value')
-
 # Disables safe, and resumes normal fork
 def nonSafe_fork():
   val = __orig_fork()
-  if val == 0 and safe._builtin_globals_r != None:
+  if val == 0 and safe._builtin_globals_backup != None:
     safe._builtin_restore()
   return val
 
