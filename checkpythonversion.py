@@ -6,6 +6,7 @@ Start Date: Feb 27th, 2009
 Description:
 Exits if they are using an unsupported Python version...
 
+Currently Python v2.5 and v2.6 are supported
 
 """
 
