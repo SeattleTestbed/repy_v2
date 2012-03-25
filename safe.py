@@ -79,7 +79,13 @@
 import os           # This is for some path manipulation
 import sys          # This is to get sys.executable to launch the external process
 import time         # This is to sleep
+
+# Hide the DeprecationWarning for compiler
+import warnings
+warnings.simplefilter('ignore')
 import compiler     # Required for the code safety check
+warnings.resetwarnings()
+
 import UserDict     # This is to get DictMixin
 import platform     # This is for detecting Nokia tablets
 import threading    # This is to get a lock
