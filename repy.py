@@ -22,7 +22,6 @@
 
   Where [options] are some combination of the following:
 
-  --simple               : Simple execution mode -- execute and exit
   --ip IP                : This flag informs Repy that it is allowed to bind to the given given IP.
                          : This flag may be asserted multiple times.
                          : Repy will attempt to use IP's and interfaces in the order they are given.
@@ -166,12 +165,6 @@ def main(resourcefn, program, args):
   # Let the code string get GC'ed
   usercode = None
 
-  # If we are in "simple execution" mode, execute and exit
-  if simpleexec:
-    main_namespace.evaluate(usercontext)
-    sys.exit(0)
-
-
   # I'll use this to detect when the program is idle so I know when to quit...
   idlethreadcount =  threading.activeCount()
 
@@ -231,7 +224,6 @@ Usage: repy.py [options] resourcefile program_to_run.repy [program args]
 
 Where [options] are some combination of the following:
 
---simple               : Simple execution mode -- execute and exit
 --ip IP                : This flag informs Repy that it is allowed to bind to the given given IP.
                        : This flag may be asserted multiple times.
                        : Repy will attempt to use IP's and interfaces in the order they are given.
@@ -251,7 +243,6 @@ Where [options] are some combination of the following:
 
 
 if __name__ == '__main__':
-  global simpleexec
   global logfile
 
   # Armon: The CMD line path to repy is the first argument
@@ -290,16 +281,13 @@ if __name__ == '__main__':
 
   try:
     optlist, fnlist = getopt.getopt(args, '', [
-      'simple', 'ip=', 'iface=', 'nootherips', 'logfile=',
+      'ip=', 'iface=', 'nootherips', 'logfile=',
       'stop=', 'status=', 'cwd=', 'servicelog'
       ])
 
   except getopt.GetoptError:
     usage()
     sys.exit(1)
-
-  # Set up the simple variable if needed
-  simpleexec = False
 
   # By default we don't want to use the service logger
   servicelog = False
@@ -318,10 +306,7 @@ if __name__ == '__main__':
     sys.exit(1)
 
   for option, value in optlist:
-    if option == '--simple':
-      simpleexec = True
-
-    elif option == '--ip':
+    if option == '--ip':
       emulcomm.user_ip_interface_preferences = True
 
       # Append this ip to the list of available ones if it is new, since
