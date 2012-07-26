@@ -93,27 +93,7 @@ if "fork" in dir(os):
 
 
 
-def main(resourcefn, program, args):
-
-  # Armon: Initialize the circular logger before starting the nanny
-  if logfile:
-    # time to set up the circular logger
-    loggerfo = loggingrepy.circular_logger(logfile)
-    # and redirect err and out there...
-    sys.stdout = loggerfo
-    sys.stderr = loggerfo
-  else:
-    # let's make it so that the output (via print) is always flushed
-    sys.stdout = loggingrepy.flush_logger(sys.stdout)
-    
-  # start the nanny up and read the resource file.  
-  nanny.start_resource_nanny(resourcefn)
-
-  # now, let's fire up the cpu / disk / memory monitor...
-  nonportable.monitor_cpu_disk_and_mem()
-
-  # Armon: Update our IP cache
-  emulcomm.update_ip_cache()
+def get_safe_context(args):
 
 
   # These will be the functions and variables in the user's namespace (along
@@ -145,33 +125,23 @@ def main(resourcefn, program, args):
   usercontext["createvirtualnamespace"] = virtual_namespace.createvirtualnamespace
   usercontext["getlasterror"] = emulmisc.getlasterror
       
-  # grab the user code from the file
-  try:
-    filehandle = open(program)
-    usercode = filehandle.read()
-    filehandle.close()
-  except:
-    print "Failed to read the specified file: '"+program+"'"
-    raise
+  # call the initialize function
+  usercontext['callfunc'] = 'initialize'
+  usercontext['callargs'] = args[:]
 
-  # Armon: Create the main namespace
-  try:
-    main_namespace = virtual_namespace.VirtualNamespace(usercode, program)
-  except CodeUnsafeError, e:
-    print "Specified repy program is unsafe!"
-    print "Static-code analysis failed with error: "+str(e)
-    harshexit.harshexit(5)
 
-  # Let the code string get GC'ed
-  usercode = None
+  return usercontext
+
+
+
+
+def execute_namespace_until_completion(thisnamespace, thiscontext):
 
   # I'll use this to detect when the program is idle so I know when to quit...
   idlethreadcount =  threading.activeCount()
 
-  # call the initialize function
-  usercontext['callfunc'] = 'initialize'
-  usercontext['callargs'] = args[:]
  
+  # add my thread to the set of threads that are used...
   event_id = idhelper.getuniqueid()
   try:
     nanny.tattle_add_item('events', event_id)
@@ -179,8 +149,9 @@ def main(resourcefn, program, args):
     tracebackrepy.handle_internalerror("Failed to acquire event for '" + \
               "initialize' event.\n(Exception was: %s)" % e.message, 140)
  
+  
   try:
-    main_namespace.evaluate(usercontext)
+    thisnamespace.evaluate(thiscontext)
   except SystemExit:
     raise
   except:
@@ -196,9 +167,9 @@ def main(resourcefn, program, args):
     # do accounting here?
     time.sleep(0.25)
 
+  # Once there are no more events, return...
+  return
 
-  # Once there are no more pending events for the user thread, we exit
-  harshexit.harshexit(0)
 
 
 def usage(str_err=""):
@@ -242,14 +213,8 @@ Where [options] are some combination of the following:
   return
 
 
-if __name__ == '__main__':
-  global logfile
+def init_repy_location(repy_directory):
 
-  # Armon: The CMD line path to repy is the first argument
-  repy_location = sys.argv[0]
-
-  # Get the directory repy is in
-  repy_directory = os.path.dirname(repy_location)
   
   # Translate into an absolute path
   if os.path.isabs(repy_directory):
@@ -276,11 +241,15 @@ if __name__ == '__main__':
   # by setting a crazy python path
   sys.path = newsyspath
 
+
+
   
-  args = sys.argv[1:]
+def init_commandline_options(args):
+
+  # let's get the arguments!
 
   try:
-    optlist, fnlist = getopt.getopt(args, '', [
+    optlist, extraargs = getopt.getopt(args, '', [
       'ip=', 'iface=', 'nootherips', 'logfile=',
       'stop=', 'status=', 'cwd=', 'servicelog'
       ])
@@ -301,7 +270,7 @@ if __name__ == '__main__':
   # Default stopfile (if the option --stopfile isn't passed)
   statusfile = None
 
-  if len(fnlist) < 2:
+  if len(extraargs) < 2:
     usage("Must supply a resource file and a program file to execute")
     sys.exit(1)
 
@@ -357,17 +326,116 @@ if __name__ == '__main__':
   # Write out our initial status
   statusstorage.write_status("Started")
 
-  resourcefn = fnlist[0]
-  progname = fnlist[1]
-  progargs = fnlist[2:]
 
   # We also need to pass in whether or not we are going to be using the service
   # log for repy.  We provide the repy directory so that the vessel information
   # can be found regardless of where we are called from...
-  tracebackrepy.initialize(servicelog, absolute_repy_directory)
+  tracebackrepy.initialize(servicelog, repy_constants.REPY_START_DIR)
 
+  # Armon: Initialize the circular logger before starting the nanny
+  if logfile:
+    # time to set up the circular logger
+    loggerfo = loggingrepy.circular_logger(logfile)
+    # and redirect err and out there...
+    sys.stdout = loggerfo
+    sys.stderr = loggerfo
+  else:
+    # let's make it so that the output (via print) is always flushed
+    sys.stdout = loggingrepy.flush_logger(sys.stdout)
+
+
+  # we need to give the left over arguments to repy so it can function
+  return extraargs
+
+
+
+def initialize_nanny(resourcefn):
+  # start the nanny up and read the resource file.  
+  # JAC: Should this take a string instead?
+  nanny.start_resource_nanny(resourcefn)
+
+  # now, let's fire up the cpu / disk / memory monitor...
+  nonportable.monitor_cpu_disk_and_mem()
+
+  # JAC: I believe this is needed for interface / ip-based restrictions
+  emulcomm.update_ip_cache()
+
+
+
+def main():
+  # JAC: This function should be kept as stable if possible.   Others who
+  # extend Repy may be doing essentially the same thing in their main and
+  # your changes may not be reflected there!
+
+
+  # Armon: The CMD line path to repy is the first argument
+  repy_location = sys.argv[0]
+
+  # Get the directory repy is in
+  repy_directory = os.path.dirname(repy_location)
+  
+  init_repy_location(repy_directory)
+  
+
+  ### PARSE OPTIONS.   These are command line in our case, but could be from
+  ### anywhere if this is repurposed...
+
+  args = sys.argv[1:]
+
+  # do a huge amount of initialization.
+  # The repy location must be set first!!!
+  remainingargs = init_commandline_options(args)
+
+
+  # what remains is the resourcefn progname [args...]
+  resourcefn = remainingargs[0]
+  progname = remainingargs[1]
+  progargs = remainingargs[2:]
+
+  ### start resource restrictions, etc. for the nanny
+  initialize_nanny(resourcefn)
+
+
+  # grab the user code from the file
   try:
-    main(resourcefn, progname, progargs)
+    filehandle = open(progname)
+    usercode = filehandle.read()
+    filehandle.close()
+  except:
+    print "Failed to read the specified program file: '"+progname+"'"
+    raise
+
+  # create the namespace...
+  try:
+    newnamespace = virtual_namespace.VirtualNamespace(usercode, progname)
+  except CodeUnsafeError, e:
+    print "Specified repy program is unsafe!"
+    print "Static-code analysis failed with error: "+str(e)
+    harshexit.harshexit(5)
+
+  # allow the (potentially large) code string to be garbage collected
+  usercode = None
+
+
+  # get a new namespace
+  newcontext = get_safe_context(progargs)
+
+  # one could insert a new function for repy code here by changing newcontext 
+  # to contain an additional function.
+
+
+  # run the code to completion...
+  execute_namespace_until_completion(newnamespace, newcontext)
+
+
+  # No more pending events for the user thread, we exit
+  harshexit.harshexit(0)
+
+
+
+if __name__ == '__main__':
+  try:
+    main()
   except SystemExit:
     harshexit.harshexit(4)
   except:
