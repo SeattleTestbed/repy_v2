@@ -145,7 +145,7 @@ _STR_OK:
 # through it node by node, and checking that only safe nodes
 # are used and that no unsafe strings are present.
 
-_STR_OK = ['__init__','__del__','__iter__', '__repr__''__str__']
+_STR_OK = ['__init__','__del__','__iter__', '__repr__', '__str__']
 
 # __ is not allowed because it can be used to access a 'private' object in a class
 # by bypassing Python's name mangling.
