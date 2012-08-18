@@ -223,7 +223,7 @@ def _check_node(node):
   if node.__class__.__name__ not in _NODE_CLASS_OK:
     raise exception_hierarchy.CheckNodeException(node.lineno,node.__class__.__name__)
   
-  for attribute, value in node.__dict__.items():
+  for attribute, value in node.__dict__.iteritems():
     # Don't allow the construction of unicode literals
     if type(value) == unicode:
       raise exception_hierarchy.CheckStrException(node.lineno, attribute, value)
@@ -269,7 +269,7 @@ def safe_check_subprocess(code):
   <Purpose>
     Runs safe_check() in a subprocess. This is done because the AST safe_check()
     creates uses a large amount of RAM. By running safe_check() in a subprocess
-    we can guarantee that teh memory will be reclaimed when the process ends.
+    we can guarantee that the memory will be reclaimed when the process ends.
   
   <Arguments>
     code: See safe_check.
@@ -423,7 +423,7 @@ _builtin_globals_backup = None
 
 # Populates `_builtin_globals` with keys for every built-in function
 # The values will either be the actual function (if safe), a replacement 
-# function, or a function that raises an exception.
+# function, or a stub function that raises an exception.
 def _builtin_init():
   global _builtin_globals, _builtin_globals_backup
   
@@ -436,7 +436,7 @@ def _builtin_init():
   _builtin_globals_backup = __builtin__.__dict__.copy()
   _builtin_globals = {}
 
-  for builtin in __builtin__.__dict__.keys():
+  for builtin in __builtin__.__dict__.iterkeys():
     # It's important to check _BUILTIN_REPLACE before _BUILTIN_OK because
     # even if the name is defined in both, there must be a security reason
     # why it was supposed to be replaced, and not just allowed.
@@ -463,12 +463,12 @@ def _builtin_init():
 # Replace every function in __builtin__ with the one from _builtin_globals.
 def _builtin_destroy():
   _builtin_init()
-  for builtin_name, builtin in _builtin_globals.items():
+  for builtin_name, builtin in _builtin_globals.iteritems():
     __builtin__.__dict__[builtin_name] = builtin
 
 # Restore every function in __builtin__ with the backup from _builtin_globals_backup.
 def _builtin_restore():
-  for builtin_name, builtin in _builtin_globals_backup.items():
+  for builtin_name, builtin in _builtin_globals_backup.iteritems():
     __builtin__.__dict__[builtin_name] = builtin
 
 # Have the builtins already been destroyed?
@@ -571,7 +571,7 @@ class SafeDict(UserDict.DictMixin):
       return
 
     # If we are given a dict, try to copy its keys
-    for key,value in from_dict.items():
+    for key,value in from_dict.iteritems():
       # Skip __builtins__ and __doc__ since safe_run/python inserts that
       if key in ["__builtins__","__doc__"]:
         continue
@@ -626,13 +626,11 @@ class SafeDict(UserDict.DictMixin):
 
   # Return the key set
   def keys(self):
-    # Get the keys from the underlying dict
-    keys = self.__under__.keys()
 
-    # Filter out the unsafe keys
+    # Filter out the unsafe keys from the underlying dict
     safe_keys = []
 
-    for key in keys:
+    for key in self.__under__.iterkeys():
       if _is_string_safe(key):
         safe_keys.append(key)
 
