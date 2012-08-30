@@ -4,6 +4,7 @@
   Ivan Beschastnikh (12/24/08) -- added usage
   Brent Couvrette   (2/27/09) -- added servicelog commandline option
   Conrad Meyer (5/22/09) -- switch option parsing to getopt
+  Moshe Kaplan (8/15/12) -- switched option parsing to optparse
 
 <Start Date>
   June 26th, 2008
@@ -39,30 +40,30 @@
 """
 
 
-# Let's make sure the version of python is supported
+
+import os
+import sys
+import time
+import optparse
+import threading
+
+# Relative imports
+
+# First make sure the version of python is supported
 import checkpythonversion
 checkpythonversion.ensure_python_version_is_supported()
 
-import idhelper
 import safe
-import sys
-import getopt
-import emulcomm
-import namespace
 import nanny
-import time
-import threading
-import loggingrepy
-
-import nmstatusinterface
-
+import emulcomm
+import idhelper
 import harshexit
-
+import namespace
+import nonportable
+import loggingrepy
 import statusstorage
-
-import repy_constants   
-
-import os
+import repy_constants
+import nmstatusinterface
 
 # Armon: Using VirtualNamespace as an abstraction around direct execution
 import virtual_namespace
@@ -70,14 +71,12 @@ import virtual_namespace
 ## we'll use tracebackrepy to print our exceptions
 import tracebackrepy
 
-import nonportable
-
 from exception_hierarchy import *
 
 # BAD: REMOVE these imports after we remove the API calls
-import emulfile
+#import emulfile
 import emulmisc
-import emultimer
+#import emultimer
 
 # Disables safe, and resumes normal fork
 def nonSafe_fork():
@@ -170,51 +169,7 @@ def execute_namespace_until_completion(thisnamespace, thiscontext):
   # Once there are no more events, return...
   return
 
-
-
-def usage(str_err=""):
-  # Ivan 12/24/2008
-  """
-   <Purpose>
-      Prints repy.py usage and possibly an error supplied argument
-   <Arguments>
-      str_err (string):
-        Options error to print to stdout
-   <Exceptions>
-      None
-   <Side Effects>
-      Modifies stdout
-   <Returns>
-      None
-  """
-  print
-  if str_err:
-    print "Error:", str_err
-  print """
-Usage: repy.py [options] resourcefile program_to_run.repy [program args]
-
-Where [options] are some combination of the following:
-
---ip IP                : This flag informs Repy that it is allowed to bind to the given given IP.
-                       : This flag may be asserted multiple times.
-                       : Repy will attempt to use IP's and interfaces in the order they are given.
---iface interface      : This flag informs Repy that it is allowed to bind to the given interface.
-                       : This flag may be asserted multiple times.
---nootherips           : Instructs Repy to only use IP's and interfaces that are explicitly given.
-                       : It should be noted that loopback (127.0.0.1) is always permitted.
---logfile filename.txt : Set up a circular log buffer and output to logfilename.txt
---stop filename        : Repy will watch for the creation of this file and abort when it happens
-                       : File can have format EXITCODE;EXITMESG. Code 44 is Stopped and is the default.
-                       : EXITMESG will be printed prior to exiting if it is non-null.
---status filename.txt  : Write status information into this file
---cwd dir              : Set Current working directory
---servicelog           : Enable usage of the servicelogger for internal errors
-"""
-  return
-
-
 def init_repy_location(repy_directory):
-
   
   # Translate into an absolute path
   if os.path.isabs(repy_directory):
@@ -242,86 +197,91 @@ def init_repy_location(repy_directory):
   sys.path = newsyspath
 
 
+def add_repy_options(parser):
+  """Adds the Repy command-line options to the specified optparser
+  """
 
-  
-def init_commandline_options(args):
-
-  # let's get the arguments!
-
-  try:
-    optlist, extraargs = getopt.getopt(args, '', [
-      'ip=', 'iface=', 'nootherips', 'logfile=',
-      'stop=', 'status=', 'cwd=', 'servicelog'
-      ])
-
-  except getopt.GetoptError:
-    usage()
-    sys.exit(1)
-
-  # By default we don't want to use the service logger
-  servicelog = False
-
-  # Default logfile (if the option --logfile isn't passed)
-  logfile = None
-
-  # Default stopfile (if the option --stopfile isn't passed)
-  stopfile = None
-
-  # Default stopfile (if the option --stopfile isn't passed)
-  statusfile = None
-
-  if len(extraargs) < 2:
-    usage("Must supply a resource file and a program file to execute")
-    sys.exit(1)
-
-  for option, value in optlist:
-    if option == '--ip':
-      emulcomm.user_ip_interface_preferences = True
-
-      # Append this ip to the list of available ones if it is new, since
-      # multiple IP's may be specified
-      if (True, value) not in emulcomm.user_specified_ip_interface_list:
-        emulcomm.user_specified_ip_interface_list.append((True, value))
-
-    elif option == '--iface':
-      emulcomm.user_ip_interface_preferences = True
-      
-      # Append this interface to the list of available ones if it is new
-      if (False, value) not in emulcomm.user_specified_ip_interface_list:
-        emulcomm.user_specified_ip_interface_list.append((False, value))
-
-    # Check if they have told us explicitly not to allow other IP's
-    elif option == '--nootherips':
-      # Set user preference to True
-      emulcomm.user_ip_interface_preferences = True
-      # Disable nonspecified IP's
-      emulcomm.allow_nonspecified_ips = False
+  parser.add_option('--ip',
+                    action="append", type="string", dest="ip" ,
+                    help="Explicitly allow Repy to bind to the specified IP. This option can be used multiple times."
+                    )
+  parser.add_option('--iface',
+                    action="append", type="string", dest="interface",
+                    help="Explicitly allow Repy to bind to the specified interface. This option can be used multiple times."
+                    )
+  parser.add_option('--nootherips',
+                    action="store_true", dest="nootherips",default=False,
+                    help="Do not allow IPs or interfaces that are not explicitly specified"
+                    )
+  parser.add_option('--logfile',
+                    action="store", type="string", dest="logfile",
+                    help="Set up a circular log buffer and output to logfile"
+                    )
+  parser.add_option('--stop',
+                    action="store", type="string", dest="stopfile",
+                    help="Watch for the creation of stopfile and abort when it is created"
+                    )
+  parser.add_option('--status',
+                    action="store", type="string", dest="statusfile",
+                    help="Write status information into statusfile"
+                    )
+  parser.add_option('--cwd',
+                    action="store", type="string", dest="cwd",
+                    help="Set Current working directory to cwd"
+                    )
+  parser.add_option('--servicelog',
+                    action="store_true", dest="servicelog",
+                    help="Enable usage of the servicelogger for internal errors"
+                    )
     
-    elif option == '--logfile':
-      # set up the circular log buffer...
-      logfile = value
+def parse_options(options):
+  """ Parse the specified options and initialize all required structures
+  Note: This modifies global state, specifically, the emulcomm module
+  """
+  if options.ip:
+    emulcomm.user_ip_interface_preferences = True
 
-    elif option == '--stop':
-      # Watch for the creation of this file and abort when it happens...
-      stopfile = value
+    # Append this ip to the list of available ones if it is new
+    for ip in options.ip:
+      if (True, ip) not in emulcomm.user_specified_ip_interface_list:
+        emulcomm.user_specified_ip_interface_list.append((True, ip))
 
-    elif option == '--status':
-      # Write status information into this file...
-      statusfile = value
+  if options.interface:
+    emulcomm.user_ip_interface_preferences = True
+      
+    # Append this interface to the list of available ones if it is new
+    for interface in options.interface:
+      if (False, interface) not in emulcomm.user_specified_ip_interface_list:
+        emulcomm.user_specified_ip_interface_list.append((False, interface))
 
-    # Set Current Working Directory
-    elif option == '--cwd':
-      os.chdir(value)
-
-    # Enable logging of internal errors to the service logger.
-    elif option == '--servicelog':
-      servicelog = True
+  # Check if they have told us to only use explicitly allowed IP's and interfaces
+  if options.nootherips:
+    # Set user preference to True
+    emulcomm.user_ip_interface_preferences = True
+    # Disable nonspecified IP's
+    emulcomm.allow_nonspecified_ips = False
+    
+  # set up the circular log buffer...
+  # Armon: Initialize the circular logger before starting the nanny
+  if options.logfile:
+    # time to set up the circular logger
+    loggerfo = loggingrepy.circular_logger(options.logfile)
+    # and redirect err and out there...
+    sys.stdout = loggerfo
+    sys.stderr = loggerfo
+  else:
+    # let's make it so that the output (via print) is always flushed
+    sys.stdout = loggingrepy.flush_logger(sys.stdout)
+    
+  # Set Current Working Directory
+  if options.cwd:
+    os.chdir(options.cwd)
 
   # Update repy current directory
   repy_constants.REPY_CURRENT_DIR = os.path.abspath(os.getcwd())
 
   # Initialize the NM status interface
-  nmstatusinterface.init(stopfile, statusfile)
+  nmstatusinterface.init(options.stopfile, options.statusfile)
   
   # Write out our initial status
   statusstorage.write_status("Started")
@@ -330,22 +290,8 @@ def init_commandline_options(args):
   # We also need to pass in whether or not we are going to be using the service
   # log for repy.  We provide the repy directory so that the vessel information
   # can be found regardless of where we are called from...
-  tracebackrepy.initialize(servicelog, repy_constants.REPY_START_DIR)
+  tracebackrepy.initialize(options.servicelog, repy_constants.REPY_START_DIR)
 
-  # Armon: Initialize the circular logger before starting the nanny
-  if logfile:
-    # time to set up the circular logger
-    loggerfo = loggingrepy.circular_logger(logfile)
-    # and redirect err and out there...
-    sys.stdout = loggerfo
-    sys.stderr = loggerfo
-  else:
-    # let's make it so that the output (via print) is always flushed
-    sys.stdout = loggingrepy.flush_logger(sys.stdout)
-
-
-  # we need to give the left over arguments to repy so it can function
-  return extraargs
 
 
 
@@ -379,31 +325,34 @@ def main():
 
   ### PARSE OPTIONS.   These are command line in our case, but could be from
   ### anywhere if this is repurposed...
-
-  args = sys.argv[1:]
-
-  # do a huge amount of initialization.
-  # The repy location must be set first!!!
-  remainingargs = init_commandline_options(args)
-
-
-  # what remains is the resourcefn progname [args...]
-  resourcefn = remainingargs[0]
-  progname = remainingargs[1]
-  progargs = remainingargs[2:]
-
+  usage = "USAGE: repy.py [options] resource_file program_to_run.repy [program args]"
+  parser = optparse.OptionParser(usage=usage)
+  add_repy_options(parser)
+  options, args = parser.parse_args()
+  
+  if len(args) < 2:
+    print "Repy requires a resource file and the program to run!"
+    parser.print_help()
+    sys.exit(1)
+  
+  resourcefn = args[0]
+  progname = args[1]
+  progargs = args[2:]
+  
+  # Do a huge amount of initialization.
+  parse_options(options)
+  
   ### start resource restrictions, etc. for the nanny
   initialize_nanny(resourcefn)
 
-
-  # grab the user code from the file
+  # Read the user code from the file
   try:
     filehandle = open(progname)
     usercode = filehandle.read()
     filehandle.close()
   except:
-    print "Failed to read the specified program file: '"+progname+"'"
-    raise
+    print "FATAL ERROR: Unable to read the specified program file: '%s'" % (progname)
+    sys.exit(1)
 
   # create the namespace...
   try:
@@ -414,8 +363,7 @@ def main():
     harshexit.harshexit(5)
 
   # allow the (potentially large) code string to be garbage collected
-  usercode = None
-
+  del usercode
 
   # get a new namespace
   newcontext = get_safe_context(progargs)
@@ -423,10 +371,8 @@ def main():
   # one could insert a new function for repy code here by changing newcontext 
   # to contain an additional function.
 
-
   # run the code to completion...
   execute_namespace_until_completion(newnamespace, newcontext)
-
 
   # No more pending events for the user thread, we exit
   harshexit.harshexit(0)
