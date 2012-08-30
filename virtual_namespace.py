@@ -65,6 +65,10 @@ class VirtualNamespace(object):
     # Remove any windows carriage returns
     code = code.replace('\r\n','\n')
 
+    # Prepend an encoding string to protect against bugs in that code (ticket #982)
+    # Note that this will cause tracebacks to have an inaccurate line number.
+    code = "# coding: utf-8\n\n" + code 
+
     # Do a safety check
     try:
       safe.serial_safe_check(code)

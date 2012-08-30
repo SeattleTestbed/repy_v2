@@ -152,6 +152,9 @@ _STR_OK = ['__init__','__del__','__iter__', '__repr__', '__str__']
 _STR_NOT_CONTAIN = ['__']
 _STR_NOT_BEGIN = ['im_','func_','tb_','f_','co_',]
 
+# Disallow these exact strings.
+#   encode and decode are not allowed because of the potential for encoding bugs (#982) 
+_STR_NOT_ALLOWED = ['encode','decode'] 
 
 def _is_string_safe(token):
   """
@@ -174,6 +177,10 @@ def _is_string_safe(token):
   # If the string is explicitly allowed, return True
   if token in _STR_OK:
     return True
+    
+  # Check if the string is specifically prohibited:
+  if token in _STR_NOT_ALLOWED:
+    return False
 
   # Check all the prohibited sub-strings
   for forbidden_substring in _STR_NOT_CONTAIN:
