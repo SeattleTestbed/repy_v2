@@ -110,10 +110,6 @@ def preparesocket(socketobject):
     # Linux seems not to care if we set the timeout, Mac goes nuts and refuses
     # to let you send from a socket you're receiving on (why?)
     pass
-
-  elif ostype == "WindowsCE":
-    # No known issues, so just go
-    pass
 	
   else:
     raise UnsupportedSystemException, "Unsupported system type: '"+osrealtype+"' (alias: "+ostype+")"
@@ -127,15 +123,9 @@ def monitor_cpu_disk_and_mem():
     # Startup a CPU monitoring thread/process
     do_forked_resource_monitor()
     
-  elif ostype == 'Windows' or ostype == 'WindowsCE':
+  elif ostype == 'Windows':
     # Now we set up a cpu nanny...
-    # Use an external CPU monitor for WinCE
-    if ostype == 'WindowsCE':
-      nannypath = "\"" + repy_constants.PATH_SEATTLE_INSTALL + 'win_cpu_nanny.py' + "\""
-      cmdline = str(os.getpid())+" "+str(nanny.get_resource_limit("cpu"))+" "+str(repy_constants.CPU_POLLING_FREQ_WINCE)
-      windows_api.launch_python_script(nannypath, cmdline)
-    else:
-      WinCPUNannyThread().start()
+    WinCPUNannyThread().start()
     
     # Launch mem./disk resource nanny
     WindowsNannyThread().start()
@@ -218,7 +208,7 @@ def getruntime():
       last_uptime = uptime
 
   # Check for windows  
-  elif ostype in ["Windows", "WindowsCE"]:   
+  elif ostype in ["Windows"]:   
     # Release the lock
     runtimelock.release()
     
@@ -330,7 +320,7 @@ def get_resources():
 
 
     # Windows Specific versions
-    elif ostype in ["Windows","WindowsCE"]:
+    elif ostype in ["Windows"]:
     
       # Get the CPU time
       usage["cpu"] = windows_api.get_process_cpu_time(pid)
@@ -911,7 +901,7 @@ def resource_monitor(childpid, pipe_handle):
 def calculate_granularity():
   global granularity
 
-  if ostype in ["Windows", "WindowsCE"]:
+  if ostype in ["Windows"]:
     # The Granularity of getTickCount is 1 millisecond
     granularity = pow(10,-3)
     
@@ -954,7 +944,7 @@ elif osrealtype == "Darwin":
   import darwin_api as os_api
 elif osrealtype == "FreeBSD":
   import freebsd_api as os_api
-elif ostype == "Windows" or ostype == "WindowsCE":
+elif ostype == "Windows":
   # There is no real reason to do this, since windows is imported separately
   import windows_api as os_api
 else:
@@ -965,7 +955,7 @@ else:
 calculate_granularity()  
 
 # For Windows, we need to initialize time.clock()
-if ostype in ["Windows", "WindowsCE"]:
+if ostype in ["Windows"]:
   time.clock()
 
 # Initialize getruntime for other platforms 

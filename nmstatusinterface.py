@@ -111,7 +111,7 @@ def stop():
 # It handles some of the nonportable details for nm_interface_thread
 def _stopfile_exit(exitcode, pid):
   # On Windows, we are in the Repy process, so we can just use harshexit
-  if harshexit.ostype in ["Windows", "WindowsCE"]:
+  if harshexit.ostype in ["Windows"]:
     # Harshexit will store the appriopriate status for us
     harshexit.harshexit(exitcode)
 
@@ -150,7 +150,7 @@ class nm_interface_thread(threading.Thread):
     global stopfilename, frequency, run_thread_lock
     
     # On Windows elevate our priority above the user code.
-    if harshexit.ostype in ["Windows", "WindowsCE"]:
+    if harshexit.ostype in ["Windows"]:
       # Elevate our priority, above normal is higher than the usercode
       windows_api.set_current_thread_priority(windows_api.THREAD_PRIORITY_ABOVE_NORMAL)
     

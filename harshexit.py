@@ -62,7 +62,7 @@ def portablekill(pid):
     except:
       pass
 
-  elif ostype == 'Windows' or ostype == 'WindowsCE':
+  elif ostype == 'Windows':
     # Use new api
     windows_api.kill_process(pid)
     
@@ -120,7 +120,7 @@ def harshexit(val):
 #    os._exit(val)
   elif ostype == 'Darwin':
     os._exit(val)
-  elif ostype == 'Windows' or ostype == 'WindowsCE':
+  elif ostype == 'Windows':
     # stderr is not automatically flushed in Windows...
     sys.stderr.flush()
     os._exit(val)
@@ -134,12 +134,7 @@ def init_ostype():
   global ostype
   global osrealtype
 
-  # Detect whether or not it is Windows CE/Mobile
-  if os.name == 'ce':
-    ostype = 'WindowsCE'
-    return
-
-  # figure out what sort of witch we are...
+  # figure out what sort of system we are...
   osrealtype = platform.system()
 
   # The Nokia N800 (and N900) uses the ARM architecture, 

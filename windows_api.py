@@ -17,28 +17,13 @@ import os
 # Used for processing command output (netstat, etc)
 import textops
 
-# Detect whether or not it is Windows CE/Mobile
-MobileCE = False
-if os.name == 'ce':
-  MobileCE = True
-else:
-  import portable_popen
+import portable_popen
 
 # Main Libraries
-# Loaded depending on OS
-if MobileCE:
-  # kerneldll links to the library that has Windows Kernel Calls
-  kerneldll = ctypes.cdll.coredll
-
-  # Toolhelp library
-  # Contains Tool helper functions
-  toolhelp = ctypes.cdll.toolhelp
-
-else:
-  # kerneldll links to the library that has Windows Kernel Calls
-  kerneldll = ctypes.windll.kernel32 
-  # memdll links to the library that has Windows Process/Thread Calls
-  memdll = ctypes.windll.psapi
+# kerneldll links to the library that has Windows Kernel Calls
+kerneldll = ctypes.windll.kernel32 
+# memdll links to the library that has Windows Process/Thread Calls
+memdll = ctypes.windll.psapi
 
 # Types
 DWORD = ctypes.c_ulong # Map Microsoft DWORD type to C long
@@ -137,55 +122,21 @@ except AttributeError: # This means the function does not exist
 
 _free_disk_space = kerneldll.GetDiskFreeSpaceExW # Determines free disk space
 
-# Load CE Specific function
-if MobileCE:
-  # Uses kernel, but is slightly different on desktop
-  _global_memory_status = kerneldll.GlobalMemoryStatus
-  
-  # Things using toolhelp
-  _create_snapshot = toolhelp.CreateToolhelp32Snapshot # Makes snapshot of threads 
-  _close_snapshot = toolhelp.CloseToolhelp32Snapshot # destroys a snapshot 
-  _first_thread = toolhelp.Thread32First # Reads from Thread from snapshot
-  _next_thread = toolhelp.Thread32Next # Reads next Thread from snapshot
-  
-  # Things using kernel
-  # Windows CE uses thread identifiers and handles interchangably
-  # Use internal ce method to handle this
-  # _open_thread_ce
-  
-  # Non-Supported functions:
-  # _process_times, there is no tracking of this on a process level
-  # _process_memory, CE does not track memory usage
-  # _current_thread_id, CE has this defined inline in a header file, so we need to do it
-  # These must be handled specifically
-  # We override this later
-  _current_thread_id = None 
-  
-  # Heap functions only needed on CE for getting memory info
-  _heap_list_first = toolhelp.Heap32ListFirst # Initializes Heap List
-  _heap_list_next = toolhelp.Heap32ListNext # Iterates through the heap list
-  _heap_first = toolhelp.Heap32First # Initializes Heap Entry
-  _heap_next = toolhelp.Heap32Next # Iterates through the Heaps
-  
-  # Non-officially supported methods
-  _get_current_permissions = kerneldll.GetCurrentPermissions
-  _set_process_permissions = kerneldll.SetProcPermissions
 # Load the Desktop Specific functions
-else:
-  # These are in the kernel library on the desktop
-  _open_thread = kerneldll.OpenThread # Returns Thread Handle
-  _create_snapshot = kerneldll.CreateToolhelp32Snapshot # Makes snapshot of threads 
-  _first_thread = kerneldll.Thread32First # Reads from Thread from snapshot
-  _next_thread = kerneldll.Thread32Next # Reads next Thread from snapshot
-  _global_memory_status = kerneldll.GlobalMemoryStatusEx # Gets global memory info
-  _current_thread_id = kerneldll.GetCurrentThreadId # Returns the thread_id of the current thread
-  
-  # These process specific functions are only available on the desktop
-  _process_times = kerneldll.GetProcessTimes # Returns data about Process CPU use
-  _process_memory = memdll.GetProcessMemoryInfo # Returns data on Process mem use
-  
-  # This is only available for desktop, sets the process wide priority
-  _set_process_priority = kerneldll.SetPriorityClass 
+# These are in the kernel library on the desktop
+_open_thread = kerneldll.OpenThread # Returns Thread Handle
+_create_snapshot = kerneldll.CreateToolhelp32Snapshot # Makes snapshot of threads 
+_first_thread = kerneldll.Thread32First # Reads from Thread from snapshot
+_next_thread = kerneldll.Thread32Next # Reads next Thread from snapshot
+_global_memory_status = kerneldll.GlobalMemoryStatusEx # Gets global memory info
+_current_thread_id = kerneldll.GetCurrentThreadId # Returns the thread_id of the current thread
+
+# These process specific functions are only available on the desktop
+_process_times = kerneldll.GetProcessTimes # Returns data about Process CPU use
+_process_memory = memdll.GetProcessMemoryInfo # Returns data on Process mem use
+
+# This is only available for desktop, sets the process wide priority
+_set_process_priority = kerneldll.SetPriorityClass 
   
 
 # Classes
@@ -314,20 +265,6 @@ class _MEMORYSTATUSEX(ctypes.Structure):
                 ('ullAvailVirtual', DWORDLONG),
                 ('ullAvailExtendedVirtual', DWORDLONG)]        
  
-# Python Class which is converted to a C struct
-# It encapsulates data about global memory
-# This version is for WinCE (< 4gb ram)
-# see http://msdn.microsoft.com/en-us/library/bb202730.aspx
-class _MEMORYSTATUS(ctypes.Structure): 
-   _fields_ = [('dwLength', DWORD), 
-               ('dwMemoryLoad', DWORD), 
-               ('dwTotalPhys', DWORD), 
-               ('dwAvailPhys', DWORD),
-               ('dwTotalPageFile', DWORD),
-               ('dwAvailPageFile', DWORD),
-               ('dwTotalVirtual', DWORD),
-               ('dwAvailVirtual', DWORD)]          
-                                
 # Exceptions
 
 class DeadThread(Exception):
@@ -373,11 +310,7 @@ def get_process_threads(pid):
   """
   global _system_thread_count
   
-  # Mobile requires different structuer
-  if MobileCE:
-    thread_class = _THREADENTRY32CE
-  else:
-    thread_class = _THREADENTRY32
+  thread_class = _THREADENTRY32
     
   threads = [] # List object for threads
   current_thread = thread_class() # Current Thread Pointer
@@ -411,8 +344,6 @@ def get_process_threads(pid):
     more_threads = _next_thread(handle, ctypes.pointer(current_thread))
   
   # Cleanup snapshot
-  if MobileCE:
-    _close_snapshot(handle)
   _close_handle(handle)
     
   return threads  
@@ -447,7 +378,6 @@ def get_thread_handle(thread_id):
              The Thread Identifier, for which a handle is returned
   
    <Side Effects>
-     If running on a mobile CE platform, execution permissions will be elevated.
      close_thread_handle must be called before get_thread_handle is called again,
      or permissions will not be set to their original level.
      
@@ -457,13 +387,8 @@ def get_thread_handle(thread_id):
     <Returns>
       Thread Handle
     """
-  # Check if it is CE
-  if MobileCE:
-    # Use the CE specific function
-    handle = _open_thread_ce(thread_id)
-  else:
-    # Open handle to thread
-    handle = _open_thread(THREAD_HANDLE_RIGHTS, 0, thread_id)
+  # Open handle to thread
+  handle = _open_thread(THREAD_HANDLE_RIGHTS, 0, thread_id)
   
   # Check for a successful handle
   if handle: 
@@ -483,12 +408,6 @@ def close_thread_handle(thread_handle):
              The Thread handle which is closed
     """
     
-  # Check if it is CE
-  if MobileCE:
-    # Opening a thread raises permissions,
-    # so we need to revert to default
-    _revert_permissions();
-  
   # Close thread handle
   _close_handle(thread_handle)
     
@@ -789,21 +708,13 @@ def launch_process(application,cmdline = None, priority = NORMAL_PRIORITY_CLASS)
   else:
     cmdline_param = None
   
-  # Adjust for CE
-  if MobileCE:
-    # Not Supported on CE
-    priority = 0
-    window_info_addr = 0
-    # Always use absolute path
-    application = unicode(os.path.abspath(application))
-  else:
-    # For some reason, Windows Desktop uses the first part of the second parameter as the
-    # Application... This is documented on MSDN under CreateProcess in the user comments
-    # Create struct to hold window info
-    window_info = _STARTUPINFO()
-    window_info_addr = ctypes.pointer(window_info)
-    cmdline_param = unicode(application) + " " + cmdline_param
-    application = None
+  # For some reason, Windows Desktop uses the first part of the second parameter as the
+  # Application... This is documented on MSDN under CreateProcess in the user comments
+  # Create struct to hold window info
+  window_info = _STARTUPINFO()
+  window_info_addr = ctypes.pointer(window_info)
+  cmdline_param = unicode(application) + " " + cmdline_param
+  application = None
   
   # Lauch process, and save status
   status = _create_process(
@@ -877,9 +788,6 @@ def set_current_process_priority(priority=PROCESS_NORMAL_PRIORITY_CLASS):
   <Returns>
     True on success, False on failure.
   """
-  # This is not supported, just return True
-  if MobileCE:
-    return True
     
   # Get our pid
   pid = os.getpid()
@@ -994,10 +902,6 @@ def process_times(pid):
     UserTime: the time spent executing user code
   """
   
-  # Check if it is CE
-  if MobileCE:
-    # Use the CE specific function
-    return _process_times_ce(pid)
   
   # Open process handle
   handle = get_process_handle(pid)
@@ -1142,10 +1046,6 @@ def process_memory_info(pid):
     Dictionary with memory data associated with description.
   """
   
-  # Check if it is CE
-  if MobileCE:
-    # Use the CE specific function
-    return _process_memory_info_ce(pid)
     
   # Open process Handle
   handle = get_process_handle(pid)
@@ -1297,7 +1197,6 @@ def exists_outgoing_network_socket(localip, localport, remoteip, remoteport):
   <Purpose>
     Determines if there exists a network socket with the specified unique tuple.
     Assumes TCP.
-    * Not supported on Windows Mobile.
 
   <Arguments>
     localip: The IP address of the local socket
@@ -1308,8 +1207,6 @@ def exists_outgoing_network_socket(localip, localport, remoteip, remoteport):
   <Returns>
     A Tuple, indicating the existence and state of the socket. E.g. (Exists (True/False), State (String or None))
   """
-  if MobileCE:
-    return False 
   
   # This only works if all are not of the None type
   if not (localip and localport and remoteip and remoteport):
@@ -1358,7 +1255,6 @@ def exists_listening_network_socket(ip, port, tcp):
   """
   <Purpose>
     Determines if there exists a network socket with the specified ip and port which is the LISTEN state.
-    *Note: Not currently supported on Windows CE. It will always return False on this platform.
   <Arguments>
     ip: The IP address of the listening socket
     port: The port of the listening socket
@@ -1367,8 +1263,6 @@ def exists_listening_network_socket(ip, port, tcp):
   <Returns>
     True or False.
   """
-  if MobileCE:
-    return False
 
   # This only works if both are not of the None type
   if not (ip and port):
@@ -1402,7 +1296,6 @@ def _fetch_ipconfig_infomation():
   """
   <Purpose>
     Fetch's the information from ipconfig and stores it in a useful format.
-    * Not Supported on Windows Mobile.
   <Returns>
     A dictionary object.
   """
@@ -1471,12 +1364,9 @@ def get_available_interfaces():
   """
   <Purpose>
     Returns a list of available network interfaces.
-    * Not Supported on Windows Mobile.
   <Returns>
     An array of string interfaces
   """
-  if MobileCE:
-    return []
     
   # Get the information from ipconfig
   ipconfig_data = _fetch_ipconfig_infomation()
@@ -1497,15 +1387,12 @@ def get_interface_ip_addresses(interfaceName):
   """
   <Purpose>
     Returns the IP address associated with the interface.
-    * Not Supported on Windows Mobile.
   <Arguments>
     interfaceName: The string name of the interface, e.g. eth0
 
   <Returns>
     A list of IP addresses associated with the interface.
   """
-  if MobileCE:
-    return []
     
   # Get the information from ipconfig
   ipconfig_data = _fetch_ipconfig_infomation()
@@ -1521,151 +1408,6 @@ def get_interface_ip_addresses(interfaceName):
   return []
 
 
-# Windows CE Stuff
-# Internal function, not public
-
-# Get information about a process CPU use times
-# Windows CE does not have a GetProcessTimes function, so we will emulate it
-def _process_times_ce(pid):
-  # Get List of threads related to Process
-  threads = get_process_threads(pid)
-  
-  # Create all the structures needed to make API Call
-  creation_time = _FILETIME()
-  exit_time = _FILETIME()
-  kernel_time = _FILETIME()
-  user_time = _FILETIME()
-  
-  # Create counters for each category
-  # Only adds the "low date time" (see _FILETIME()), since thats what we return
-  creation_time_sum = 0
-  exit_time_sum = 0 # We don't return this, but we keep it anyways
-  kernel_time_sum = 0
-  user_time_sum = 0
-  
-  # Get the process times for each thread
-  for t in threads:
-    # Open handle to thread
-    handle = get_thread_handle(t)
-  
-    # Pass all the structures as pointers into threadTimes
-    _thread_times(handle, ctypes.pointer(creation_time), ctypes.pointer(exit_time), ctypes.pointer(kernel_time), ctypes.pointer(user_time))
-  
-    # Close thread Handle
-    close_thread_handle(handle)
-    
-    # Update all the counters
-    creation_time_sum += creation_time.dwLowDateTime
-    exit_time_sum += exit_time.dwLowDateTime
-    kernel_time_sum += kernel_time.dwLowDateTime
-    user_time_sum += user_time.dwLowDateTime
-  
-  # Return the proper values in a dictionaries
-  return {"CreationTime":creation_time_sum,"KernelTime":kernel_time_sum,"UserTime":user_time_sum}
-
-
-
-# Windows CE does not have a GetProcessMemoryInfo function,
-# so memory usage may be more inaccurate
-# We iterate over all of the process's heap spaces, and tally up the
-# total size, and return that value for all types of usage
-def _process_memory_info_ce(pid):
-  heap_size = 0 # Keep track of heap size
-  heap_list = _HEAPLIST32() # List of heaps
-  heap_entry = _HEAPENTRY32() # Current Heap entry
-  
-  heap_list.dwSize = ctypes.sizeof(_HEAPLIST32)
-  heap_entry.dwSize = ctypes.sizeof(_HEAPENTRY32)
-  
-  # Create Handle to snapshot of all system threads
-  handle = _create_snapshot(TH32CS_SNAPHEAPLIST, pid)
-  
-  # Check if handle was created successfully
-  if handle == INVALID_HANDLE_VALUE:
-    return {}
-  
-  # Attempt to read snapshot
-  if not _heap_list_first( handle, ctypes.pointer(heap_list)):
-    _close_snapshot(handle)
-    _close_handle(handle)
-    return {}
-  
-  # Loop through threads, check for threads associated with the right process
-  more_heaps = True
-  while (more_heaps):
-    
-    # Check if there is a heap entry here
-    if _heap_first(handle, ctypes.pointer(heap_entry), heap_list.th32ProcessID, heap_list.th32HeapID):
-      
-      # Loop through available heaps
-      more_entries = True
-      while more_entries:
-        # Increment the total heap size by the current heap size
-        heap_size += heap_entry.dwBlockSize
-        
-        heap_entry.dwSize = ctypes.sizeof(_HEAPENTRY32)
-        more_entries = _heap_next(handle, ctypes.pointer(heap_entry)) # Go to next Heap entry
-    
-    heap_list.dwSize = ctypes.sizeof(_HEAPLIST32)
-    more_heaps = _heap_list_next(handle, ctypes.pointer(heap_list)) # Go to next Heap List
-  
-  # Cleanup snapshot
-  _close_snapshot(handle)
-  _close_handle(handle)
-  
-  # Since we only have one value, return that for all different possible sets
-  return {'PageFaultCount':heap_size,
-          'PeakWorkingSetSize':heap_size,
-          'WorkingSetSize':heap_size,
-          'QuotaPeakPagedPoolUsage':heap_size,
-          'QuotaPagedPoolUsage':heap_size,
-          'QuotaPeakNonPagedPoolUsage':heap_size,
-          'QuotaNonPagedPoolUsage':heap_size,
-          'PagefileUsage':heap_size,
-          'PeakPagefileUsage':heap_size}  
-
-
-# Windows CE does not have a separate handle for threads
-# Since handles and identifiers are interoperable, just return the ID
-# Set process permissions higher or else this will fail
-def _open_thread_ce(thread_id):
-	# Save original permissions
-	global _original_permissions_ce
-	_original_permissions_ce = _get_process_permissions()
-	
-	# Get full system control
-	_set_current_proc_permissions(CE_FULL_PERMISSIONS)
-	
-	return thread_id
-
-# Sets the permission level of the current process
-def _set_current_proc_permissions(permission):
-	_set_process_permissions(permission)
-
-# Global variable to store permissions
-_original_permissions_ce = None
-
-# Returns the permission level of the current process
-def _get_process_permissions():
-	return _get_current_permissions()
-
-# Reverts permissions to original
-def _revert_permissions():
-	global _original_permissions_ce
-	if not _original_permissions_ce == None:
-		_set_current_proc_permissions(_original_permissions_ce)
-
-# Returns ID of current thread on WinCE
-def _current_thread_id_ce():
-  # We need to check this specific memory address
-  loc = ctypes.cast(0xFFFFC808, ctypes.POINTER(ctypes.c_ulong))
-  # Then follow the pointer to get the value there
-  return loc.contents.value
-
-# Over ride this for CE
-if MobileCE:
-  _current_thread_id = _current_thread_id_ce
-  
 ## Resource Determining Functions
 # For number of CPU's check the %NUMBER_OF_PROCESSORS% Environment variable 
 
@@ -1727,10 +1469,6 @@ def global_memory_info():
     totalVirtual: The size of the user-mode portion of the virtual address space of the calling process, in bytes
     availableVirtual: The amount of unreserved and uncommitted memory currently in the user-mode portion of the virtual address space of the calling process, in bytes.
   """
-  # Check if it is CE
-  if MobileCE:
-    # Use the CE specific function
-    return _global_memory_info_ce()
     
   # Initialize the data structure
   mem_info = _MEMORYSTATUSEX() # Memory usage ints
@@ -1752,22 +1490,3 @@ def global_memory_info():
   "totalVirtual":mem_info.ullTotalVirtual,
   "availableVirtual":mem_info.ullAvailVirtual}
     
-def _global_memory_info_ce():
-  # Initialize the data structure
-  mem_info = _MEMORYSTATUS() # Memory usage ints
-  mem_info.dwLength = ctypes.sizeof(_MEMORYSTATUS)
-  
-  # Make the call
-  _global_memory_status(ctypes.pointer(mem_info))
-  
-  # Return Dictionary
-  return {"load":mem_info.dwMemoryLoad,
-  "totalPhysical":mem_info.dwTotalPhys,
-  "availablePhysical":mem_info.dwAvailPhys,
-  "totalPageFile":mem_info.dwTotalPageFile,
-  "availablePageFile":mem_info.dwAvailPageFile,
-  "totalVirtual":mem_info.dwTotalVirtual,
-  "availableVirtual":mem_info.dwAvailVirtual}
-  
-  
-  

@@ -605,7 +605,7 @@ def do_oddballtests():
       sys.exit(1)
       
   # Windows 
-  elif nonportable.ostype == 'Windows' or nonportable.ostype == 'WindowsCE':
+  elif nonportable.ostype == 'Windows':
     # this is much easier because we don't worry about the path or have 
     # children to worry about.
     p = subprocess.Popen("python repy.py restrictions.default killp_writetodisk.py".split(),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
