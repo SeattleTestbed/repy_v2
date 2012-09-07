@@ -401,7 +401,7 @@ _BUILTIN_OK = [
   'UnicodeTranslateError', 'UserWarning', 'ValueError', 'Warning', 'ZeroDivisionError',
     
   'abs', 'bool', 'cmp', 'complex', 'dict', 'divmod', 'filter', 'float', 
-  'frozenset', 'hex', 'int', 'len', 'list', 'long', 'map', 'max', 'min',
+  'frozenset', 'hex', 'id', 'int', 'len', 'list', 'long', 'map', 'max', 'min',
   'object', 'oct', 'pow', 'range', 'reduce', 'repr', 'round', 'set', 'slice',
   'str', 'sum', 'tuple',  'xrange', 'zip','id',
     
