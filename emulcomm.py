@@ -1962,13 +1962,13 @@ class UDPServerSocket:
       # we acquire the lock because it is possible that the
       # socket was closed/re-opened or that it was set to None,
       # etc.
-      socket = self.socketobj
-      if socket is None:
+      mysocketobj = self.socketobj
+      if mysocketobj is None:
         raise KeyError # Indicates socket is closed
 
       # Try to get a message of any size.   (64K is the max that fits in the 
       # UDP header)
-      message, addr = socket.recvfrom(65535)
+      message, addr = mysocketobj.recvfrom(65535)
       remote_ip, remote_port = addr
 
       # Do some resource accounting
