@@ -98,7 +98,7 @@ def removefile(filename):
 
    <Arguments>
       filename: the name of the file to remove.   It must not contain 
-      characters other than 'a-zA-Z0-9.-_' and cannot be '.', '..' or
+      characters other than 'a-z0-9.-_' and cannot start with a period or
       the empty string.
 
    <Exceptions>
