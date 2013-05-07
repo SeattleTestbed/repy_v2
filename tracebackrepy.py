@@ -205,6 +205,8 @@ def handle_internalerror(error_string, exitcode):
   <Return>
     Shouldn't return because harshexit will always be called.
   """
+  if servicelog:
+    import servicelogger
 
   try:
     print >> sys.stderr, "Internal Error"
