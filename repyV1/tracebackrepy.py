@@ -22,12 +22,8 @@ traceback.linecache = fakelinecache
 # Need to be able to reference the last traceback...
 import sys
 
-# We need the service logger to log internal errors -Brent
-# import servicelogger
-
 # Used to determine whether or not we use the service logger to log internal
 # errors.  Defaults to false. -Brent
-# WARNING: Changing this to True manually may break tracebackrepy
 servicelog = False
 
 # this is the directory where the node manager resides.   We will use this
@@ -35,11 +31,15 @@ servicelog = False
 logdirectory = None
 
 
-# We need to be able to do a harshexit on internal errors.
+# We need the service logger to log internal errors -Brent
+import servicelogger
+
+# We need to be able to do a harshexit on internal errors
 import harshexit
 
-# Get the exception hierarchy
-import exception_hierarchy
+# I'd like to know if it's a "safety concern" so I can tell the user...
+# I'll import the module so I can check the exceptions
+import safety_exceptions
 
 # needed to get the PID
 import os
@@ -56,31 +56,16 @@ TB_SKIP_MODULES = ["repy.py","safe.py","virtual_namespace.py","namespace.py","em
 def initialize(useservlog=False, logdir = '.'):
   global servicelog
   global logdirectory
-
-  if useservlog:
-    import servicelogger
-
   servicelog = useservlog
   logdirectory = logdir
 
 
-def format_exception():
+# Public: this prints the previous exception in a readable way...
+def handle_exception():
   """
-  <Purpose>
-    Creates a string containing traceback and debugging information
-    for the current exception that is being handled in this thread.
-
-  <Side Effects>
-    Calls sys.exc_clear(), so that we know this current exception has been
-    "handled".
-
-  <Returns>
-    A human readable string containing debugging information. Returns
-    None if there is no exception being handled.
-
   This is an example traceback:
   ---
-  Following is a full traceback, and a user traceback.
+  Uncaught exception! Following is a full traceback, and a user traceback.
   The user traceback excludes non-user modules. The most recent call is displayed last.
 
   Full debugging traceback:
@@ -106,12 +91,9 @@ def format_exception():
   Unsafe call: ('__import__',)
   ---
   """
+
   # exc_info() gives the traceback (see the traceback module for info)
   exceptiontype, exceptionvalue, exceptiontraceback = sys.exc_info()
-
-  # Check if there is an exception
-  if exceptiontype is None:
-    return None
  
   # We store a full traceback, and a "filtered" user traceback to help the user
   full_tb = ""
@@ -145,44 +127,36 @@ def format_exception():
       filtered_tb += stack_frame
 
 
-  # Construct the debug string
-  debug_str = "---\nFollowing is a full traceback, and a user traceback.\n" \
-              "The user traceback excludes non-user modules. The most recent call is displayed last.\n\n"
+  # Print some general info
+  print >> sys.stderr, "---\nUncaught exception! Following is a full traceback, and a user traceback.\n" \
+                        "The user traceback excludes non-user modules. The most recent call is displayed last.\n"
 
-  debug_str += "Full debugging traceback:\n" + full_tb + "\n"
-  debug_str += "User traceback:\n" + filtered_tb + "\n"
+  # Print the full traceback first
+  print >> sys.stderr, "Full debugging traceback:\n",full_tb
+      
+  print >> sys.stderr, "User traceback:\n",filtered_tb
+
 
   # When I try to print an Exception object, I get:
   # "<type 'exceptions.Exception'>".   I'm going to look for this and produce
   # more sensible output if it happens.
-  if exceptiontype is exception_hierarchy.CheckNodeException:
-    debug_str += "Unsafe call with line number / type: " + str(exceptionvalue)
-  elif exceptiontype is exception_hierarchy.CheckStrException:
-    debug_str += "Unsafe string on line number / string: " + str(exceptionvalue)
-  elif exceptiontype is exception_hierarchy.RunBuiltinException:
-    debug_str += "Unsafe call: " + str(exceptionvalue)
+
+  if exceptiontype is safety_exceptions.CheckNodeException:
+    print >> sys.stderr, "Unsafe call with line number / type:",str(exceptionvalue)
+
+  elif exceptiontype is safety_exceptions.CheckStrException:
+    print >> sys.stderr, "Unsafe string on line number / string:",exceptionvalue
+
+  elif exceptiontype is safety_exceptions.RunBuiltinException:
+    print >> sys.stderr, "Unsafe call:",exceptionvalue
+
   elif str(exceptiontype)[0] == '<':
-    debug_str += "Exception (with "+str(exceptiontype)[1:-1]+"): " + str(exceptionvalue)
+    print >> sys.stderr, "Exception (with "+str(exceptiontype)[1:-1]+"):", exceptionvalue
   else:
-    debug_str += "Exception (with type "+str(exceptiontype)+"): " + str(exceptionvalue)
+    print >> sys.stderr, "Exception (with type "+str(exceptiontype)+"):", exceptionvalue
 
-  debug_str += "\n---"
-
-  # Clear the exception being handled
-  sys.exc_clear()
-
-  # Return the debug string
-  return debug_str
-
-
-# This function is called when there is an uncaught exception prior to exiting
-def handle_exception():
-  # Get the debug string
-  debug_str = format_exception()
-
-  # Print "Uncaught exception!", followed by the debug string
-  print >> sys.stderr, "---\nUncaught exception!\n",debug_str 
-
+  # Print another line so that the end of the output is clear
+  print >> sys.stderr, "---"
 
 
 def handle_internalerror(error_string, exitcode):
@@ -208,7 +182,6 @@ def handle_internalerror(error_string, exitcode):
 
   try:
     print >> sys.stderr, "Internal Error"
-    handle_exception()
     if not servicelog:
       # If the service log is disabled, lets just exit.
       harshexit.harshexit(exitcode)
