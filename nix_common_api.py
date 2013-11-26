@@ -17,7 +17,12 @@ import portable_popen
 import textops
 
 # Get the standard library
-libc = ctypes.CDLL(ctypes.util.find_library("c"))
+# AR: work around find_library deficiencies on Android
+try:
+  import android
+  libc = ctypes.CDLL("/system/lib/libc.so")
+except ImportError:
+  libc = ctypes.CDLL(ctypes.util.find_library("c"))
 
 # Functions
 _strerror = libc.strerror

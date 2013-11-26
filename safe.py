@@ -317,9 +317,49 @@ def safe_check_subprocess(code):
                     ("+str(nonportable.getruntime() - starttime)+" seconds)"
   
   # Read the output and close the pipe
-  output = proc.stdout.read()
+  rawoutput = proc.stdout.read()
   proc.stdout.close()
-  
+
+
+  # Interim fix for #1080: Get rid of stray debugging output on Android
+  # of the form "dlopen libpython2.6.so" and "dlopen /system/lib/libc.so",
+  # yet preserve all of the other output (including empty lines).
+
+  try:
+    import android
+    output = ""
+    for line in rawoutput.split("\n"):
+      # Preserve empty lines
+      if line == "":
+        output += "\n"
+        continue
+      # Suppress debug messages we know can turn up
+      wordlist = line.split()
+      if wordlist[0]=="dlopen":
+        if wordlist[-1]=="/system/lib/libc.so":
+          continue
+        if wordlist[-1].startswith("libpython") and \
+          wordlist[-1].endswith(".so"):
+          # We expect "libpython" + version number + ".so".
+          # The version number should be a string convertible to float.
+          # If it's not, raise an exception.
+          try:
+            versionstring = (wordlist[-1].replace("libpython", 
+              "")).replace(".so", "")
+            junk = float(versionstring)
+          except TypeError, ValueError:
+            raise Exception("Unexpected debug output '" + line + 
+              "' while evaluating code safety!")
+      else:
+        output += line + "\n"
+
+    # Strip off the last newline character we added
+    output = output[0:-1]
+
+  except ImportError: # We are *not* running on Android, proceed with unfiltered output
+    output = rawoutput
+
+
   # Check the output, None is success, else it is a failure
   if output == "None":
     return True
