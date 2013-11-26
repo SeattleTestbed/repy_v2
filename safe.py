@@ -418,10 +418,20 @@ def safe_type(*args, **kwargs):
     raise exception_hierarchy.RunBuiltinException(
       'type() may only take exactly one non-keyword argument.')
 
-#  # Fix for #1189
+  # Fix for #1189
 #  if _type(args[0]) is _type or _type(args[0]) is _compile_type:
 #    raise exception_hierarchy.RunBuiltinException(
 #      'unsafe type() call.')
+  # JAC: The above would be reasonable, but it is harsh.   The wrapper code for
+  # the encasement library needs to have a way to check the type of things and
+  # these might be inadvertantly be types.   It is hard to know if something
+  # is a type
+  if args[0] == safe_type or args[0] == _type or _type(args[0]) is _type:
+    return safe_type
+
+  if _type(args[0]) is _type or _type(args[0]) is _compile_type:
+    raise exception_hierarchy.RunBuiltinException(
+      'unsafe type() call.')
 
   return _type(args[0])
 
