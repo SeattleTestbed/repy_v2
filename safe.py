@@ -246,6 +246,12 @@ def _check_node(node):
     if attribute in _NODE_ATTR_OK: 
       continue
 
+    # JAC: don't check doc strings for __ and the like... (#889)
+    if attribute == 'doc' and (node.__class__.__name__ in
+      ['Module', 'Function', 'Class']):
+      continue
+
+
     # Check the safety of any strings
     if not _is_string_safe(value):
       raise exception_hierarchy.CheckStrException(node.lineno, attribute, value)
