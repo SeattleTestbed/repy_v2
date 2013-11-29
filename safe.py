@@ -220,7 +220,7 @@ _NODE_ATTR_OK = ['value']
 def _check_node(node):
   """
   <Purpose>
-    Examines a node, it's attributes, and all of its children (recursively) for safety.
+    Examines a node, its attributes, and all of its children (recursively) for safety.
     A node is safe if it is in _NODE_CLASS_OK and an attribute is safe if it is
     not a unicode string and either in _NODE_ATTR_OK or is safe as is 
     defined by _is_string_safe()
@@ -633,7 +633,7 @@ class SafeDict(UserDict.DictMixin):
     SafeDict is used by virtual_namespace (for the safe eval) as the dictionary
     of variables that will be accessible to the running code. The reason it is
     important to prevent unsafe keys is because it is possible to use them to
-    break out of the sandbox. For example, it is possible to change an objects
+    break out of the sandbox. For example, it is possible to change an object's
     private variables by manually bypassing python's name mangling.
   """
 
