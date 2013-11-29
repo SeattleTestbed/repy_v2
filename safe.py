@@ -714,6 +714,20 @@ class SafeDict(UserDict.DictMixin):
     # Return the safe keys
     return safe_keys
 
+  # allow us to be printed
+  # this gets around the __repr__ infinite loop issue ( #918 ) for simple cases
+  # It seems unlikely this is adequate for more complex cases (like safedicts
+  # that refer to each other)
+  def __repr__(self):
+    newdict = {}
+    for safekey in self.keys():
+      if self.__under__[safekey] == self:
+        newdict[safekey] = newdict
+      else:
+        newdict[safekey] = self.__under__[safekey]
+    return newdict.__repr__()
+
+
   # Allow a copy of us
   def copy(self):
     # Create a new instance
