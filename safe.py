@@ -80,6 +80,14 @@ import os           # This is for some path manipulation
 import sys          # This is to get sys.executable to launch the external process
 import time         # This is to sleep
 
+# Currently required to filter out Android-specific debug messages, cf #1080
+# and safe_check() below
+try:
+  import android
+  IS_ANDROID = True
+except ImportError:
+  IS_ANDROID = False
+
 # Hide the DeprecationWarning for compiler
 import warnings
 warnings.simplefilter('ignore')
@@ -325,8 +333,7 @@ def safe_check_subprocess(code):
   # of the form "dlopen libpython2.6.so" and "dlopen /system/lib/libc.so",
   # yet preserve all of the other output (including empty lines).
 
-  try:
-    import android
+  if IS_ANDROID:
     output = ""
     for line in rawoutput.split("\n"):
       # Preserve empty lines
@@ -356,7 +363,7 @@ def safe_check_subprocess(code):
     # Strip off the last newline character we added
     output = output[0:-1]
 
-  except ImportError: # We are *not* running on Android, proceed with unfiltered output
+  else: # We are *not* running on Android, proceed with unfiltered output
     output = rawoutput
 
 
