@@ -110,7 +110,8 @@ subprocess.getattr = getattr
 # Armon: This is how long we will wait for the external process
 # to validate the safety of the user code before we timeout, 
 # and exit with an exception
-EVALUTATION_TIMEOUT = 10
+# AR: Increasing timeout to 15 seconds, see r3410 / #744
+EVALUTATION_TIMEOUT = 15
 
 if platform.machine().startswith('armv'):
   # The Nokia needs more time to evaluate code safety, especially
