@@ -273,6 +273,11 @@ def parse_options(options):
     # let's make it so that the output (via print) is always flushed
     sys.stdout = loggingrepy.flush_logger(sys.stdout)
     
+  # We also need to pass in whether or not we are going to be using the service
+  # log for repy.  We provide the repy directory so that the vessel information
+  # can be found regardless of where we are called from...
+  tracebackrepy.initialize(options.servicelog, repy_constants.REPY_START_DIR)
+
   # Set Current Working Directory
   if options.cwd:
     os.chdir(options.cwd)
@@ -285,13 +290,6 @@ def parse_options(options):
   
   # Write out our initial status
   statusstorage.write_status("Started")
-
-
-  # We also need to pass in whether or not we are going to be using the service
-  # log for repy.  We provide the repy directory so that the vessel information
-  # can be found regardless of where we are called from...
-  tracebackrepy.initialize(options.servicelog, repy_constants.REPY_START_DIR)
-
 
 
 
