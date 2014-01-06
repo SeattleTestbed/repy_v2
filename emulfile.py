@@ -182,7 +182,6 @@ def emulated_open(filename, create):
 
 ##### Private functions
 
-
 def _assert_is_allowed_filename(filename):
   """
   <Purpose>
@@ -220,6 +219,9 @@ def _assert_is_allowed_filename(filename):
   if filename.startswith('.'):
     raise RepyArgumentError("Filename starts with a period, this is not allowed!")
 
+
+# make a copy of the function.
+check_repy_filename = _assert_is_allowed_filename
 
 
 ##### Class Definitions
