@@ -120,11 +120,13 @@ def parse_resourcedict_from_string(resourcestring):
 
     <Returns>
         A dictionary with the resource information.   Resources that are
-        not specified, but are required will be set to 0.0
+        not specified, but are required will be set to 0.0 Also returns
+        the list of calls that were in the original resource string.
   """
 
 
   returned_resource_dict = {}
+  returned_call_list = []
 
   # I must create an empty set for any resource types that are sets.
   # (these are things like messports, etc.)
@@ -201,10 +203,11 @@ def parse_resourcedict_from_string(resourcestring):
 
 
     elif linetypestring == 'call':
-
+      returned_call_list.append(cleanline)
       # it was a call...   I'm going to ignore these because these are obsolete
       # This may be an error later
-      continue
+      # continue
+      # MMM: Added back the 'call's to make it compatible with RepyV1
 
     else:
       raise ResourceParseError("Internal error for '"+line+"'")
@@ -222,7 +225,7 @@ def parse_resourcedict_from_string(resourcestring):
       returned_resource_dict[resource] = 0.0
 
 
-  return returned_resource_dict
+  return returned_resource_dict, '\n'.join(returned_call_list)
 
 
 
@@ -234,7 +237,7 @@ def parse_resourcedict_from_string(resourcestring):
 
 
 
-def write_resourcedict_to_file(resourcedict, filename):
+def write_resourcedict_to_file(resourcedict, filename, call_list=None):
   """
     <Purpose>
         Writes out a resource dictionary to disk...
@@ -242,6 +245,8 @@ def write_resourcedict_to_file(resourcedict, filename):
     <Arguments>
         resourcedict: the dictionary to write out
         filename: the file to write it to
+        call_list: if provided is the list of calls that are allowed
+            (for backward compatibility with Repy V1).
 
     <Exceptions>
         IOError: if the filename cannot be opened or is invalid.
@@ -261,6 +266,8 @@ def write_resourcedict_to_file(resourcedict, filename):
     else:
       print >> outfo, "resource "+resource+" "+str(resourcedict[resource])
 
+  if call_list:
+    print >> outfo, '\n' + str(call_list)
   outfo.close()
 
 
