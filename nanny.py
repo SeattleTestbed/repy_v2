@@ -385,7 +385,7 @@ def start_resource_nanny(resourcefilename):
   global _resources_consumed_dict 
 
   # get the resource information from disk
-  _resources_allowed_dict = resourcemanipulation.read_resourcedict_from_file(resourcefilename)
+  _resources_allowed_dict, call_list = resourcemanipulation.read_resourcedict_from_file(resourcefilename)
 
   # this sets up a dictionary with the correct locks, etc. for tracking
   # resource use.
