@@ -26,6 +26,7 @@
   --ip IP                : This flag informs Repy that it is allowed to bind to the given given IP.
                          : This flag may be asserted multiple times.
                          : Repy will attempt to use IP's and interfaces in the order they are given.
+  --execinfo             : Display information regarding the current execution state. 
   --iface interface      : This flag informs Repy that it is allowed to bind to the given interface.
                          : This flag may be asserted multiple times.
   --nootherips           : Instructs Repy to only use IP's and interfaces that are explicitly given.
@@ -205,6 +206,10 @@ def add_repy_options(parser):
                     action="append", type="string", dest="ip" ,
                     help="Explicitly allow Repy to bind to the specified IP. This option can be used multiple times."
                     )
+  parser.add_option('--execinfo',
+                    action="store_true", dest="execinfo", default=False,
+                    help="Display information regarding the current execution state."
+                    )
   parser.add_option('--iface',
                     action="append", type="string", dest="interface",
                     help="Explicitly allow Repy to bind to the specified interface. This option can be used multiple times."
@@ -293,6 +298,7 @@ def parse_options(options):
 
 
 
+
 def initialize_nanny(resourcefn):
   # start the nanny up and read the resource file.  
   # JAC: Should this take a string instead?
@@ -362,6 +368,17 @@ def main():
 
   # allow the (potentially large) code string to be garbage collected
   del usercode
+
+
+
+  # Insert program log separator and execution information
+  if options.execinfo:
+    print '=' * 40
+    print "Running program:", progname
+    print "Arguments:", progargs
+    print '=' * 40
+
+
 
   # get a new namespace
   newcontext = get_safe_context(progargs)
