@@ -27,9 +27,9 @@
               terminate normally...
 """
 
-include nmclient.repy
-include time.repy
-include testportfiller.repy
+dy_import_module_symbols('nmclient.repy')
+dy_import_module_symbols('time.repy')
+dy_import_module_symbols('testportfiller.repy')
 
 # Runs a single test and prints out whether it succeeded or failed
 def run_test(testname):
