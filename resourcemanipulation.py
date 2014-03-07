@@ -335,7 +335,7 @@ def add_resourcedicts(dict1, dict2):
     if resource not in retdict:
       retdict[resource] = 0.0
 
-    if type(retdict[resource]) != float:
+    if type(retdict[resource]) not in [float, int]:
       raise ResourceMathError("Resource dictionary contain an element of unknown type '"+str(type(retdict[resource]))+"'")
 
     # ... and add this item to what we have.   This is okay for sets or floats
