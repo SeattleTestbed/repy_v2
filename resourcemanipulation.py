@@ -174,9 +174,24 @@ def parse_resourcedict_from_string(resourcestring):
       if knownresourcename not in resource_constants.known_resources:
         raise ResourceParseError("Line '"+line+"' has an unknown resource '"+knownresourcename+"'")
 
-      # and the last item should be a valid float
+      # and the last item should be a valid float or int, 
+      # depending on the resource type (#1374)
       try:
-        resourcevalue = float(resourcevaluestring)
+        # Renewable resources should be cast as floats
+        if knownresourcename in resource_constants.renewable_resources:
+          resourcevalue = float(resourcevaluestring)
+        # Quantity resources includes a few renewable ones too, 
+        # but the ``if'' above already caught these. Treat the 
+        # remaining ones as integer.
+        elif knownresourcename in resource_constants.quantity_resources:
+          resourcevalue = int(resourcevaluestring)
+        # Item resources (bytes of space, port numbers) are integers as well.
+        elif knownresourcename in resource_constants.item_resources:
+          resourcevalue = int(resourcevaluestring)
+        else:
+          raise ResourceParseError("Resource " + knownresourcename + 
+            " in line " + line + " is neither renewable, quantity-based " + 
+            " nor item-based.")
       except ValueError:
         raise ResourceParseError("Line '"+line+"' has an invalid resource value '"+resourcevaluestring+"'")
 
