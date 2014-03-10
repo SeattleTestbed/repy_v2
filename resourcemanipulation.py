@@ -388,7 +388,7 @@ def subtract_resourcedicts(dict1, dict2):
       retdict[resource] = 0.0
 
     # ... if it's a float, we can just subtract...
-    if type(retdict[resource]) == float:
+    if type(retdict[resource]) in [float, int]:
       retdict[resource] = retdict[resource] - dict2[resource]
 
     # otherwise we need to be sure we're only subtracting items that exist
