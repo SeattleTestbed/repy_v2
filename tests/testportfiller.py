@@ -77,6 +77,9 @@ def replace_ports(foundMessports, foundConnports):
     inFile = file(testfile, 'r')
     filestring = inFile.read()
     inFile.close()
+
+    # MMM: We probably need a better way of doing this then just if
+    # statements if we want to expand this in the future.
     # Replace the instances of messport that we can replace
     if len(foundMessports) >= 1:
       filestring = filestring.replace('<messport>', foundMessports[0])
@@ -84,6 +87,10 @@ def replace_ports(foundMessports, foundConnports):
       filestring = filestring.replace('<messport1>', foundMessports[1])
     if len(foundMessports) >= 3:
       filestring = filestring.replace('<messport2>', foundMessports[2])
+    if len(foundMessports) >= 4:
+      filestring = filestring.replace('<messport3>', foundMessports[3])
+    if len(foundMessports) >= 5:
+      filestring = filestring.replace('<messport4>', foundMessports[4])
 
     # Replace the instances of connport that we can replace
     if len(foundConnports) >= 1:
@@ -92,6 +99,10 @@ def replace_ports(foundMessports, foundConnports):
       filestring = filestring.replace('<connport1>', foundConnports[1])
     if len(foundConnports) >= 3:
       filestring = filestring.replace('<connport2>', foundConnports[2])
+    if len(foundConnports) >= 4:
+      filestring = filestring.replace('<connport3>', foundConnports[3])
+    if len(foundConnports) >= 5:
+      filestring = filestring.replace('<connport4>', foundConnports[4])
 				
     # write out the file with our changes
     outFile = file(testfile, 'w')
