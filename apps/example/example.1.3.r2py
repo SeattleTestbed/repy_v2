@@ -1,9 +1,13 @@
 def hello(ip, port, sockobj):
   httpheader = sockobj.recv(512) # Receive HTTP header, but we'll ignore it
   mycontext['pagecount'] = mycontext['pagecount'] + 1
-  sockobj.send("<html><head><title>Hello World</title></head>\
-                <body><h1> Hello World!</h1>\
-                <p>You are visitor "+str(mycontext['pagecount'])+"</body></html>")
+
+  response = ("<html><head><title>Hello World</title></head>"
+              "<body><h1> Hello World!</h1>"
+              "<p>You are visitor "+str(mycontext['pagecount'])+"</body></html>")
+  response = ('HTTP/1.1 200 OK\nContent-Type: text/html\nContent-Length: '+
+              str(len(response))+'\nServer: Seattle Testbed\n\n'+response)
+  sockobj.send(response)
   # close my connection with this user
   sockobj.close()
 
@@ -30,5 +34,5 @@ while True:
   try:
     ret_ip, ret_port, ret_socket = server_socket.getconnection()
     hello(ret_ip, ret_port, ret_socket)
-  except SocketWouldBlockError as e:
-    continue
+  except SocketWouldBlockError:
+    sleep(0.1)

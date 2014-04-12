@@ -19,7 +19,7 @@ createthread(terminate_program)
 while True:
   try:
     log(socketobject.recv(4096), "\n")
-  except SocketWouldBlockError as e:
-    continue
-  except SocketClosedRemote as e:
+  except SocketWouldBlockError:
+    sleep(0.1)
+  except SocketClosedRemote:
     break

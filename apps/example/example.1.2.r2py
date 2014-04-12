@@ -32,5 +32,5 @@ while True:
     ret_ip, ret_port, ret_socket = server_socket.getconnection()
     hello(ret_ip, ret_port, ret_socket)
 
-  except SocketWouldBlockError as e:
-    continue
+  except SocketWouldBlockError:
+    sleep(0.1)

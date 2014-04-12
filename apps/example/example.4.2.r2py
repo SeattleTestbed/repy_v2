@@ -14,12 +14,10 @@ def decode_NTP_packet(ip, port, mess, sockobj):
   log("NTP Transmit Time (in seconds since Jan 1st, 1900):", convert_timestamp_to_float(mess[40:48]), '\n')
   sockobj.close()
 
-
 timeservers = ["time-a.nist.gov", "time-b.nist.gov", "time-a.timefreq.bldrdoc.gov",
                "time-b.timefreq.bldrdoc.gov", "time-c.timefreq.bldrdoc.gov",
-               "utcnist.colorado.edu", "time.nist.gov", "time-nw.nist.gov",
-               "nist1.symmetricom.com", "nist1-dc.WiTime.net", "nist1-ny.WiTime.net",
-               "nist1-sj.WiTime.net", "nist.expertsmi.com", "nist.netservicesgroup.com"]
+               "utcnist.colorado.edu", "time.nist.gov", "nist1.symmetricom.com",
+               "nist.netservicesgroup.com"]
 
 # choose a random time server from the list
 servername = timeservers[int(randomfloat()*len(timeservers))]
@@ -41,7 +39,7 @@ while True:
   try:
     remoteip, remoteport, message = udpserversocket.getmessage()
     decode_NTP_packet(remoteip, remoteport, message, udpserversocket)
-  except SocketWouldBlockError as e:
-    continue
-  except SocketClosedLocal as e:
+  except SocketWouldBlockError:
+    sleep(0.1)
+  except SocketClosedLocal:
     break
