@@ -1,0 +1,3 @@
+log(gethostbyname("www.google.com"), "\n")
+log(gethostbyname("www.wikipedia.com"), "\n")
+log(getmyip(), "\n")

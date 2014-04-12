@@ -1,0 +1,16 @@
+# In repyV2 we use openfile(filename, create)
+# Boolean value decide whether creating file if such file doesn't exist
+myfileobject = openfile("hello.file", True)
+
+# Use fileobject.writeat(data, offset) to write data into file
+myfileobject.writeat("hello world\n", 0)
+
+myfileobject.close()
+
+newfileobject = openfile("hello.file", False)
+
+# Use fileobject.readat(sizelimit, offset) to read data from file
+myfilecontent = newfileobject.readat(None, 0)
+
+log(myfilecontent)
+newfileobject.close()

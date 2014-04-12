@@ -1,0 +1,52 @@
+def hello(ip, port, sockobj):
+  try:
+    httpheader = sockobj.recv(512) # Receive HTTP header, but we'll ignore it
+  except SocketWouldBlockError as e:
+    sockobj.close()
+    return
+  mycontext['pagecount'] = mycontext['pagecount'] + 1
+  sockobj.send("<html><head><title>Hello World</title></head>\
+                <body><h1> Hello World!</h1>\
+                <p>You are visitor "+str(mycontext['pagecount'])+"</body></html>")
+  # close my connection with this user
+  sockobj.close()
+
+
+def close_after(t):
+  def sleep_for():
+    # after sleeping t sec, close the server
+    sleep(t)
+    exitall()
+  return sleep_for
+
+
+mycontext['pagecount'] = 0
+
+if len(callargs) > 1:
+  raise Exception("Too many call arguments")
+
+# Running remotely: whenever this vessel gets a connection
+# on its IPaddress:Clearinghouseport it'll call hello
+elif len(callargs) == 1:
+  port = int(callargs[0])
+  ip = getmyip()
+
+# Running locally: whenever we get a connection
+# on 127.0.0.1:12345 we'll call hello
+else:
+  port = 12345
+  ip = '127.0.0.1'
+
+server_socket = listenforconnection(ip, port)
+close_server = close_after(60)
+createthread(close_server)
+
+while True:
+  try:
+    ret_ip, ret_port, ret_socket = server_socket.getconnection()
+    hello(ret_ip, ret_port, ret_socket)
+  except SocketWouldBlockError as e:
+    continue
+  except SocketClosedLocal as e:
+    log("The server is going to close now!\n")
+    break

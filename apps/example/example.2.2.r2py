@@ -1,0 +1,15 @@
+for filename in callargs:   # callargs has all of the command line arguments in it.
+
+  myfileobject = openfile(filename, True)
+  myfileobject.writeat("hello world\n", 0)
+  myfileobject.close()
+
+  # Check the list of file names for files in the vessel by listfiles()
+  # This may include things other than our files.
+  myfilelist = listfiles()
+  log(myfilelist)
+
+for filename in callargs:   # let's remove our files now...
+  removefile(filename)
+
+log("\nThe files: " + str(callargs) + " should now be missing from " + str(listfiles()))
