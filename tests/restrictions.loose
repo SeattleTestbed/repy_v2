@@ -19,6 +19,8 @@ resource messport <messport1>
 resource connport <connport1>
 resource messport <messport2>
 resource connport <connport2>
+resource connport <connport3> # Extra port that can be used as source port.
+resource connport <connport4> # Extra port that can be used as source port.
 
 call gethostbyname_ex allow
 call sendmess allow
