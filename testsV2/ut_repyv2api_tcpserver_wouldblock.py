@@ -2,7 +2,7 @@
 This test checks that a listening TCP socket throws
 a SocketWouldBlockError if there are no connections waiting.
 """
-#pragma repy
+#pragma repy restrictions.fixed
 
 ip = "127.0.0.1"
 port = 12345

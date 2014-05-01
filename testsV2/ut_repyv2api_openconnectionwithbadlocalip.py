@@ -1,7 +1,7 @@
 """
 Check that connecting from a non-local IP will result in an AddressBindingError
 """
-#pragma repy
+#pragma repy restrictions.fixed
 
 localip = "1.2.3.4"
 localport = 12345

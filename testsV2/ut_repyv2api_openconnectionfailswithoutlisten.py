@@ -2,7 +2,7 @@
 Check that connecting where there isn't a listener will give the appropriate
 exception
 """
-#pragma repy
+#pragma repy restrictions.fixed
 
 localip = "127.0.0.1"
 localport = 12345

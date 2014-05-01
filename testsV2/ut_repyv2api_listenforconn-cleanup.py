@@ -3,7 +3,7 @@ This unit test checks that we do not get a DuplicateTupleError if you
 try to listen on an IP/Port pair that is was in use, but was
 closed.
 """
-#pragma repy
+#pragma repy restrictions.fixed
 
 ip = "127.0.0.1"
 port = 12345

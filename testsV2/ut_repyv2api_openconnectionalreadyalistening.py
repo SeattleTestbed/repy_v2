@@ -1,7 +1,7 @@
 """
 Check that open after listen is forbidden.
 """
-#pragma repy
+#pragma repy restrictions.fixed
 
 localip = "127.0.0.1"
 localport = 12345

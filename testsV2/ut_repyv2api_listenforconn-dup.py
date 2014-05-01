@@ -2,7 +2,7 @@
 This unit test checks that we get a AlreadyListeningError if you
 try to listen on an IP/Port pair that is already in use.
 """
-#pragma repy
+#pragma repy restrictions.fixed
 
 ip = "127.0.0.1"
 port = 12345

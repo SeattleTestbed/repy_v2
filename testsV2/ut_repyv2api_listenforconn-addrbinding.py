@@ -2,7 +2,7 @@
 This unit test checks that we get a AddressBindingError
 when providing bad IP's to listenforconnection.
 """
-#pragma repy
+#pragma repy restrictions.fixed
 
 PORT = 12345
 

@@ -2,7 +2,7 @@
 This test checks that a successful listenforconnection
 consumes an insocket.
 """
-#pragma repy
+#pragma repy restrictions.fixed
 
 ip = "127.0.0.1"
 port = 12345
