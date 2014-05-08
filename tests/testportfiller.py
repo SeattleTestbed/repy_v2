@@ -72,7 +72,8 @@ def replace_ports(foundMessports, foundConnports):
       glob.glob("re_*.py") + glob.glob("rl_*.py") +glob.glob("s_*.py") + \
       glob.glob("n_*.py") + glob.glob("z_*.py") + glob.glob("b_*.py") + \
       glob.glob("u_*.py") + glob.glob("e_*.py") + glob.glob("l_*.py") + \
-      glob.glob("ut_*.repy") + glob.glob('restrictions.*'):
+      glob.glob("ut_*.repy") + glob.glob("ut_*.r2py") + \
+      glob.glob('restrictions.*'):
     # read in the initial file
     inFile = file(testfile, 'r')
     filestring = inFile.read()

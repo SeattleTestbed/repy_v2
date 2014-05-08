@@ -6,7 +6,7 @@
    Description:
    
    Provides a unique ID when requested...
-   This really should use uniqueid.repy
+   This really should use uniqueid.r2py
 """
 
 import threading        # to get the current thread name and a lock

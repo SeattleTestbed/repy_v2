@@ -31,11 +31,11 @@ do
    rfile=`echo $file | awk -F_ '{print $2}'`
    echo | awk '{printf("Running test %-50s [","'$file'");}'
    python $file > $file.python
-   python ../repy.py --simple $rfile $file > $file.repy
-   if diff -q $file.python $file.repy > /dev/null
+   python ../repy.py --simple $rfile $file > $file.r2py
+   if diff -q $file.python $file.r2py > /dev/null
    then
       echo " PASS ]"
-      rm $file.python $file.repy
+      rm $file.python $file.r2py
       pass=`expr $pass + 1`
    else   
       echo "FAILED]"
@@ -158,11 +158,11 @@ do
    fi
    echo | awk '{printf("Running test %-50s [","'$file'");}'
    python $file > $file.python
-   python ../repy.py --simple $rfile $file > $file.repy
-   if diff -q $file.python $file.repy > /dev/null
+   python ../repy.py --simple $rfile $file > $file.r2py
+   if diff -q $file.python $file.r2py > /dev/null
    then
       echo " PASS ]"
-      rm $file.python $file.repy
+      rm $file.python $file.r2py
       pass=`expr $pass + 1`
    else   
       echo "FAILED]"

@@ -26,7 +26,7 @@ import traceback
 
 # We don't import from repyportability because when this is imported from
 # within repy, restrictions files are no longer honored.
-#begin include servicelookup.repy
+#begin include servicelookup.r2py
 """
 <Program>
   servicelookup.py
@@ -43,10 +43,10 @@ import traceback
   
 """
 
-#begin include rsa.repy
+#begin include rsa.r2py
 """
 <Program Name>
-  random.repy
+  random.r2py
 
 <Started>
   2008-04-23
@@ -55,7 +55,7 @@ import traceback
   Modified by Anthony Honstain from the following code:
     PyCrypto which is authored by Dwayne C. Litzenberger
     
-    Seattle's origional rsa.repy which is Authored by:
+    Seattle's origional rsa.r2py which is Authored by:
       Adapted by Justin Cappos from the version by:
         author = "Sybren Stuvel, Marloes de Boer and Ivo Tamboer"
 
@@ -68,10 +68,10 @@ import traceback
     
 """
 
-#begin include random.repy
+#begin include random.r2py
 """ 
 <Program Name>
-  random.repy
+  random.r2py
 
 <Author>
   Justin Cappos: random_sample
@@ -109,7 +109,7 @@ import traceback
       
 """
 
-#begin include math.repy
+#begin include math.r2py
 """ Justin Cappos -- substitute for a few python math routines"""
 
 def math_ceil(x):
@@ -174,7 +174,7 @@ def math_log(X, base=math_e, epsilon=1e-16):
   return (integer + decimal)
 
 
-#end include math.repy
+#end include math.r2py
 
 def random_randombytes(num_bytes, random_float=None):
   """
@@ -610,11 +610,11 @@ def random_sample(population, k):
 
   return retlist
 
-#end include random.repy
-#begin include pycryptorsa.repy
+#end include random.r2py
+#begin include pycryptorsa.r2py
 """
 <Program Name>
-  pycrypto.repy
+  pycrypto.r2py
 
 <Started>
   2009-01
@@ -624,7 +624,7 @@ def random_sample(population, k):
     PyCrypto which is authored by Dwayne C. Litzenberger
     
 <Purpose>
-  This file provides the encryption functionality for rsa.repy. 
+  This file provides the encryption functionality for rsa.r2py. 
   This code has been left as close to origional as possible with
   the notes about changes made to enable for easier modification
   if pycrypto is updated. 
@@ -638,9 +638,9 @@ def random_sample(population, k):
 
 """
 
-#begin include random.repy
-#already included random.repy
-#end include random.repy
+#begin include random.r2py
+#already included random.r2py
+#end include random.r2py
 
 #
 #   pubkey.py : Internal functions for public key operations
@@ -1383,7 +1383,7 @@ def number_getPrime(N, randfunc=None):
     # This will use a bitwise OR to ensure the number is odd
     #origional: number=getRandomNumber(N, randfunc) | 1
     
-    # Anthony - changed this again, now that random.repy
+    # Anthony - changed this again, now that random.r2py
     # includes a function to get a random N bit number
     # that can be used instead.
     #number = random_randint(2**(N-1), 2**N - 1) | 1
@@ -1586,7 +1586,7 @@ def _import_Random():
     Modified _slowmath_RSAKey.has_private and  _slowmath_RSAKey.has_public
     to no longer use hasattr because repy no longer allows hasattr.
     The code was borrowed from the fix for RSA.py (Note: RSA.py is
-    lumped together with the other modules to get pycryptorsa.repy
+    lumped together with the other modules to get pycryptorsa.r2py
     before distribution.
 """
 
@@ -1728,7 +1728,7 @@ def _slowmath_rsa_construct(n=None, e=None, d=None, p=None, q=None, u=None):
     if u is not None: obj.u = u
     return obj
 
-#end include pycryptorsa.repy
+#end include pycryptorsa.r2py
     
      
         
@@ -2529,7 +2529,7 @@ def rsa_matching_keys(privatekey, publickey):
   
   # Test for a match
   return (testmessage == decryptedmessage)
-#end include rsa.repy
+#end include rsa.r2py
 
 def servicelookup_get_servicevessels(vesseldict, ownerkey, ownerinfo):
   """
@@ -2547,7 +2547,7 @@ def servicelookup_get_servicevessels(vesseldict, ownerkey, ownerinfo):
   return ret
 
 
-#end include servicelookup.repy
+#end include servicelookup.r2py
 
 
 logfile = None

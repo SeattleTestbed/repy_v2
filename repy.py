@@ -19,7 +19,7 @@
   The CPU, memory, disk usage, and network bandwidth are all limited.
 
 <Usage>
-  Usage: repy.py [options] resourcefn program_to_run.repy [program args]
+  Usage: repy.py [options] resourcefn program_to_run.r2py [program args]
 
   Where [options] are some combination of the following:
 
@@ -329,7 +329,7 @@ def main():
 
   ### PARSE OPTIONS.   These are command line in our case, but could be from
   ### anywhere if this is repurposed...
-  usage = "USAGE: repy.py [options] resource_file program_to_run.repy [program args]"
+  usage = "USAGE: repy.py [options] resource_file program_to_run.r2py [program args]"
   parser = optparse.OptionParser(usage=usage)
   add_repy_options(parser)
   options, args = parser.parse_args()

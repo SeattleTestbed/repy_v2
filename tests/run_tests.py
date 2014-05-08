@@ -324,7 +324,7 @@ def do_actual_test(testtype, restrictionfn, testname, is_python_test):
       pyerr = testerr
     
     capture_test_result(testname, pyout, pyerr, ".py")
-    capture_test_result(testname, testout, testerr, ".repy")
+    capture_test_result(testname, testout, testerr, ".r2py")
 
     same = True
 
@@ -347,7 +347,7 @@ def do_actual_test(testtype, restrictionfn, testname, is_python_test):
     else:
       (testout, testerr) = exec_repy_script(testname, restrictionfn, {'status':'foo'})
     
-    capture_test_result(testname, testout, testerr, ".repy")
+    capture_test_result(testname, testout, testerr, ".r2py")
     
     if (not mobileNoSubprocess) and testout != '' and testerr == '':
       return True
@@ -364,7 +364,7 @@ def do_actual_test(testtype, restrictionfn, testname, is_python_test):
     else:
       (testout, testerr) = exec_repy_script(testname, restrictionfn, {'status':'foo'})
     
-    capture_test_result(testname, testout, testerr, ".repy")
+    capture_test_result(testname, testout, testerr, ".r2py")
     
     if (not mobileNoSubprocess) and testout == '' and testerr != '':
       return True
@@ -381,7 +381,7 @@ def do_actual_test(testtype, restrictionfn, testname, is_python_test):
     else:
       (testout, testerr) = exec_repy_script(testname, restrictionfn, {'status':'foo'})
     
-    capture_test_result(testname, testout, testerr, ".repy")
+    capture_test_result(testname, testout, testerr, ".r2py")
     
     if testout == '' and testerr == '':
       return True
@@ -396,7 +396,7 @@ def do_actual_test(testtype, restrictionfn, testname, is_python_test):
     else:
       (testout, testerr) = exec_repy_script(testname, restrictionfn, {'status':'foo'})
     
-    capture_test_result(testname, testout, testerr, ".repy")
+    capture_test_result(testname, testout, testerr, ".r2py")
     
     if (not mobileNoSubprocess) and testout != '' and testerr != '':
       return True
@@ -421,7 +421,7 @@ def do_actual_test(testtype, restrictionfn, testname, is_python_test):
     else:
       (testout, testerr) = exec_repy_script(testname, restrictionfn, {'status':'foo'})
       
-    capture_test_result(testname, testout, testerr, ".repy")
+    capture_test_result(testname, testout, testerr, ".r2py")
 
     # first, check to make sure there was no output or error
     if mobileNoSubprocess or (testout == '' and testerr == ''):
@@ -826,7 +826,7 @@ if len(sys.argv) > 1 and sys.argv[1] == "-threaderr":
   logstream.write("INFO: Please be patient. This may take awhile to complete. Start time: "+str(start)+"\n")
   
   # First, run the test
-  (testout, testerr) = exec_repy_script("testthreadingerr.repy", "restrictions.insane", {'status':'threadtest_status'})
+  (testout, testerr) = exec_repy_script("testthreadingerr.r2py", "restrictions.insane", {'status':'threadtest_status'})
   
   # Check for the status file
   files = glob.glob("threadtest_status-*")
@@ -896,7 +896,7 @@ if len(sys.argv) > 1 and sys.argv[1] == "-nm-network":
   exec_command("python nminit.py")
   
   # Pre-process our helper file
-  exec_command("python repypp.py helper_uploadstartprintlog.repy helper_uploadstartprintlog.py")
+  exec_command("python repypp.py helper_uploadstartprintlog.r2py helper_uploadstartprintlog.py")
   
   # We need getmyip()
   import misc
