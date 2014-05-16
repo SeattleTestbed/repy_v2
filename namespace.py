@@ -1173,8 +1173,9 @@ class NamespaceAPIFunctionWrapper(object):
 
       if len(args_to_check) != len(self.__args):
         if not self.__args or not isinstance(self.__args[-1:][0], NonCopiedVarArgs):
-          raise RepyArgumentError("Wrong number of arguments (%s) when calling %s." %
-                                  (len(args_to_check), self.__func_name))
+          raise RepyArgumentError("Function '" + self.__func_name + 
+              "' takes " + str(len(self.__args)) + " arguments, not " + 
+              str(len(args_to_check)) + " as you provided.")
 
       args_copy = self._process_args(args_to_check)
 
