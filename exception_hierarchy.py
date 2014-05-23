@@ -33,6 +33,7 @@ _EXPORTED_EXCEPTIONS = ["RepyException",
                         "SocketClosedLocal",
                         "SocketClosedRemote",
                         "SocketWouldBlockError",
+                        "TCPServerSocketInvalidError",
                         "TimeoutError",
                        ]
 
@@ -253,3 +254,9 @@ class SocketWouldBlockError (NetworkError):
   This indicates that the socket operation would have blocked.
   """
   pass
+
+class TCPServerSocketInvalidError(NetworkError):
+  """
+  This indicates that the TCP server socket has become invalid, e.g. 
+  because the local IP address changed.
+  """
