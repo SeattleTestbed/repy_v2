@@ -1,2 +1,0 @@
-exitall()
-print "hi"

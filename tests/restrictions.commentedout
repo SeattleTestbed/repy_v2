@@ -1,3 +1,0 @@
-#resource cpu 10
-#resource memory 1500000000
-#resource diskused 10000000 # 10 MB

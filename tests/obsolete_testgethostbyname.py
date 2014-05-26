@@ -1,2 +1,0 @@
-myname = gethostname()
-gethostbyname(myname)
