@@ -488,7 +488,9 @@ _BUILTIN_STR = ['copyright','credits','license','__name__','__doc__',]
 def _replace_unsafe_builtin(unsafe_call):
   # This function will replace any unsafe built-in function
   def exceptionraiser(*vargs,**kargs):
-    raise exception_hierarchy.RunBuiltinException(unsafe_call)
+    raise exception_hierarchy.RunBuiltinException("Unsafe call '" + 
+        str(unsafe_call) + "' with args '" + str(vargs) + "', kwargs '" + 
+        str(kargs) + "'")
   return exceptionraiser
 
 
