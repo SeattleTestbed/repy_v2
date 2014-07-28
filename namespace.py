@@ -582,7 +582,7 @@ class DictOrSafeDict(ObjectProcessor):
   # references are maintained.
   def check(self, val):
     if type(val) is not dict:
-      SafeDict(val).check()
+      SafeDict().check(val)
 
 
 
