@@ -7,4 +7,4 @@ seash
 softwareupdater
 nodemanager
 affix
-dist -b git-aware-buildscripts
+dist -b new_build
