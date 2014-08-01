@@ -7,4 +7,4 @@ seash
 softwareupdater
 nodemanager
 affix
-dist -b new_build
+dist -b new_build_v1
