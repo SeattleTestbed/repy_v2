@@ -1,12 +1,8 @@
-affix/*
 repy_v2/*
-nodemanager/*
 portability/*
 seattlelib_v2/*
-repy_v1/*
 seash/*
 clearinghouse/*
-softwareupdater/*
 dist/LICENSE.TXT
 # Tests
 test repy_v2/tests/*
