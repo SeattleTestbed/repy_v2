@@ -5,9 +5,8 @@ seash/*
 clearinghouse/*
 dist/LICENSE.TXT
 # Tests
-test repy_v2/tests/*
 test repy_v2/testsV2/*
-test nodemanager/tests/*
 test portability/tests/*
 test seash/tests/*
 test seattlelib_v2/tests/*
+test clearinghouse/tests/*
