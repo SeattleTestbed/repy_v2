@@ -3,7 +3,7 @@ portability/*
 seattlelib_v2/*
 seash/*
 clearinghouse/*
-dist/LICENSE.TXT
+dist/LICENSE.txt
 # Tests
 test repy_v2/testsV2/*
 test portability/tests/*
