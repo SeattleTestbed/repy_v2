@@ -7,7 +7,7 @@ repy_v1/*
 seash/*
 clearinghouse/*
 softwareupdater/*
-dist/LICENSE.TXT
+dist/LICENSE.txt
 # Tests
 test repy_v2/tests/*
 test repy_v2/testsV2/*
