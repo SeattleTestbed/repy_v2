@@ -1,3 +1,5 @@
+affix/*
+affix/components/*
 repy_v2/*
 portability/*
 seattlelib_v2/*
@@ -11,4 +13,3 @@ test portability/tests/*
 test seash/tests/*
 test seattlelib_v2/tests/*
 test clearinghouse/tests/*
-test utf/tests/*
