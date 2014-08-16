@@ -1,0 +1,15 @@
+affix/*
+affix/components/*
+repy_v2/*
+portability/*
+seattlelib_v2/*
+seash/*
+clearinghouse/*
+utf/*
+dist/LICENSE.txt
+# Tests
+test repy_v2/testsV2/*
+test portability/tests/*
+test seattlelib_v2/tests/*
+test clearinghouse/tests/*
+test nodemanager/tests/restrictions.test
