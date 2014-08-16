@@ -10,6 +10,6 @@ dist/LICENSE.txt
 # Tests
 test repy_v2/testsV2/*
 test portability/tests/*
-test seash/tests/*
 test seattlelib_v2/tests/*
 test clearinghouse/tests/*
+test nodemanager/tests/restrictions.test
