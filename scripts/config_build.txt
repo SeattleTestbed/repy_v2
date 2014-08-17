@@ -4,6 +4,8 @@ dependencies/affix/components/*
 dependencies/portability/*
 dependencies/seattlelib_v2/*
 dependencies/seash/*
+common/*
+common/utf/*
 # Tests
 test ../testsV2/*
 test dependencies/portability/tests/*
