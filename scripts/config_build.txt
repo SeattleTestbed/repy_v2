@@ -1,15 +1,10 @@
-affix/*
-affix/components/*
-repy_v2/*
-portability/*
-seattlelib_v2/*
-seash/*
-clearinghouse/*
-utf/*
-dist/LICENSE.txt
+dependencies/affix/*
+dependencies/affix/components/*
+../*
+dependencies/portability/*
+dependencies/seattlelib_v2/*
+dependencies/seash/*
 # Tests
-test repy_v2/testsV2/*
-test portability/tests/*
-test seattlelib_v2/tests/*
-test clearinghouse/tests/*
-test nodemanager/tests/restrictions.test
+test ../testsV2/*
+test dependencies/portability/tests/*
+test dependencies/seattlelib_v2/tests/*

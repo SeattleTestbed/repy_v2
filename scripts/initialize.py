@@ -38,4 +38,9 @@ for line in config_file.readlines():
      stdout = subprocess.PIPE, stderr = subprocess.PIPE )
   (out, error) = pr.communicate()
   print "Done!"
+  
+if os.path.exists("readme.txt"):
+  with open('readme.txt', 'r') as content_file:
+    print content_file.read()
+    
 
