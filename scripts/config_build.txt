@@ -1,12 +1,10 @@
-dependencies/affix/*
-dependencies/affix/components/*
+affix/*
+affix/components/*
 ../*
-dependencies/portability/*
-dependencies/seattlelib_v2/*
-dependencies/seash/*
+portability/*
+seattlelib_v2/*
+seash/*
 common/*
 common/utf/*
 # Tests
 test ../testsV2/*
-test dependencies/portability/tests/*
-test dependencies/seattlelib_v2/tests/*
