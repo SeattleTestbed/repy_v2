@@ -1,3 +1,3 @@
 #!/bin/bash
-cd "../dependencies/common/"
+cd "../DEPENDENCIES/common/"
 python build.py $*
