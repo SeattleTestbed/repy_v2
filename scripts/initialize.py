@@ -13,7 +13,11 @@
   * Run this script: 
       ``python initialize.py''
   * The dependencies will be checked out into ``../DEPENDENCIES''.
-   
+
+<Note>
+  While this file is redistributed with every buildable Seattle repo, 
+  the ``master copy'' (and thus the most up-to-date version) is kept 
+  at https://github.com/SeattleTestbed/buildscripts
 """
 
 import subprocess
