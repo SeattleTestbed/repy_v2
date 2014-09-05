@@ -1,24 +1,18 @@
 """
 <Program>
   initialize.py 
-  
-<Date Started>
-  July 5th, 2014
-
-<Author>
-  Chintan Choksi
 
 <Purpose>
-  This script does a git check-out of all the dependent repositories 
-  to the current directory.
-  
+  This script does a ``git clone'' of all the dependent repositories
+  of a Seattle component.
+
 <Usage>
   * Clone the repository you would like to build on your machine, e.g. using 
       ``git clone https://github.com/SeattleTestbed/seash''
   * Change into the ``scripts'' subdirectory
   * Run this script: 
       ``python initialize.py''
-  * The dependencies will be checked out into the current directory.
+  * The dependencies will be checked out into ``../DEPENDENCIES''.
    
 """
 
@@ -31,7 +25,7 @@ config_file = open("config_initialize.txt")
 
 for line in config_file.readlines():
   # Ignore comments and blank lines
-  if line.startswith("#") or line.strip == '':
+  if line.startswith("#") or line.strip() == '':
     continue
 
   # If we end up here, the line contains a Git URL (+options?) for us to clone
