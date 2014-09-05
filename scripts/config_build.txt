@@ -1,6 +1,6 @@
+./*
 DEPENDENCIES/affix/*
 DEPENDENCIES/affix/components/*
-./*
 DEPENDENCIES/portability/*
 DEPENDENCIES/seattlelib_v2/*
 DEPENDENCIES/seash/*
