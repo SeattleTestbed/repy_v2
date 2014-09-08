@@ -1,0 +1,467 @@
+'''
+<Program>
+  allpairspingmap.r2py
+
+<Purpose>
+  This program gives a visual representation of the vessels that a user has
+  acquired.  It includes a map that contains markers on where the vessels are
+  reported to be, according to the geoip client.
+
+<Usage>
+  A file containing the ip addresses of all the vessels to contact must be 
+  uploaded.  This file should be named 'neighboriplist.txt'.  Each line should 
+  contain one vessel.  This file can be prepared within seash by issuing the 
+  following command within a group:
+    show ip to neighboriplist.txt
+  
+  Additionally, the following files (which are provided) need to be uploaded to
+  the vessels:
+    jquerygmaps.js
+    style.css
+    map_marker_icon.png
+    map_marker_icon_blue.png
+
+  Once this is set up, you need to pass your Clearinghouse port to the program
+  as an argument:
+    username@group> run allpairspingmap.r2py [port number]
+
+'''
+
+dy_import_module_symbols('geoip_client.r2py')
+
+
+class InvalidRequestError(Exception):
+  ''' The user made a request for a nonexistent file. '''
+
+
+# These are the paths that the web server will serve files for.
+# This is to prevent clients from seeing anything else that we might not want
+# them to be able to see.
+#
+# '':
+#   Index file. We generate a webpage representing the current program status
+#
+# style.css:
+#   Stylesheet that controls how the webpage is formatted.  Without this,
+#   the map will not render correctly.
+#
+# jquerygmaps.js:
+#   Contains code that interfaces against google's MapV2 API.
+#
+# map_marker_icon.png:
+#   This image is used as a marker for where the vessels are, on the map.
+
+mycontext['RECOGNIZED_FILES'] = (
+  '', 'style.css', 'jquerygmaps.js', 'map_marker_icon.png', 'map_marker_icon_blue.png')
+
+
+# When responding to HTTP requests, we need to include a MIME type, identifying
+# the type of file that we are serving to the HTTP client.  This dictionary
+# maps a file extension to its common MIME type.
+mycontext['MIME_TYPES'] = {
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.png': 'image/png'
+  }
+
+
+
+def probe_neighbors_forever():
+  '''
+  <Purpose>
+    Send a probe message to each neighbor
+
+  <Arguments>
+    port: The clearinghouse port assigned to the current user.
+
+  <Side Effects>
+    Starts the ping loop to calculate the latency between the local node
+    and neighboring nodes.  We also send our latency data to each node.
+
+  <Exceptions>
+    None
+
+  <Returns>
+    None
+  '''
+  while True:
+    for neighborip in mycontext["neighborlist"]:
+      mycontext['sendtime'][neighborip] = getruntime()
+      if neighborip == mycontext['ip']:
+        #skip if local and destination ip addresses and port match because we can't send message if local/dest ip and port match in repy v2
+        continue
+      sendmessage(neighborip, mycontext['port'], 'ping',mycontext['ip'],mycontext['port'])
+      sendmessage(neighborip,mycontext['port'],'share'+encode_row(mycontext["neighborlist"],mycontext['latency'].copy()),mycontext['ip'],mycontext['port'])
+      sleep(0.5)
+    #sleep for 10 sec and start from while loop again to avoid so many responses at the same time
+    sleep(10)
+      
+
+
+
+# Handle an incoming message
+def got_message(srcip,srcport,mess):
+  '''
+  <Purpose>
+    Handle an incoming message from a neighboring node.
+
+  <Arguments>
+    See documentation for recvmess().
+
+  <Side Effects>
+    If we receive a ping message, we respond with a pong message.
+    If we receive a pong message, we take the difference between when we sent
+    this neighbor a ping message and record that as the latency.
+    If we receive a share message, we record the neighbor's neighbor row
+    information.
+
+  <Exceptions>
+    None
+
+  <Returns>
+    None
+  '''
+
+
+  if mess == 'ping':
+    sendmessage(srcip,srcport,'pong',getmyip(), pingport)
+  elif mess == 'pong':
+    # elapsed time is now - time when I sent the ping
+    mycontext['latency'][srcip] = getruntime() - mycontext['sendtime'][srcip]
+
+  elif mess.startswith('share'):
+    mycontext['row'][srcip] = mess[len('share'):]
+
+
+
+def encode_row(neighborlist, latencylist):
+  '''
+  <Purpose>
+    Prepares the local node's latency information into a format that is
+    recognizable by the other nodes.
+
+  <Arguments>
+    neighborlist: The IP addresses of all our neighbors.
+    latencylist: The list of latencies associated with the neighbors.
+
+  <Side Effects>
+    None
+
+  <Exceptions>
+    None
+
+  <Return>
+    A string representing a HTML row containing the latency information
+    between this node and the other neighbor nodes.
+  '''
+
+  retstring = ""
+  for neighborip in neighborlist:
+    if neighborip in latencylist:
+      retstring += "<td>"+str(latencylist[neighborip])[:4]+"s</td>"
+    else:
+      retstring += "<td>Unknown</td>"
+  return retstring
+
+
+def generate_node_list():
+  """
+  <Purpose>
+    Generates an HTMl string of an unsorted list of nodes.
+
+  <Arguments>
+    None.
+
+  <Exceptions>
+    None.
+
+  <Side Effects>
+    None.
+
+  <Returns>
+    HTML string of unsorted list of nodes.
+  """
+  # Is there a specific reason why we sort these keys?  I'm leaving these
+  # intact since the original version sorted them.
+  nodeiplist = mycontext['neighborlist']
+  nodeiplist.sort()
+
+  nodelist_str = '<ul id="coords">'
+  for nodeip in nodeiplist:
+    # Print node list element
+    nodelist_str += ('<li id="node' + str(nodeiplist.index(nodeip)) + '"><span class="nodeip">' +
+                      str(nodeip) + '</span>')
+    
+    if nodeip in mycontext['locationdata']:
+      nodelocdict = mycontext['locationdata'][nodeip]
+      if nodelocdict is not None:
+        nodelist_str += ('<span class="longitude">' + str(nodelocdict['longitude']) +
+                          '</span><span class="latitude">' + str(nodelocdict['latitude']) +
+                          '</span><span class="locationname">' + geoip_location_str(nodelocdict) + '</span>')
+    # We didn't perform the lookup yet.  This is used to tell the client to 
+    # refresh the page.
+    else:
+      nodelist_str += "<span class='lookingup'></span>"
+    nodelist_str += '</li>'
+  nodelist_str += '</ul>'
+  return nodelist_str
+
+
+
+
+
+def generate_status_page():
+  '''
+  <Purpose>
+    Generates a HTML page that represents the current status of the program
+
+  <Arguments>
+    None
+
+  <Side Effects>
+    The webpage returned may cause a client's browser to make additional
+    requests to the current program, or other machines.
+
+  <Exceptions>
+    None
+
+  <Returns>
+    A string representing a HTML webpage containing the current status of the
+    program.
+  '''
+  webpage = "<html><head><title>Latency Information</title></head>"
+
+  webpage += '<script type="text/javascript" src="http://www.google.com/jsapi"></script>'
+  webpage += '<script type="text/javascript">google.load("maps", "2.x"); google.load("jquery", "1.3.2");</script>'
+  # Include our script/stylesheet for the webpage
+  webpage += '<link rel="stylesheet" type="text/css" href="style.css" />'
+  webpage += '<script type="text/javascript" src="jquerygmaps.js"></script>'
+  
+  # Begin displaying body content; Lets start with the map.
+  webpage += "<body><div id='message' style='display: none;'></div><div id='map'></div>"
+
+  # Display the latency information as a table
+  webpage += "<h1>Latency information from "+getmyip()+' </h1><table border="1">'
+
+  # Create a column in the table for each vessel
+  webpage += "<tr><td></td><td>"+ "</td><td>".join(mycontext['neighborlist'])+"</td></tr>"
+
+  # Create a row in the table for each vessel
+  for nodeip in mycontext['neighborlist']:
+    # Show ip and location data, if present
+    webpage += '<tr><td>' +nodeip+'<br />\n'
+
+    # Was there a geoip lookup yet?
+    if nodeip in mycontext['locationdata']:
+      # Did the geoip lookup succeed?
+      if mycontext['locationdata'][nodeip] is not None:
+        nodelocation = mycontext['locationdata'][nodeip]
+        webpage += nodelocation['city'] + ', ' + nodelocation['country_code']
+      # The lookup failed
+      else:
+        webpage += "No location data available"
+
+    # We haven't done a geoip lookup yet.  Let the user know.
+    else:
+      webpage += "Location data not yet retrieved"
+    webpage += '</td>'
+
+    # Add latency information
+    if nodeip in mycontext['row']:
+      webpage += mycontext['row'][nodeip]
+    else:
+      webpage += '<td>No Data Reported</td>'
+    webpage += '</tr>\n'
+
+  webpage += '</table>'
+
+  # We need this for the map data to work
+  webpage += generate_node_list()
+  # now the footer...
+  webpage += '</body></html>'
+
+  return webpage
+
+
+def handle_http_request(srcip,srcport,connobj):
+  # Get the header
+  total_data = ''
+  new_data = ''
+  # The HTTP header ends once we see the char combination '\n\n', which
+  # is an empty string.
+  while '\n\n' not in new_data:
+    # Receive in chunks to avoid reading too much data
+    data = connobj.recv(4096)
+    new_data = data.replace('\r\n', '\n')
+    total_data += new_data
+  header, overflow = total_data.split('\n\n', 1)
+
+  # Get the request path, which is inbetween the HTTP action keyword and the
+  # HTTP version number.
+  # The http action keyword is the first word with no whitespace.
+  everything_after_httpaction = header.split(None, 1)[1]
+  # Following the path is the HTTP/[VERSION_NUMBER].
+  # We can use that as a delimiter to extract the path.
+  requested_file = everything_after_httpaction.split(" HTTP/")[0]
+
+  # Get rid of the leading '/' because its useless to us
+  requested_file = requested_file.lstrip('/')
+
+  # Generate the data to send back.
+  try:
+    # We default to this content type.
+    content_type = 'text/html'
+    # Don't respond with anything if they have something in the request path.
+
+    if requested_file not in mycontext['RECOGNIZED_FILES']:
+      raise InvalidRequestError("Unrecognized file:" + requested_file)
+    
+    # Generate the index page if the request field is empty.
+    elif not requested_file:
+      
+      contents = generate_status_page()
+
+    # This is a file that we recognize.  Send its contents to the client.
+    else:
+      # PNGs are binary files.  Plaintext files still work when read in
+      # binary mode.
+      contents = openfile(requested_file, True).readat(None,0)
+
+      # Figure out the MIME type to send to the client
+      for extension in mycontext['MIME_TYPES']:
+        if requested_file.endswith(extension):
+          content_type = mycontext['MIME_TYPES'][extension]
+          break
+      else:
+        content_type = 'text/plain'
+
+    # combine everything into one unit for sending
+    data = 'HTTP/1.1 200 OK\nContent-Type: '+content_type+'\nContent-Length: '+str(len(contents))+'\nServer: Seattle Testbed\n\n'+contents
+
+  except InvalidRequestError:
+    data = 'HTTP/1.1 404 Not Found\n\n'
+
+
+  # send the response
+  try:
+    sent = 0
+    while sent < len(data):
+      sent += connobj.send(data[sent:])
+    # and we're done, so let's close this connection...
+    connobj.close()
+  except Exception, e:
+    if "Socket closed" in str(e):
+      # We can't do anything if the socket is closed
+      return
+    raise
+
+
+
+def lookup_geoip_info():
+  '''
+  <Purpose>
+    Acquires the geoip information for all the vessels specified in the
+    neighbor ip table.
+
+  <Arguments>
+    None
+
+  <Side Effects>
+    The geoip data recorded will be stored in mycontext['locationdata'][neighborip].
+    If the lookup was successful, then the looked up data will be stored.
+    Otherwise, we put
+
+  <Exceptions>
+    None
+
+  <Returns>
+    None
+  '''
+
+  geoip_init_client()
+  for neighbor in mycontext['neighborlist']:
+    try:
+      locationdict = geoip_record_by_addr(neighbor)
+      if locationdict is not None:
+        # Sometimes we don't get a city name.
+        if 'city' not in locationdict:
+          locationdict['city'] = "Unknown"
+        mycontext['locationdata'][neighbor] = locationdict
+      
+      # The lookup failed
+      else:
+        mycontext['locationdata'][neighbor] = None
+
+    except Exception, e:
+      if not "Unable to contact the geoip server" in str(e):
+        raise
+      # We use this to indicate that no location data is available.
+      mycontext['locationdata'][neighbor] = None
+
+def handle_message_forever():
+  while True:
+    try:
+      srcip, srcport, mess = udpserversocket.getmessage()
+      got_message(srcip, srcport, mess)
+    except SocketWouldBlockError:
+      sleep(0.1)
+    
+
+def handle_connection_forever():
+  while True:
+    try: 
+      ret_ip, ret_port, ret_socket = connobj.getconnection()
+      handle_http_request(ret_ip, ret_port, ret_socket)
+    except SocketWouldBlockError:
+      sleep(0.1)  
+    
+    
+
+if callfunc == 'initialize':
+
+  # this holds the response information (i.e. when nodes responded)
+  mycontext['latency'] = {}
+
+  # this remembers when we sent a probe
+  mycontext['sendtime'] = {}
+
+  # this remembers row data from the other nodes
+  mycontext['row'] = {}
+
+  # get the nodes to probe
+  mycontext['neighborlist'] = []
+  try:
+    fileobject = openfile('neighboriplist.txt',False)
+    filecontent = fileobject.readat(None,0)
+    neighbor_array = filecontent.splitlines()
+    for line in neighbor_array:
+      mycontext['neighborlist'].append(line.strip())
+  except FileNotFoundError, e:
+    raise FileNotFoundError("neighboriplist.txt file doesn't exist. Please provide the required file in same directory.")
+
+  # Contains the dictionaries for node location information.
+  mycontext['locationdata'] = {}
+
+  ip = getmyip()
+  if len(callargs) != 1:
+    raise Exception, "Must specify the port to use"
+  pingport = int(callargs[0])
+  mycontext['port'] = pingport
+  mycontext['ip'] = ip
+  log(mycontext['ip'])
+
+   #listen for a new message and call handle_message in new thread
+  udpserversocket = listenformessage(mycontext['ip'], mycontext['port'])
+  createthread(handle_message_forever)
+  
+  createthread(probe_neighbors_forever)
+  
+  #listen for connection and call handle_http_request once a connection is got
+  connobj = listenforconnection(mycontext['ip'],mycontext['port']) 
+  createthread(handle_connection_forever)
+  
+
+  # Getting geoip data takes a while, in the meanwhile we allow the user to
+  # see a status webpage and display a notice there.
+  lookup_geoip_info()
+
