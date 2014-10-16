@@ -329,6 +329,44 @@ def _is_conn_refused_exception(exceptionobj):
   return (errname in refused_errors)
 
 
+
+def _is_conn_aborted_exception(exceptionobj):
+  """
+    <Purpose>
+    Determines if a given error number indicates that a 
+    connection abort on the socket occurred.
+    
+    <Arguments>
+    An exception object from a network call.
+    
+    <Returns>
+    True if connection aborted, false otherwise
+    """
+  # Get the type
+  exception_type = type(exceptionobj)
+  
+  # Only continue if the type is socket.error
+  if exception_type is not socket.error:
+    return False
+  
+  # Get the error number
+  errnum = exceptionobj[0]
+
+
+  # Store a list of error messages meaning we are connected
+  aborted_errors = ["ECONNABORTED", "WSAECONNABORTED"]
+  
+  # Convert the errno to and error string name
+  try:
+    errname = errno.errorcode[errnum]
+  except Exception,e:
+    # The error is unknown for some reason...
+    errname = None
+  
+  # Return if the error name is in our white list
+  return (errname in aborted_errors)
+
+
 def _is_network_down_exception(exceptionobj):
   """
   <Purpose>
@@ -1320,7 +1358,11 @@ def openconnection(destip, destport,localip, localport, timeout):
       # Call _conn_alreadyexists_check to determine if this is because
       # the connection is active or not
       _conn_alreadyexists_check(identity)
-      
+ 
+    # Check if this is a software caused connection abort error
+    if _is_conn_aborted_exception(e):
+      raise CleanupInProgressError("The socket is being cleaned up by the operating system!")
+
 
     # Unknown error...
     else:
