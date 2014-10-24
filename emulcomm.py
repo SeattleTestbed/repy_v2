@@ -351,8 +351,11 @@ def _is_network_down_exception(exceptionobj):
   # Get the error number
   errnum = exceptionobj[0]
 
-  # Store a list of error messages meaning we are disconnected
-  net_down_errors = ["ENETDOWN","ENETUNREACH","WSAENETDOWN", "WSAENETUNREACH"]
+  # These error messages mean we are disconnected.
+  # (The "WSA" ones are the Windows Sockets API's renditions of 
+  # the Linux/BSD errno.h preprocessor macros).
+  net_down_errors = ["ENETDOWN", "EHOSTUNREACH", "ENETUNREACH", 
+      "WSAENETDOWN", "WSAEHOSTUNREACH", "WSAENETUNREACH"] 
 
   # Convert the errno to and error string name
   try:
