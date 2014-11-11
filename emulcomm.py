@@ -349,6 +349,45 @@ def _is_conn_refused_exception(exceptionobj):
   return (errname in refused_errors)
 
 
+
+def _is_conn_aborted_exception(exceptionobj):
+  """
+    <Purpose>
+    Determines if a given error number indicates that a
+    connection abort on the socket occurred.
+
+    <Arguments>
+    An exception object from a network call.
+
+    <Returns>
+    True if connection aborted, false otherwise
+    """
+  # Get the type
+  exception_type = type(exceptionobj)
+
+  # Only continue if the type is socket.error
+  if exception_type is not socket.error:
+    return False
+
+  # Get the error number
+  errnum = exceptionobj[0]
+
+
+  # Store a list of error messages meaning we are connected
+  aborted_errors = ["ECONNABORTED", "WSAECONNABORTED"]
+
+  # Convert the errno to and error string name
+  try:
+    errname = errno.errorcode[errnum]
+  except Exception,e:
+    # The error is unknown for some reason...
+    errname = None
+
+  # Return if the error name is in our white list
+  return (errname in aborted_errors)
+
+
+
 def _is_network_down_exception(exceptionobj):
   """
   <Purpose>
@@ -1190,6 +1229,10 @@ def _timed_conn_initialize(localip,localport,destip,destport, timeout):
         if _is_conn_refused_exception(e):
           raise ConnectionRefusedError("The connection was refused!") 
 
+        # Check for ECONNABORTED due to a server-sent RST
+        if _is_conn_aborted_exception(e):
+          raise ConnectionRefusedError("The remote side hung up before the connection was established.")
+
         # Check if this is recoverable (try again, timeout, etc)
         elif not _is_recoverable_network_exception(e):
           raise
@@ -1253,7 +1296,8 @@ def openconnection(destip, destport,localip, localport, timeout):
       still being cleaned up by the OS.
 
       ConnectionRefusedError (descends NetworkError) if the connection cannot 
-      be established because the destination port isn't being listened on.
+      be established because the destination port isn't being listened on,
+      or an ECONNABORTED error is encountered.
 
       TimeoutError (common to all API functions that timeout) if the 
       connection times out
@@ -2149,7 +2193,8 @@ class TCPServerSocket (object):
 
     <Exceptions>
       Raises SocketClosedLocal if close() has been called.
-      Raises SocketWouldBlockError if the operation would block.
+      Raises SocketWouldBlockError if the operation would block, or
+          an ECONNABORTED was encountered.
       Raises ResourcesExhaustedError if there are no free outsockets.
 
     <Resource Consumption>
@@ -2222,6 +2267,10 @@ class TCPServerSocket (object):
       # Check if this is a would-block error
       if _is_recoverable_network_exception(e):
         raise SocketWouldBlockError("No connections currently available!")
+
+      # Check for ECONNABORTED due to client-sent RST
+      elif _is_conn_aborted_exception(e):
+        raise SocketWouldBlockError("The remote side hung up before the connection was established.")
 
       else: 
         # Unexpected, close the socket, and then raise SocketClosedLocal
