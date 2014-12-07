@@ -3,3 +3,4 @@ https://github.com/SeattleTestbed/portability ../DEPENDENCIES/portability
 https://github.com/SeattleTestbed/seash ../DEPENDENCIES/seash
 https://github.com/SeattleTestbed/affix ../DEPENDENCIES/affix
 https://github.com/SeattleTestbed/common ../DEPENDENCIES/common
+https://github.com/SeattleTestbed/utf ../DEPENDENCIES/utf
