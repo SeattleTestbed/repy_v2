@@ -7,5 +7,5 @@ DEPENDENCIES/seash/*
 DEPENDENCIES/common/*
 
 # Tests
-test DEPENDENCIES/common/utf/*
+test DEPENDENCIES/utf/*
 test testsV2/*
