@@ -975,6 +975,10 @@ def sendmessage(destip, destport, message, localip, localport):
  
     if _is_addr_unavailable_exception(e):
       raise AddressBindingError("Cannot bind to the specified local ip, invalid!")
+    # Complain if the network is down for UDP, too
+    # (See SeattleTestbed/repy_v2#80 for details)
+    if _is_network_down_exception(e):
+      raise InternetConnectivityError("The network is down or cannot be reached from the local IP!")
 
     # Unknown error...
     else:
