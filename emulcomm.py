@@ -1161,6 +1161,10 @@ def _timed_conn_initialize(localip,localport,destip,destport, timeout):
 
   # Get a TCP socket bound to the local ip / port
   sock = _get_tcp_socket(localip, localport)
+  # Limit the socket buffer size, see SeattleTestbed/repy_v2#88
+  sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 10000)
+  sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 10000)
+
   sock.settimeout(timeout)
 
   try:
@@ -1432,6 +1436,9 @@ def listenforconnection(localip, localport):
     on_loopback = _is_loopback_ipaddr(localip)
     # Get the socket
     sock = _get_tcp_socket(localip,localport)     
+    # Limit the socket buffer size, see SeattleTestbed/repy_v2#88
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 10000)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 10000)
     nanny.tattle_add_item('insockets',id(sock))
     # Get the maximum number of outsockets
     max_outsockets = nanny.get_resource_limit("outsockets")        
@@ -1493,6 +1500,10 @@ def _get_tcp_socket(localip, localport):
 def _get_udp_socket(localip, localport):
   # Create the UDP socket
   s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+  # Limit the socket buffer size, see SeattleTestbed/repy_v2#88
+  s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 66000)
+  s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 66000)
+
   if localip and localport:
     try:
       s.bind((localip, localport))
