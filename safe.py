@@ -236,13 +236,16 @@ def _check_node(node):
   <Return>
     None
   """
+  # need to adjust line numbers by 2 to account for the encoding specification 
+  # header (Issue #95)
+  HEADERSIZE = 2
   if node.__class__.__name__ not in _NODE_CLASS_OK:
-    raise exception_hierarchy.CheckNodeException(node.lineno,node.__class__.__name__)
+    raise exception_hierarchy.CheckNodeException(node.lineno-HEADERSIZE,node.__class__.__name__)
   
   for attribute, value in node.__dict__.iteritems():
     # Don't allow the construction of unicode literals
     if type(value) == unicode:
-      raise exception_hierarchy.CheckStrException(node.lineno, attribute, value)
+      raise exception_hierarchy.CheckStrException(node.lineno-HEADERSIZE, attribute, value)
 
     if attribute in _NODE_ATTR_OK: 
       continue
@@ -255,7 +258,7 @@ def _check_node(node):
 
     # Check the safety of any strings
     if not _is_string_safe(value):
-      raise exception_hierarchy.CheckStrException(node.lineno, attribute, value)
+      raise exception_hierarchy.CheckStrException(node.lineno-HEADERSIZE, attribute, value)
 
   for child in node.getChildNodes():
     _check_node(child)

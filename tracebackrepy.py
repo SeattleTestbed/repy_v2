@@ -113,6 +113,16 @@ def format_exception():
   if exceptiontype is None:
     return None
  
+  # Need to adjust if this is a file we added encoding information to (Issue 
+  # #95)
+  try:
+    if exceptionvalue.filename.startswith('RepyV2:'):
+      exceptionvalue.lineno = exceptionvalue.lineno - 2
+  except AttributeError:
+    # If there isn't a lineno or filename field, then do not try to tweak
+    # the line number of the exception
+    pass
+
   # We store a full traceback, and a "filtered" user traceback to help the user
   full_tb = ""
   filtered_tb = ""
@@ -135,7 +145,13 @@ def format_exception():
         break
 
     # Construct a frame of output
-    stack_frame = '  "'+tracebackentry[0]+'", line '+str(tracebackentry[1])+", in "+str(tracebackentry[2])+"\n"
+    # We need to subtract 2 lines to those files that Repy processed 
+    # (issue #95).  These files will seem to have a name that begins with
+    # 'RepyV2'.
+    if module.startswith('RepyV2:'):
+      stack_frame = '  "'+tracebackentry[0]+'", line '+str(tracebackentry[1]-2)+", in "+str(tracebackentry[2])+"\n"
+    else:
+      stack_frame = '  "'+tracebackentry[0]+'", line '+str(tracebackentry[1])+", in "+str(tracebackentry[2])+"\n"
 
     # Always add to the full traceback
     full_tb += stack_frame

@@ -66,8 +66,15 @@ class VirtualNamespace(object):
     code = code.replace('\r\n','\n')
 
     # Prepend an encoding string to protect against bugs in that code (ticket #982)
-    # Note that this will cause tracebacks to have an inaccurate line number.
     code = "# coding: utf-8\n\n" + code 
+
+    # Witheout further fixes, this will cause tracebacks to have an inaccurate 
+    # line number. (This is issue #95 for repy_v2.)   We will prepend 
+    # 'RepyV2:' to the file names imported by repy.  This will serve as an 
+    # indicator that we have done this replacement (and that the traceback
+    # module should remove 2 lines from the count).
+    name = 'RepyV2:' + name
+    
 
     # Do a safety check
     try:

@@ -24,6 +24,14 @@ if __name__ == "__main__":
     value = safe.safe_check(usercode)
     output += str(value)
   except Exception,e:
+    # To address issue #95, we need to subtract 2 from the line number.
+    # This compensates for adding the encoding information at the top of the
+    # file.
+    try:
+      e.lineno = e.lineno - 2
+    except AttributeError:
+      # Some exceptions may not have line numbers.  If so, ignore
+      pass
     output += str(type(e)) + " " + str(e)
   
   # Write out
