@@ -331,6 +331,7 @@ def main():
   ### anywhere if this is repurposed...
   usage = "USAGE: repy.py [options] resource_file program_to_run.r2py [program args]"
   parser = optparse.OptionParser(usage=usage)
+  parser.disable_interspersed_args()
   add_repy_options(parser)
   options, args = parser.parse_args()
   
