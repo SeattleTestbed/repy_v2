@@ -11,7 +11,7 @@ We test this by calling repy.py with arguments similar to the above,
 and a no-op (empty) RepyV2 program. 
 If repy.py creates the named logfile, this is an error. If the file is 
 not created, we take this to mean that the sandboxed program gets the 
-argument (althoug we don't check this specifically).
+argument (although we don't check this specifically).
 
 Note: This test overwrites / removes files from the current working dir. 
 The chosen `program_name` and `logfile_prefix` should be unlikely to 
