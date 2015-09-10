@@ -331,7 +331,15 @@ def main():
   ### anywhere if this is repurposed...
   usage = "USAGE: repy.py [options] resource_file program_to_run.r2py [program args]"
   parser = optparse.OptionParser(usage=usage)
+  
+  # Set optparse to stop parsing arguments on the first non-option arg. We 
+  # need this so that command-line args to the sandboxed Repy program don't 
+  # clash or get confused with args to the sandbox (repy.py) itself.
+  # See also SeattleTestbed/repy_v2#101 .
+  # (Per the USAGE string above, the user program name is the first 
+  # non-option argument which causes parsing to stop.)
   parser.disable_interspersed_args()
+  
   add_repy_options(parser)
   options, args = parser.parse_args()
   
