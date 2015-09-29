@@ -44,11 +44,18 @@ import exception_hierarchy
 # needed to get the PID
 import os
 
-# Armon: These set contains all the module's which are black-listed
+# Armon: These set contains all the modules which are black-listed
 # from the traceback, so that if there is an exception, they will
-# not appear in the stack.
-TB_SKIP_MODULES = ["repy.py","safe.py","virtual_namespace.py","namespace.py","emulcomm.py",
-                      "emultimer.py","emulmisc.py","emulfile.py","nonportable.py","socket.py"]
+# not appear in the "user" (filtered) traceback.
+TB_SKIP_MODULES = ["repy.py", "safe.py", "virtual_namespace.py", 
+    "namespace.py", "emulcomm.py", "emultimer.py", "emulmisc.py", 
+    "emulfile.py", "nonportable.py", "socket.py"]
+
+
+# Import virtual_namespace so that we can refer to the encoding declaration 
+# that is prepended to user code. We adjust traceback line numbers 
+# accordingly (see SeattleTestbed/repy_v2#95).
+import virtual_namespace
 
 
 # sets the user's file name.
@@ -73,6 +80,13 @@ def format_exception():
   <Side Effects>
     Calls sys.exc_clear(), so that we know this current exception has been
     "handled".
+
+    NOTE WELL:
+      Ensure that this function does not raise excpetions itself (even 
+      if it handles them). This will override the original exception 
+      we are trying to handle, and `sys.exc_info` / `sys.exc_clear` will 
+      not do the right thing. For reference, see the Python 2 docs:
+      https://docs.python.org/2.7/library/sys.html#sys.exc_info
 
   <Returns>
     A human readable string containing debugging information. Returns
@@ -112,46 +126,29 @@ def format_exception():
   # Check if there is an exception
   if exceptiontype is None:
     return None
- 
-  # Need to adjust if this is a file we added encoding information to (Issue 
-  # #95)
-  try:
-    if exceptionvalue.filename.startswith('RepyV2:'):
-      exceptionvalue.lineno = exceptionvalue.lineno - 2
-  except AttributeError:
-    # If there isn't a lineno or filename field, then do not try to tweak
-    # the line number of the exception
-    pass
 
   # We store a full traceback, and a "filtered" user traceback to help the user
   full_tb = ""
   filtered_tb = ""
 
-  for tracebackentry in traceback.extract_tb(exceptiontraceback):
-    # the entry format is (filename, lineno, modulename, linedata)
+  for (filename, lineno, modulename, _) in traceback.extract_tb(exceptiontraceback):
     # linedata is always empty because we prevent the linecache from working
     # for safety reasons...
 
     # Check that this module is not black-listed
-    module = tracebackentry[0]
     skip = False
 
-    # Check if any of the forbidden modules are a substring of the module name
-    # e.g. if the name is /home/person/seattle/repy.py, we want to see that repy.py
-    # and skip this frame.
+    # Check if any of the forbidden modules are a substring of the file name
+    # e.g. if the name is /home/person/seattle/repy.py, we want to see 
+    # that repy.py and skip this frame.
     for forbidden in TB_SKIP_MODULES:
-      if forbidden in module:
+      if forbidden in filename:
         skip = True
         break
 
-    # Construct a frame of output
-    # We need to subtract 2 lines to those files that Repy processed 
-    # (issue #95).  These files will seem to have a name that begins with
-    # 'RepyV2'.
-    if module.startswith('RepyV2:'):
-      stack_frame = '  "'+tracebackentry[0]+'", line '+str(tracebackentry[1]-2)+", in "+str(tracebackentry[2])+"\n"
-    else:
-      stack_frame = '  "'+tracebackentry[0]+'", line '+str(tracebackentry[1])+", in "+str(tracebackentry[2])+"\n"
+    # Construct a frame of output.
+    # Adjust traceback line numbers, see SeattleTestbed/repy_v2#95.
+    stack_frame = '  "' + filename + '", line ' + str(lineno - len(virtual_namespace.ENCODING_DECLARATION.splitlines())) + ", in " + modulename + "\n"
 
     # Always add to the full traceback
     full_tb += stack_frame

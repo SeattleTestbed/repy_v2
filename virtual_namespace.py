@@ -11,6 +11,10 @@
   specified global context.
 """
 
+# Treat any user code as having UTF-8 encoding. For this, 
+# prepend this encoding string
+ENCODING_DECLARATION = "# coding: utf-8\n\n"
+
 # Used for safety checking
 import safe
 
@@ -65,16 +69,12 @@ class VirtualNamespace(object):
     # Remove any windows carriage returns
     code = code.replace('\r\n','\n')
 
-    # Prepend an encoding string to protect against bugs in that code (ticket #982)
-    code = "# coding: utf-8\n\n" + code 
+    # Prepend an encoding string to protect against bugs in that code (#982).
+    # Without further fixes, prepending the encoding string causes tracebacks 
+    # to have an inaccurate line number, see SeattleTestbed/repy_v2#95.
+    # We work around this in tracebackrepy.py
+    code = ENCODING_DECLARATION + code 
 
-    # Witheout further fixes, this will cause tracebacks to have an inaccurate 
-    # line number. (This is issue #95 for repy_v2.)   We will prepend 
-    # 'RepyV2:' to the file names imported by repy.  This will serve as an 
-    # indicator that we have done this replacement (and that the traceback
-    # module should remove 2 lines from the count).
-    name = 'RepyV2:' + name
-    
 
     # Do a safety check
     try:

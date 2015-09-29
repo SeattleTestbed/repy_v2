@@ -104,6 +104,13 @@ import nonportable  # This is to get the current runtime
 import repy_constants # This is to get our start-up directory
 import exception_hierarchy # This is for exception classes shared with tracebackrepy
 
+
+# virtual_namespace prepends a multiline ENCODING_DECLARATION to user 
+# code. We import it to adjust traceback line numbers accordingly 
+# (see SeattleTestbed/repy_v2#95).
+import virtual_namespace
+
+
 # Fix to make repy compatible with Python 2.7.2 on Ubuntu 11.10 (ticket #1049)
 subprocess.getattr = getattr
 
@@ -236,16 +243,16 @@ def _check_node(node):
   <Return>
     None
   """
-  # need to adjust line numbers by 2 to account for the encoding specification 
-  # header (Issue #95)
-  HEADERSIZE = 2
+  # Adjust line numbers to account for the encoding declaration header, 
+  # SeattleTestbed/repy_v2#95
+  HEADERSIZE = len(virtual_namespace.ENCODING_DECLARATION.splitlines())
   if node.__class__.__name__ not in _NODE_CLASS_OK:
-    raise exception_hierarchy.CheckNodeException(node.lineno-HEADERSIZE,node.__class__.__name__)
+    raise exception_hierarchy.CheckNodeException(node.lineno - HEADERSIZE, node.__class__.__name__)
   
   for attribute, value in node.__dict__.iteritems():
     # Don't allow the construction of unicode literals
     if type(value) == unicode:
-      raise exception_hierarchy.CheckStrException(node.lineno-HEADERSIZE, attribute, value)
+      raise exception_hierarchy.CheckStrException(node.lineno - HEADERSIZE, attribute, value)
 
     if attribute in _NODE_ATTR_OK: 
       continue
@@ -258,7 +265,7 @@ def _check_node(node):
 
     # Check the safety of any strings
     if not _is_string_safe(value):
-      raise exception_hierarchy.CheckStrException(node.lineno-HEADERSIZE, attribute, value)
+      raise exception_hierarchy.CheckStrException(node.lineno - HEADERSIZE, attribute, value)
 
   for child in node.getChildNodes():
     _check_node(child)

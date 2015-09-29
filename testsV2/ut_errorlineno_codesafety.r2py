@@ -1,0 +1,6 @@
+#pragma repy
+#pragma out (6, 'Import')
+
+"""This unit test raises a code safety error on line 6. We do this to verify 
+that traceback line numbers are correct."""
+import socket

@@ -12,6 +12,13 @@ Description:
 import safe
 import sys
 
+# virtual_namespace prepends a multiline ENCODING_DECLARATION to user 
+# code. We import it to adjust traceback line numbers accordingly 
+# (see SeattleTestbed/repy_v2#95).
+import virtual_namespace
+
+
+
 if __name__ == "__main__":
   # Get the user "code"
   usercode = sys.stdin.read()
@@ -23,12 +30,15 @@ if __name__ == "__main__":
   try:
     value = safe.safe_check(usercode)
     output += str(value)
-  except Exception,e:
-    # To address issue #95, we need to subtract 2 from the line number.
-    # This compensates for adding the encoding information at the top of the
-    # file.
+  except Exception, e:
+    # In virtual_namespace.py, we prepend an encoding declaration to 
+    # each user file we read in.
+    # Now, we need to subtract the number of lines consumed by the 
+    # encoding declaration from the current exception's line number 
+    # so that the line number we output corresponds with the actual 
+    # user code again (see SeattleTestbed/repy_v2#95).
     try:
-      e.lineno = e.lineno - 2
+      e.lineno = e.lineno - len(virtual_namespace.ENCODING_DECLARATION.splitlines())
     except AttributeError:
       # Some exceptions may not have line numbers.  If so, ignore
       pass
