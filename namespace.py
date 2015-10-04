@@ -115,6 +115,7 @@ import emulcomm
 import emulfile
 import emulmisc
 import emultimer
+import openwrt_api
 import nonportable
 import safe # Used to get SafeDict
 import tracebackrepy
@@ -597,6 +598,30 @@ class DictOrSafeDict(ObjectProcessor):
 # the basis for what is populated in the user context. Anything function
 # defined here will be wrapped and made available to untrusted user code.
 USERCONTEXT_WRAPPER_INFO = {
+  'ping' :
+      {'func' : openwrt_api.ping,
+       'args' : [Str(),Int()],
+       'return' : Dict()},
+  'traceroute' :
+      {'func' : openwrt_api.traceroute,
+       'args' : [Str(),Int(),Int(),Int(),Int()],
+       'return' : None},
+  'get_network_bytes' :
+      {'func' : openwrt_api.get_network_bytes,
+       'args' : [Str()],
+       'return' : Dict()},
+  'get_network_packets' :
+      {'func' : openwrt_api.get_network_packets,
+       'args' : [Str()],
+       'return' : Dict()},
+  'get_network_interface' :
+      {'func' : openwrt_api.get_network_interface,
+       'args' : [],
+       'return' : List()},
+  'get_station' :
+      {'func' : openwrt_api.get_station,
+       'args' : [Str()],
+       'return' : List()},
   'gethostbyname' :
       {'func' : emulcomm.gethostbyname,
        'args' : [Str()],
