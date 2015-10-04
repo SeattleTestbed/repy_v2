@@ -253,6 +253,9 @@ def ping(dest_ip,count):
   if not emulcomm._is_valid_ip_address(dest_ip):
     raise RepyArgumentError("Provided dest_ip is not valid! IP: '" + dest_ip + "'")
 
+  if count <1:
+    raise RepyArgumentError("Provided count must be more than 0")
+
   process = portable_popen.Popen(['ping', '-c', str(count), dest_ip],)
   ping_output, err = process.communicate()
   return _parse(str(ping_output))
