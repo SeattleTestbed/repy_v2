@@ -266,6 +266,9 @@ def get_station(interface):
    <Arguments>
       interface: the name of the interface to gather network information.
 
+   <Exceptions>
+      RepyArgumentError is raised if the argument isn't valid types or values
+
    <Side Effects>
       None
 
@@ -329,9 +332,6 @@ def _get_match_groups(ping_output, regex):
   <Side Effects>
     None
 
-  <Resource Consumption>
-    None
-
   <Returns>
     Returns one or more subgroups of the match.
   """
@@ -353,9 +353,6 @@ def _parse(ping_output):
 
   <Side Effects>
     None
-
-  <Resource Consumption>
-    None.
 
   <Returns>
     ping statistics as a dict, such as {'received': '2', 'host': '173.194.123.19', 
