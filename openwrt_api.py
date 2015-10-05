@@ -5,8 +5,9 @@
 
    Description:
 
-   Network information functions for the sandbox. This is used by repy.py to provide a 
-   highly restricted (but usable) environment.
+   This file provides a python interface to low-level system call or files 
+   on the OpenWRT platform. It is designed to let researchers do a wide range 
+   of network measurements on home gateway.
    
 """
 
@@ -131,23 +132,28 @@ def get_network_interface():
   else:
     raise FileNotFoundError("Could not find /proc/net/dev!")
 
-def traceroute(dest_name,port,max_hops,waittime,ttl):
+def traceroute(dest_ip,port,max_hops,waittime,ttl):
   """
   <Purpose>
     Print the route packets take to network host 
 
   <Arguments>
-    dest_name: The host name to traceroute
+    dest_ip: The ip address to traceroute
     port: The port to traceroute
     max_hops: Maximum number of hops
     waittime: Set the time to wait for a response to a probe
     ttl: Set what TTL to start.
 
   <Exceptions>
-    RepyArgumentError when the arguments aren't valid types
+    RepyArgumentError when the arguments aren't valid types or value
     or values
 
     ResourceForbiddenError when the local port isn't allowed
+
+
+  <Resource Consumption>
+    This operation consumes 28 bytes + number of bytes of the message that
+    were transmitted. This requires that the localport is allowed.
 
   <Side Effects>
     None
@@ -155,8 +161,8 @@ def traceroute(dest_name,port,max_hops,waittime,ttl):
   <Returns>
     The result of traceroute
   """
-  if type(dest_name) is not str:
-    raise RepyArgumentError("Provided dest_name must be a string!")
+  if type(dest_ip) is not str:
+    raise RepyArgumentError("Provided dest_ip must be a string!")
 
   if type(port) is not int:
     raise RepyArgumentError("Provided port must be an integer!")
@@ -170,13 +176,15 @@ def traceroute(dest_name,port,max_hops,waittime,ttl):
   if type(ttl) is not int:
     raise RepyArgumentError("Provided ttl must be an integer!")
 
+  # Check the input arguments (sanity)
+  if not emulcomm._is_valid_ip_address(dest_ip):
+    raise RepyArgumentError("Provided dest_ip is not valid! IP: '" + dest_ip + "'")
+
   if not emulcomm._is_valid_network_port(port):
     raise RepyArgumentError("Provided port is not valid! Port: "+str(port))
 
   if not emulcomm._is_allowed_localport("UDP", port):
     raise ResourceForbiddenError("Provided port is not allowed! Port: "+str(port))
-
-  dest_addr = socket.gethostbyname(dest_name)
 
   result = []
 
@@ -189,9 +197,13 @@ def traceroute(dest_name,port,max_hops,waittime,ttl):
 
     send_sock.setsockopt(socket.SOL_IP, socket.IP_TTL, ttl)
     recv_sock.bind(("", port))
-    bytesent = send_sock.sendto("", (dest_addr, port))
+    bytesent = send_sock.sendto("", (dest_ip, port))
 
-    nanny.tattle_quantity('netsend', bytesent + 28)
+    # Account for the resources
+    if _is_loopback_ipaddr(dest_ip):
+      nanny.tattle_quantity('loopsend', bytessent + 28)
+    else:
+      nanny.tattle_quantity('netsend', bytessent + 28)
 
     curr_addr = None
     curr_name = None
