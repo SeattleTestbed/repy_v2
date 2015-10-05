@@ -69,7 +69,7 @@ def get_network_bytes(interface):
 def get_network_packets(interface):
   """
   <Purpose>
-    Counts the number of packets received and transmitted fromxs an interface
+    Count the number of packets received and transmitted from an interface
 
   <Arguments>
     interface: the name of the interface to gather network information.
@@ -134,7 +134,7 @@ def get_network_interface():
 def traceroute(dest_name,port,max_hops,waittime,ttl):
   """
   <Purpose>
-    Get the list of interface(except 'lo')
+    Print the route packets take to network host 
 
   <Arguments>
     dest_name: The host name to traceroute
@@ -178,6 +178,8 @@ def traceroute(dest_name,port,max_hops,waittime,ttl):
 
   dest_addr = socket.gethostbyname(dest_name)
 
+  result = []
+
   # Infinite loop until reach destination or TTL reach maximum.
   while True:
     recv_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW,
@@ -213,11 +215,13 @@ def traceroute(dest_name,port,max_hops,waittime,ttl):
       curr_host = "%s (%s)" % (curr_name, curr_addr)
     else:
       curr_host = "*"
-    print "%d\t%s" % (ttl, curr_host)
+    result.append("%d %s" % (ttl, curr_host)) 
 
     ttl += 1
     if curr_addr == dest_addr or ttl > max_hops:
       break
+
+  return result
 
 def ping(dest_ip,count):
   """
@@ -225,7 +229,7 @@ def ping(dest_ip,count):
     Send ICMP ECHO_REQUEST to network hosts.
 
   <Arguments>
-    ip: the ip address to communicate with.
+    dest_ip: the ip address to communicate with.
     count: Stop after sending count ECHO_REQUEST packets.
 
   <Exceptions>
