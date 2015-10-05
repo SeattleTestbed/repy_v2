@@ -52,13 +52,17 @@ def get_network_bytes(interface):
   if type(interface) is not str:
     raise RepyArgumentError("get_network_bytes() takes a string as argument.")
 
+  # Check the input arguments (sanity)
+  if interface not in get_network_interface():
+    raise RepyArgumentError("interface "+ interface + " is not available.")
+
   if os.path.exists("/proc/net/dev"):
     dev = safe_open("/proc/net/dev", "r")
     for line in dev:
       if interface in line:
         data = line.split('%s:' % interface)[1].split()
         rx_bytes, tx_bytes = (data[0], data[8])
-        return {"recv":rx_bytes, "trans":tx_bytes}
+        return {"recv": rx_bytes, "trans": tx_bytes}
   else:
     raise FileNotFoundError("Could not find /proc/net/dev!")
 
@@ -82,6 +86,10 @@ def get_network_packets(interface):
   """
   if type(interface) is not str:
     raise RepyArgumentError("get_network_bytes() takes a string as argument.")
+  
+  # Check the input arguments (sanity)
+  if interface not in get_network_interface():
+    raise RepyArgumentError("interface "+ interface + " is not available.")
 
   if os.path.exists("/proc/net/dev"):
     dev = safe_open('/proc/net/dev', 'r')
@@ -89,7 +97,7 @@ def get_network_packets(interface):
       if interface in line:
         data = line.split('%s:' % interface)[1].split()
         rx_packets, tx_packets = (data[1], data[9])
-        return {"recv":rx_packets, "trans": tx_packets}
+        return {"recv": rx_packets, "trans": tx_packets}
   else:
     raise FileNotFoundError("Could not find /proc/net/dev!")
 
@@ -118,8 +126,7 @@ def get_network_interface():
     result = []
     for line in dev[2:]:
       interface = line[:line.index(":")].strip()
-      if interface != 'lo':
-        result.append(interface)
+      result.append(interface)
     return result
   else:
     raise FileNotFoundError("Could not find /proc/net/dev!")
@@ -253,7 +260,7 @@ def ping(dest_ip,count):
   if not emulcomm._is_valid_ip_address(dest_ip):
     raise RepyArgumentError("Provided dest_ip is not valid! IP: '" + dest_ip + "'")
 
-  if count <1:
+  if count < 1:
     raise RepyArgumentError("Provided count must be more than 0")
 
   process = portable_popen.Popen(['ping', '-c', str(count), dest_ip],)
@@ -285,6 +292,10 @@ def get_station(interface):
   """
   if type(interface) is not str:
     raise RepyArgumentError("get_station() takes a string as argument.")
+
+  # Check the input arguments (sanity)
+  if interface not in get_network_interface():
+    raise RepyArgumentError("interface "+ interface + " is not available.")
 
   iw_process = portable_popen.Popen(['iw', 'dev',interface, 'station','dump'])
   iw_output, _ = iw_process.communicate()
