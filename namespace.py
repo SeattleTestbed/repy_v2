@@ -600,7 +600,7 @@ class DictOrSafeDict(ObjectProcessor):
 USERCONTEXT_WRAPPER_INFO = {
   'ping' :
       {'func' : openwrt_api.ping,
-       'args' : [Str(),Int()],
+       'args' : [Str(),Int(),Int()],
        'return' : Dict()},
   'traceroute' :
       {'func' : openwrt_api.traceroute,

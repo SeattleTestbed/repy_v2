@@ -6,7 +6,7 @@
    Description:
 
    This file provides a python interface to low-level system call or files 
-   on the OpenWRT platform. It is designed to let researchers do a wide range 
+   on the OpenWrt platform. It is designed to let researchers do a wide range 
    of network measurements on home gateway.
    
 """
@@ -19,22 +19,28 @@ import portable_popen # Import for Popen
 
 import textops # Import seattlelib's text processing lib
 
-import re
+import struct
 
 import os # Provides some convenience functions
 
 import emulcomm
+
+import time
+
+import select
 
 # Get the exceptions
 from exception_hierarchy import *
 
 safe_open = open
 
+
 ##### Public Functions #####     
 def get_network_bytes(interface):
   """
   <Purpose>
-    Count the number of packets received and transmitted from an Interface.
+    Return the number of packets received and transmitted from an Interface.
+    The information returned is looked up in the procfs.
 
   <Arguments>
     interface: the name of the interface to gather network information.
@@ -57,20 +63,14 @@ def get_network_bytes(interface):
   if interface not in get_network_interface():
     raise RepyArgumentError("interface "+ interface + " is not available.")
 
-  if os.path.exists("/proc/net/dev"):
-    dev = safe_open("/proc/net/dev", "r")
-    for line in dev:
-      if interface in line:
-        data = line.split('%s:' % interface)[1].split()
-        rx_bytes, tx_bytes = (data[0], data[8])
-        return {"recv": rx_bytes, "trans": tx_bytes}
-  else:
-    raise FileNotFoundError("Could not find /proc/net/dev!")
+  return {"recv": _get_interface_traffic_statistics(interface)['rx_bytes'],
+    "trans": _get_interface_traffic_statistics(interface)['tx_bytes']}
 
 def get_network_packets(interface):
   """
   <Purpose>
-    Count the number of packets received and transmitted from an interface
+    Return the number of packets received and transmitted from an interface.
+    The information returned is looked up in the procfs.
 
   <Arguments>
     interface: the name of the interface to gather network information.
@@ -92,20 +92,13 @@ def get_network_packets(interface):
   if interface not in get_network_interface():
     raise RepyArgumentError("interface "+ interface + " is not available.")
 
-  if os.path.exists("/proc/net/dev"):
-    dev = safe_open('/proc/net/dev', 'r')
-    for line in dev:
-      if interface in line:
-        data = line.split('%s:' % interface)[1].split()
-        rx_packets, tx_packets = (data[1], data[9])
-        return {"recv": rx_packets, "trans": tx_packets}
-  else:
-    raise FileNotFoundError("Could not find /proc/net/dev!")
+  return {"recv": _get_interface_traffic_statistics(interface)['rx_packets'],
+    "trans": _get_interface_traffic_statistics(interface)['tx_packets']}
 
 def get_network_interface():
   """
   <Purpose>
-    Returns a list of available network interfaces.
+    Return a list of available network interfaces.
 
   <Arguments>
     None
@@ -132,10 +125,11 @@ def get_network_interface():
   else:
     raise FileNotFoundError("Could not find /proc/net/dev!")
 
-def traceroute(dest_ip,port,max_hops,waittime,ttl):
+def traceroute(dest_ip, port, max_hops, waittime, ttl):
   """
   <Purpose>
-    Print the route packets take to network host 
+    Return the route packets take to network host. Adapted from the original 
+    at https://blogs.oracle.com/ksplice/entry/learning_by_doing_writing_your 
 
   <Arguments>
     dest_ip: The ip address to traceroute
@@ -181,10 +175,10 @@ def traceroute(dest_ip,port,max_hops,waittime,ttl):
     raise RepyArgumentError("Provided dest_ip is not valid! IP: '" + dest_ip + "'")
 
   if not emulcomm._is_valid_network_port(port):
-    raise RepyArgumentError("Provided port is not valid! Port: "+str(port))
+    raise RepyArgumentError("Provided port is not valid! Port: " + str(port) + "'")
 
-  if not emulcomm._is_allowed_localport("UDP", port):
-    raise ResourceForbiddenError("Provided port is not allowed! Port: "+str(port))
+  if max_hops > 255:
+    raise RepyArgumentError("Provided max_hops: " + str(max_hops) + " is larger than 255.'")
 
   result = []
 
@@ -197,10 +191,10 @@ def traceroute(dest_ip,port,max_hops,waittime,ttl):
 
     send_sock.setsockopt(socket.SOL_IP, socket.IP_TTL, ttl)
     recv_sock.bind(("", port))
-    bytesent = send_sock.sendto("", (dest_ip, port))
+    bytessent = send_sock.sendto("", (dest_ip, port))
 
     # Account for the resources
-    if _is_loopback_ipaddr(dest_ip):
+    if emulcomm._is_loopback_ipaddr(dest_ip):
       nanny.tattle_quantity('loopsend', bytessent + 28)
     else:
       nanny.tattle_quantity('netsend', bytessent + 28)
@@ -230,19 +224,20 @@ def traceroute(dest_ip,port,max_hops,waittime,ttl):
     result.append("%d %s" % (ttl, curr_host)) 
 
     ttl += 1
-    if curr_addr == dest_addr or ttl > max_hops:
+    if curr_addr == dest_ip or ttl > max_hops:
       break
 
   return result
 
-def ping(dest_ip,count):
+def ping(dest_ip, count, timeout):
   """
   <Purpose>
-    Send ICMP ECHO_REQUEST to network hosts.
+    A pure python ping implementation using raw sockets.
 
   <Arguments>
-    dest_ip: the ip address to communicate with.
+    dest_ip: the address to communicate with.
     count: Stop after sending count ECHO_REQUEST packets.
+    timeout: Time to wait for a response, in seconds.
 
   <Exceptions>
     RepyArgumentError when the host name is not valid types
@@ -252,25 +247,24 @@ def ping(dest_ip,count):
     None
 
   <Returns>
-    ping statistics as a dict, such as {'received': '2', 'jitter': '12.441', 
-    'avgping': '27.302', 'minping': '14.861', 'host': 'www.google.com', 
-    'maxping': '39.743', 'sent': '2'}
+    ping statistics as a dict, such as { 'avg': '27.302', 'min': '14.861', 'host': 
+    '192.168.1.1', 'max': '39.743', 'lost_rate': 0.0}
     `host`: the target hostname that was pinged
-    `sent`: the number of ping request packets sent
-    `received`: the number of ping reply packets received
-    `minping`: the minimum (fastest) round trip ping request/reply
+    `lost_rate`: the rate of packet loss
+    `min`: the minimum (fastest) round trip ping request/reply
         time in milliseconds
-    `avgping`: the average round trip ping time in milliseconds
-    `maxping`: the maximum (slowest) round trip ping time in
+    `avg`: the average round trip ping time in milliseconds
+    `max`: the maximum (slowest) round trip ping time in
         milliseconds
-    `jitter`: the standard deviation between round trip ping times
-        in milliseconds
   """
   if type(dest_ip) is not str:
     raise RepyArgumentError("Provided host must be a string!")
 
   if type(count) is not int:
-    raise RepyArgumentError("Provided count must be an int!")
+    raise RepyArgumentError("Provided count must be an integer!")
+
+  if type(timeout) is not int:
+    raise RepyArgumentError("Provided timeout must be an integer!")
 
   # Check the input arguments (sanity)
   if not emulcomm._is_valid_ip_address(dest_ip):
@@ -279,9 +273,38 @@ def ping(dest_ip,count):
   if count < 1:
     raise RepyArgumentError("Provided count must be more than 0")
 
-  process = portable_popen.Popen(['ping', '-c', str(count), dest_ip],)
-  ping_output, err = process.communicate()
-  return _parse(str(ping_output))
+  if count < 1:
+    raise RepyArgumentError("Provided timeout must be more than 0")
+
+  result = []
+  lost_count = 0
+
+  for i in xrange(count):
+    delay = _do_one(dest_ip, timeout)
+    # Account for the resources
+    if emulcomm._is_loopback_ipaddr(dest_ip):
+      nanny.tattle_quantity('loopsend', bytessent + 8)
+    else:
+      nanny.tattle_quantity('netsend', bytessent + 8)
+
+    if delay  ==  None:
+      lost_count +=1 
+    else:
+      delay  =  delay * 1000
+      result.append(delay)
+
+  if result:
+    maxping = max(result)
+    minping = min(result)
+    avg = sum(result)/len(result)
+    lost_rate = float(lost_count)/count*100.0
+  else:
+    maxping = None
+    minping = None
+    avg = None
+    lost_rate = 100
+
+  return {'max': maxping,'min': minping,'avg': avg, 'lost_rate': lost_rate, 'host': dest_ip}
 
 def get_station(interface):
   """
@@ -312,8 +335,11 @@ def get_station(interface):
   # Check the input arguments (sanity)
   if interface not in get_network_interface():
     raise RepyArgumentError("interface "+ interface + " is not available.")
-
-  iw_process = portable_popen.Popen(['iw', 'dev',interface, 'station','dump'])
+  try:
+    iw_process = portable_popen.Popen(['iw', 'dev',interface, 'station','dump'])
+  except:
+    raise FileNotFoundError('iw: command not found')
+    
   iw_output, _ = iw_process.communicate()
   iw_lines = textops.textops_rawtexttolines(iw_output)
 
@@ -334,67 +360,185 @@ def get_station(interface):
 
   result = []
 
-  for i in range(len(station)):
+  for st, sig, sig_avg, tx, rx in zip(station, signal, signal_avg, tx_bitrate, rx_bitrate):
     rules = {
-      "station": station[i].strip(),
-      "signal": signal[i].strip(),
-      "signal_avg": signal_avg[i].strip(),
-      "tx bitrate": tx_bitrate[i].strip(),
-      "rx bitrate": rx_bitrate[i].strip(),
+      "station": st.strip(),
+      "signal": sig.strip(),
+      "signal_avg": sig_avg.strip(),
+      "tx bitrate": tx.strip(),
+      "rx bitrate": rx.strip(),
     }
     result.append(rules)
   
   return result
 
 ##### Private functions ##### 
-def _get_match_groups(ping_output, regex):
+def _get_interface_traffic_statistics(interface):
   """
   <Purpose>
-    Check whether it is ping output
+    Return traffic statistics from an Interface. The information returned is 
+    looked up in the procfs.
 
   <Arguments>
-    ping_output: the result to parse
-    regex: the regular expression to match
-
-  <Exceptions>
-    None
-
-  <Side Effects>
-    None
+    interface: the name of the interface to gather network information.
 
   <Returns>
-    Returns one or more subgroups of the match.
+    Network usage info as a dict such as {'rx_bytes': '59528148', 'tx_bytes': '1366399094', 
+    'tx_packets': '598602', 'rx_packets': '1262217'}
   """
-  match = regex.search(ping_output)
-  if not match:
-    raise Exception('Invalid PING output:\n' + ping_output)
-  return match.groups()
+  if os.path.exists("/proc/net/dev"):
+    dev = safe_open('/proc/net/dev', 'r')
+    for line in dev:
+      if interface in line:
+        data = line.split('%s:' % interface)[1].split()
+        rx_packets, tx_packets = (data[1], data[9])
+        rx_bytes, tx_bytes = (data[0], data[8])
+        return {'rx_packets': rx_packets, 'tx_packets': tx_packets, 'rx_bytes': rx_bytes, 'tx_bytes': tx_bytes}
+  else:
+    raise FileNotFoundError("Could not find /proc/net/dev!")
 
-def _parse(ping_output):
+def _checksum(source_string):
   """
   <Purpose>
-    Parses the `ping_output` string into a dictionary
+    A port of the functionality of in_cksum() from ping.c.
+    It is part from http://github.com/samuel/python-ping.
 
   <Arguments>
-    ping_output: the result to parse
-
-  <Exceptions>
-    None
-
-  <Side Effects>
-    None
+    source_string: The data to calculate the checksum.
 
   <Returns>
-    ping statistics as a dict, such as {'received': '2', 'host': '173.194.123.19', 
-    sent': '2'}
+    Returns the value of checksum computation.
   """
-  result = {}
-  matcher = re.compile(r'PING ([a-zA-Z0-9.\-]+) \(')
-  host = _get_match_groups(ping_output, matcher)[0]
-  result['host'] = host
-  matcher = re.compile(r'(\d+) packets transmitted, (\d+) packets received')
-  sent, received = _get_match_groups(ping_output, matcher)
-  result['sent'] = sent
-  result['received'] = received
+  sum = 0
+  countTo = (len(source_string)/2)*2
+  count = 0
+  while count<countTo:
+    thisVal = ord(source_string[count + 1])*256 + ord(source_string[count])
+    sum = sum + thisVal
+    sum = sum & 0xffffffff # Necessary?
+    count = count + 2
 
-  return result
+  if countTo<len(source_string):
+    sum = sum + ord(source_string[len(source_string) - 1])
+    sum = sum & 0xffffffff # Necessary?
+
+  sum = (sum >> 16)  +  (sum & 0xffff)
+  sum = sum + (sum >> 16)
+  answer = ~sum
+  answer = answer & 0xffff
+
+  # Swap bytes. Bugger me if I know why.
+  answer = answer >> 8 | (answer << 8 & 0xff00)
+
+  return answer
+
+def _receive_one_ping(my_socket, ID, timeout):
+  """
+  <Purpose>
+    Receive the ping from the socket.
+    It is part from http://github.com/samuel/python-ping.
+
+  <Arguments>
+    my_socket: the address to communicate with.
+    dest_addr: Time to wait for a response, in seconds.
+    ID: a unique identifier in the ICMP ECHO REQUEST payload.
+
+  <Returns>
+    Returns either the delay (in seconds) or none.
+  """
+  timeLeft = timeout
+  while True:
+    startedSelect = time.time()
+    whatReady = select.select([my_socket], [], [], timeLeft)
+    howLongInSelect = (time.time() - startedSelect)
+    if whatReady[0] == []: # Timeout
+      return
+
+    timeReceived = time.time()
+    recPacket, addr = my_socket.recvfrom(1024)
+    icmpHeader = recPacket[20:28]
+    type, code, checksum, packetID, sequence = struct.unpack(
+        "bbHHh", icmpHeader
+    )
+    # Filters out the echo request itself. 
+    # This can be tested by pinging 127.0.0.1 
+    # You'll see your own request
+    if type != 8 and packetID == ID:
+        bytesInDouble = struct.calcsize("d")
+        timeSent = struct.unpack("d", recPacket[28:28 + bytesInDouble])[0]
+        return timeReceived - timeSent
+
+  timeLeft = timeLeft - howLongInSelect
+  if timeLeft <= 0:
+    return
+
+def _send_one_ping(my_socket, dest_addr, ID):
+  """
+  <Purpose>
+    Send one ping to the given address.
+    It is part from from http://github.com/samuel/python-ping.
+
+  <Arguments>
+    my_socket: the address to communicate with.
+    dest_addr: Time to wait for a response, in seconds.
+    ID: a unique identifier in the ICMP ECHO REQUEST payload.
+
+  <Returns>
+    None
+  """
+  ICMP_ECHO_REQUEST = 8
+
+  dest_addr  =  socket.gethostbyname(dest_addr)
+
+  # Header is type (8), code (8), checksum (16), id (16), sequence (16)
+  my_checksum = 0
+
+  # Make a dummy heder with a 0 checksum.
+  header = struct.pack("bbHHh", ICMP_ECHO_REQUEST, 0, my_checksum, ID, 1)
+  bytesInDouble = struct.calcsize("d")
+  data = (192 - bytesInDouble) * "Q"
+  data = struct.pack("d", time.time()) + data
+
+  # Calculate the checksum on the data and the dummy header.
+  my_checksum = _checksum(header + data)
+
+  # Now that we have the right checksum, we put that in. It's just easier
+  # to make up a new header than to stuff it into the dummy.
+  header = struct.pack(
+    "bbHHh", ICMP_ECHO_REQUEST, 0, socket.htons(my_checksum), ID, 1
+  )
+  packet = header + data
+  my_socket.sendto(packet, (dest_addr, 1)) # Don't know about the 1
+
+def _do_one(dest_addr, timeout):
+  """
+  <Purpose>
+    Returns either the delay (in seconds) or none on timeout.
+    It is part from http://github.com/samuel/python-ping.
+
+  <Arguments>
+    dest_addr: the address to communicate with.
+    timeout: Time to wait for a response, in seconds.
+
+  <Returns>
+    The result of delay (in seconds).
+  """
+  icmp = socket.getprotobyname("icmp")
+  try:
+    my_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, icmp)
+  except socket.error, (errno, msg):
+    if errno == 1:
+      # Operation not permitted
+      msg = msg + (
+        " - Note that ICMP messages can only be sent from processes"
+        " running as root."
+      )
+      raise socket.error(msg)
+    raise # raise the original error
+
+  my_ID = os.getpid() & 0xFFFF
+
+  _send_one_ping(my_socket, dest_addr, my_ID)
+  delay = _receive_one_ping(my_socket, my_ID, timeout)
+  my_socket.close()
+  return delay
