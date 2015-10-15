@@ -64,7 +64,11 @@ def get_network_bytes(interface):
     raise RepyArgumentError("interface "+ interface + " is not available.")
 
   return {"recv": _get_interface_traffic_statistics(interface)['rx_bytes'],
-    "trans": _get_interface_traffic_statistics(interface)['tx_bytes']}
+    "trans": _get_interface_traffic_statistics(interface)['tx_bytes'],
+    "rx_error": _get_interface_traffic_statistics(interface)['rx_error'],
+    "tx_error": _get_interface_traffic_statistics(interface)['tx_error'],
+    "rx_drop": _get_interface_traffic_statistics(interface)['rx_drop'],
+    "tx_drop": _get_interface_traffic_statistics(interface)['tx_drop']}
 
 def get_network_packets(interface):
   """
@@ -93,7 +97,11 @@ def get_network_packets(interface):
     raise RepyArgumentError("interface "+ interface + " is not available.")
 
   return {"recv": _get_interface_traffic_statistics(interface)['rx_packets'],
-    "trans": _get_interface_traffic_statistics(interface)['tx_packets']}
+    "trans": _get_interface_traffic_statistics(interface)['tx_packets'],
+    "rx_error": _get_interface_traffic_statistics(interface)['rx_error'],
+    "tx_error": _get_interface_traffic_statistics(interface)['tx_error'],
+    "rx_drop": _get_interface_traffic_statistics(interface)['rx_drop'],
+    "tx_drop": _get_interface_traffic_statistics(interface)['tx_drop']}
 
 def get_network_interface():
   """
@@ -281,11 +289,6 @@ def ping(dest_ip, count, timeout):
 
   for i in xrange(count):
     delay = _do_one(dest_ip, timeout)
-    # Account for the resources
-    if emulcomm._is_loopback_ipaddr(dest_ip):
-      nanny.tattle_quantity('loopsend', bytessent + 8)
-    else:
-      nanny.tattle_quantity('netsend', bytessent + 8)
 
     if delay  ==  None:
       lost_count +=1 
@@ -302,7 +305,7 @@ def ping(dest_ip, count, timeout):
     maxping = None
     minping = None
     avg = None
-    lost_rate = 100
+    lost_rate = 100.0
 
   return {'max': maxping,'min': minping,'avg': avg, 'lost_rate': lost_rate, 'host': dest_ip}
 
@@ -393,7 +396,10 @@ def _get_interface_traffic_statistics(interface):
         data = line.split('%s:' % interface)[1].split()
         rx_packets, tx_packets = (data[1], data[9])
         rx_bytes, tx_bytes = (data[0], data[8])
-        return {'rx_packets': rx_packets, 'tx_packets': tx_packets, 'rx_bytes': rx_bytes, 'tx_bytes': tx_bytes}
+        rx_error, tx_error = (data[2], data[10])
+        rx_drop, tx_drop = (data[3], data[11])
+        return {'rx_packets': rx_packets, 'tx_packets': tx_packets, 'rx_bytes': rx_bytes, 'tx_bytes': tx_bytes,
+        'rx_error': rx_error, 'tx_error': tx_error, 'rx_drop': rx_drop, 'tx_drop': tx_drop}
   else:
     raise FileNotFoundError("Could not find /proc/net/dev!")
 

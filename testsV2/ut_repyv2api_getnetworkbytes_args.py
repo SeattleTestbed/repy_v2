@@ -3,29 +3,14 @@
 #pragma repy
 
 
-try:
-  get_network_bytes('abc')
-except RepyArgumentError:
+for bad_arg in ["abc", 123, None]:
+  try:
+    get_network_bytes(bad_arg )
+  except RepyArgumentError:
   # expected
-  pass
-else:
-  log("Bad argment 'abc' allowed for interface",'\n')
-
-try:
-  get_network_bytes(123)
-except RepyArgumentError:
-  # expected
-  pass
-else:
-  log("Bad argment 123 allowed for interface",'\n')
-
-try:
-  get_network_bytes(None)
-except RepyArgumentError:
-  # expected
-  pass
-else:
-  log("Bad argment None allowed for interface",'\n')
+    pass
+  else:
+    log("Bad argment " + bad_arg + " allowed for interface",'\n')
 
 try:
   get_network_bytes('lo')
