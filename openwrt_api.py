@@ -281,7 +281,7 @@ def ping(dest_ip, count, timeout):
   if count < 1:
     raise RepyArgumentError("Provided count must be more than 0")
 
-  if count < 1:
+  if timeout < 1:
     raise RepyArgumentError("Provided timeout must be more than 0")
 
   result = []
