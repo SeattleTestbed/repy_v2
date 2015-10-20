@@ -53,7 +53,8 @@ def get_network_bytes(interface):
     None
 
   <Returns>
-    Network usage info as a dict such as {'trans': '59528148', 'recv': '1366399094'}
+    Network usage info as a dict such as {'trans': '59528148', 'recv': '1366399094', 'rx_error': '0',
+    'tx_error': '0', 'rx_drop': '0', 'tx_drop': 0}
   """
 
   if type(interface) is not str:
@@ -87,7 +88,8 @@ def get_network_packets(interface):
     None
 
   <Returns>
-    Network usage info as a dict such as {'trans': '598602', 'recv': '1262217'}
+    Network usage info as a dict such as {'trans': '598602', 'recv': '1262217', 'rx_error': '0',
+    'tx_error': '0', 'rx_drop': '0', 'tx_drop': 0}
   """
   if type(interface) is not str:
     raise RepyArgumentError("get_network_bytes() takes a string as argument.")
@@ -183,16 +185,16 @@ def traceroute(dest_ip, port, max_hops, waittime, ttl):
     raise RepyArgumentError("Provided dest_ip is not valid! IP: '" + dest_ip + "'")
 
   if not emulcomm._is_valid_network_port(port):
-    raise RepyArgumentError("Provided port is not valid! Port: " + str(port) + "'")
+    raise RepyArgumentError("Provided port is not valid! Port: '" + str(port) + "'")
 
-  if max_hops > 255:
-    raise RepyArgumentError("Provided max_hops: " + str(max_hops) + " is larger than 255.'")
+  if max_hops > 255 or max_hops < 0:
+    raise RepyArgumentError("Provided max_hops: " + str(max_hops) + " should not be larger than 255.'")
 
   result = []
 
   # Infinite loop until reach destination or TTL reach maximum.
   while True:
-    recv_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW,
+    recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
       socket.IPPROTO_ICMP)
     send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
       socket.IPPROTO_UDP)
@@ -494,7 +496,7 @@ def _send_one_ping(my_socket, dest_addr, ID):
   """
   ICMP_ECHO_REQUEST = 8
 
-  dest_addr  =  socket.gethostbyname(dest_addr)
+  dest_addr = socket.gethostbyname(dest_addr)
 
   # Header is type (8), code (8), checksum (16), id (16), sequence (16)
   my_checksum = 0
@@ -531,7 +533,7 @@ def _do_one(dest_addr, timeout):
   """
   icmp = socket.getprotobyname("icmp")
   try:
-    my_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, icmp)
+    my_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
   except socket.error, (errno, msg):
     if errno == 1:
       # Operation not permitted
