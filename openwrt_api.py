@@ -154,10 +154,9 @@ def traceroute(dest_ip, port, max_hops, waittime, ttl):
 
     ResourceForbiddenError when the local port isn't allowed
 
-
   <Resource Consumption>
-    This operation consumes 28 bytes + number of bytes of the message that
-    were transmitted. This requires that the localport is allowed.
+    This operation consumes network bandwidth of 64 * max_hops bytes 
+    netrecv, 64 * max_hops bytes netsend.
 
   <Side Effects>
     None
@@ -191,6 +190,14 @@ def traceroute(dest_ip, port, max_hops, waittime, ttl):
     raise RepyArgumentError("Provided max_hops: " + str(max_hops) + " should not be larger than 255.'")
 
   result = []
+  
+  # Account for the resources
+  if emulcomm._is_loopback_ipaddr(dest_ip):
+    nanny.tattle_quantity('loopsend', 64 * max_hops)
+    nanny.tattle_quantity('looprecv', 64 * max_hops)
+  else:
+    nanny.tattle_quantity('netsend', 64 * max_hops)
+    nanny.tattle_quantity('netrecv', 64 * max_hops)
 
   # Infinite loop until reach destination or TTL reach maximum.
   while True:
@@ -198,16 +205,9 @@ def traceroute(dest_ip, port, max_hops, waittime, ttl):
       socket.IPPROTO_ICMP)
     send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
       socket.IPPROTO_UDP)
-
     send_sock.setsockopt(socket.SOL_IP, socket.IP_TTL, ttl)
     recv_sock.bind(("", port))
     bytessent = send_sock.sendto("", (dest_ip, port))
-
-    # Account for the resources
-    if emulcomm._is_loopback_ipaddr(dest_ip):
-      nanny.tattle_quantity('loopsend', bytessent + 28)
-    else:
-      nanny.tattle_quantity('netsend', bytessent + 28)
 
     curr_addr = None
     curr_name = None
@@ -256,6 +256,10 @@ def ping(dest_ip, count, timeout):
   <Side Effects>
     None
 
+  <Resource Consumption>
+    This operation consumes network bandwidth of 256 * count bytes netrecv, 
+    256 * count bytes netsend.
+
   <Returns>
     ping statistics as a dict, such as { 'avg': '27.302', 'min': '14.861', 'host': 
     '192.168.1.1', 'max': '39.743', 'lost_rate': 0.0}
@@ -289,13 +293,20 @@ def ping(dest_ip, count, timeout):
   result = []
   lost_count = 0
 
+  # Account for the resources
+  if emulcomm._is_loopback_ipaddr(dest_ip):
+    nanny.tattle_quantity('loopsend', 256 * count)
+    nanny.tattle_quantity('looprecv', 256 * count)
+  else:
+    nanny.tattle_quantity('netsend', 256 * count)
+    nanny.tattle_quantity('netrecv', 256 * count)
+
   for i in xrange(count):
     delay = _do_one(dest_ip, timeout)
-
-    if delay  ==  None:
+    if delay == None:
       lost_count +=1 
     else:
-      delay  =  delay * 1000
+      delay = delay * 1000
       result.append(delay)
 
   if result:
@@ -455,6 +466,7 @@ def _receive_one_ping(my_socket, ID, timeout):
     Returns either the delay (in seconds) or none.
   """
   timeLeft = timeout
+
   while True:
     startedSelect = time.time()
     whatReady = select.select([my_socket], [], [], timeLeft)
@@ -464,6 +476,8 @@ def _receive_one_ping(my_socket, ID, timeout):
 
     timeReceived = time.time()
     recPacket, addr = my_socket.recvfrom(1024)
+    print len(recPacket)
+
     icmpHeader = recPacket[20:28]
     type, code, checksum, packetID, sequence = struct.unpack(
         "bbHHh", icmpHeader
@@ -495,7 +509,6 @@ def _send_one_ping(my_socket, dest_addr, ID):
     None
   """
   ICMP_ECHO_REQUEST = 8
-
   dest_addr = socket.gethostbyname(dest_addr)
 
   # Header is type (8), code (8), checksum (16), id (16), sequence (16)
@@ -531,9 +544,8 @@ def _do_one(dest_addr, timeout):
   <Returns>
     The result of delay (in seconds).
   """
-  icmp = socket.getprotobyname("icmp")
   try:
-    my_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+    my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_ICMP)
   except socket.error, (errno, msg):
     if errno == 1:
       # Operation not permitted
