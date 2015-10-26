@@ -52,6 +52,9 @@ def get_network_bytes(interface):
   <Side Effects>
     None
 
+  <Resource Consumption>
+    Consumes 4K of procfsread.
+
   <Returns>
     Network usage info as a dict such as {'trans': '59528148', 'recv': '1366399094', 'rx_error': '0',
     'tx_error': '0', 'rx_drop': '0', 'tx_drop': 0}
@@ -63,6 +66,8 @@ def get_network_bytes(interface):
   # Check the input arguments (sanity)
   if interface not in get_network_interface():
     raise RepyArgumentError("interface "+ interface + " is not available.")
+
+  nanny.tattle_quantity('procfsread', 4096)
 
   return {"recv": _get_interface_traffic_statistics(interface)['rx_bytes'],
     "trans": _get_interface_traffic_statistics(interface)['tx_bytes'],
@@ -87,6 +92,9 @@ def get_network_packets(interface):
   <Side Effects>
     None
 
+  <Resource Consumption>
+    Consumes 4K of procfsread.
+
   <Returns>
     Network usage info as a dict such as {'trans': '598602', 'recv': '1262217', 'rx_error': '0',
     'tx_error': '0', 'rx_drop': '0', 'tx_drop': 0}
@@ -97,6 +105,8 @@ def get_network_packets(interface):
   # Check the input arguments (sanity)
   if interface not in get_network_interface():
     raise RepyArgumentError("interface "+ interface + " is not available.")
+
+  nanny.tattle_quantity('procfsread', 4096)
 
   return {"recv": _get_interface_traffic_statistics(interface)['rx_packets'],
     "trans": _get_interface_traffic_statistics(interface)['tx_packets'],
@@ -119,9 +129,14 @@ def get_network_interface():
   <Side Effects>
     None
 
+  <Resource Consumption>
+    Consumes 4K of procfsread.
+
   <Returns>
     The list of strings(interface name).
   """
+  nanny.tattle_quantity('procfsread', 4096)
+  
   if os.path.exists("/proc/net/dev"):
     dev = safe_open("/proc/net/dev", "r").readlines()
     header_line = dev[1]
