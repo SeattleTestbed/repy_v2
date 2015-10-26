@@ -116,6 +116,7 @@ import emulfile
 import emulmisc
 import emultimer
 import openwrt_api
+import general_api
 import nonportable
 import safe # Used to get SafeDict
 import tracebackrepy
@@ -599,11 +600,11 @@ class DictOrSafeDict(ObjectProcessor):
 # defined here will be wrapped and made available to untrusted user code.
 USERCONTEXT_WRAPPER_INFO = {
   'ping' :
-      {'func' : openwrt_api.ping,
+      {'func' : general_api.ping,
        'args' : [Str(),Int(),Int()],
        'return' : Dict()},
   'traceroute' :
-      {'func' : openwrt_api.traceroute,
+      {'func' : general_api.traceroute,
        'args' : [Str(),Int(),Int(),Int(),Int()],
        'return' : List()},
   'get_network_bytes' :
