@@ -606,7 +606,7 @@ USERCONTEXT_WRAPPER_INFO = {
   'traceroute' :
       {'func' : general_api.traceroute,
        'args' : [Str(),Int(),Int(),Int(),Int()],
-       'return' : List()},
+       'return' : Dict()},
   'get_network_bytes' :
       {'func' : openwrt_api.get_network_bytes,
        'args' : [Str()],

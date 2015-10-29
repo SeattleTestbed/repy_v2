@@ -226,10 +226,19 @@ def _get_interface_traffic_statistics(interface):
   <Arguments>
     interface: the name of the interface to gather network information.
 
+  <Exceptions>
+    FileNotFoundError is raised if the file does not exist
+
   <Returns>
     Network usage info as a dict such as {'rx_bytes': '59528148', 'tx_bytes': '1366399094', 
     'tx_packets': '598602', 'rx_packets': '1262217'}
   """
+  #cat /proc/net/dev 
+  #Inter-|   Receive                                                |  Transmit
+  #face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+  #eth0: 1414039694 1492858    0    0    0     0          0         0 78372019  827138    0    0    0     0       0          0
+  #  lo: 5071019   36780    0    0    0     0          0         0  5071019   36780    0    0    0     0       0          0
+
   if os.path.exists("/proc/net/dev"):
     dev = safe_open('/proc/net/dev', 'r')
     for line in dev:

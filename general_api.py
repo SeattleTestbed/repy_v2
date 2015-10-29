@@ -17,11 +17,9 @@ import socket
 
 import portable_popen # Import for Popen
 
-import textops # Import seattlelib's text processing lib
+import os # Provides some convenience functions
 
 import struct
-
-import os # Provides some convenience functions
 
 import emulcomm
 
@@ -63,7 +61,11 @@ def traceroute(dest_ip, port, max_hops, waittime, ttl):
     None
 
   <Returns>
-    The result of traceroute
+    traceroute result as a dict, such as {1: 'openrg.home (192.168.
+    1.1)', 2: '10.240.161.249 (10.240.161.249)', 3: '67.59.231.17 (67.59.231.17
+    )', 4: 'ool-4353dda4.dyn.optonline.net (67.83.221.164)', 5: '451be0c5.cst.l
+    ightpath.net (65.19.99.197)', 6: '64.15.0.80 (64.15.0.80)', 7: '*', 8: '*',
+     9: '*', 10: '*'}
   """
   if type(dest_ip) is not str:
     raise RepyArgumentError("Provided dest_ip must be a string!")
@@ -90,7 +92,7 @@ def traceroute(dest_ip, port, max_hops, waittime, ttl):
   if max_hops > 255 or max_hops < 0:
     raise RepyArgumentError("Provided max_hops: " + str(max_hops) + " should not be larger than 255.'")
 
-  result = []
+  result = {}
   
   # Account for the resources
   if emulcomm._is_loopback_ipaddr(dest_ip):
@@ -132,7 +134,7 @@ def traceroute(dest_ip, port, max_hops, waittime, ttl):
       curr_host = "%s (%s)" % (curr_name, curr_addr)
     else:
       curr_host = "*"
-    result.append("%d %s" % (ttl, curr_host)) 
+    result[ttl] = curr_host
 
     ttl += 1
     if curr_addr == dest_ip or ttl > max_hops:
@@ -284,8 +286,6 @@ def _receive_one_ping(my_socket, ID, timeout):
 
     timeReceived = time.time()
     recPacket, addr = my_socket.recvfrom(1024)
-    print len(recPacket)
-
     icmpHeader = recPacket[20:28]
     type, code, checksum, packetID, sequence = struct.unpack(
         "bbHHh", icmpHeader
