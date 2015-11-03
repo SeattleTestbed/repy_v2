@@ -1,0 +1,1 @@
+log(get_network_packets('wlan0'),'\n')

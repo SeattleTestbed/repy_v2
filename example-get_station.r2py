@@ -1,0 +1,1 @@
+log(get_station('wlan0'),'\n')

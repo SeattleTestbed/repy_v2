@@ -1,0 +1,1 @@
+log(traceroute(gethostbyname('www.google.com'),33434 ,10,1,1),'\n')

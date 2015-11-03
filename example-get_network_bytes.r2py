@@ -1,0 +1,1 @@
+log(get_network_bytes('wlan0'),'\n')
