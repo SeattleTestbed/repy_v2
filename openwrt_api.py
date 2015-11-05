@@ -160,17 +160,18 @@ def get_station(interface):
       interface: the name of the interface to gather network information.
 
    <Exceptions>
-      RepyArgumentError is raised if the argument isn't valid types or values
+      RepyArgumentError is raised if the argument isn't valid types or values.
+      FileNotFoundError is raised if iw tool does not exist.
 
    <Side Effects>
       None
 
    <Returns>
-     station statistic informatio as a dict such as {{'signal': '-77 [-78, -83] dBm', 
+     station statistic informatio as a dict such as [{'signal': '-77 [-78, -83] dBm', 
     'station': '54:4e:90:06:f3:6f', 'tx bitrate': '57.8 MBit/s MCS 5 short GI', 'rx 
     bitrate': '1.0 MBit/s', 'signal_avg': '-88 [-90, -92] dBm'}, {'signal': '-40 [-42, 
     -44] dBm', 'station': 'ac:81:12:53:8e:0f', 'tx bitrate': '65.0 MBit/s MCS 6 short 
-    GI', 'rx bitrate': '18.0 MBit/s', 'signal_avg': '-42 [-44, -48] dBm'}}
+    GI', 'rx bitrate': '18.0 MBit/s', 'signal_avg': '-42 [-44, -48] dBm'}]
 
   """
   if type(interface) is not str:
@@ -180,7 +181,7 @@ def get_station(interface):
   if interface not in get_network_interface():
     raise RepyArgumentError("interface "+ interface + " is not available.")
   try:
-    iw_process = portable_popen.Popen(['iw', 'dev',interface, 'station','dump'])
+    iw_process = portable_popen.Popen(['iw', 'dev', interface, 'station','dump'])
   except:
     raise FileNotFoundError('iw: command not found')
     
@@ -211,6 +212,61 @@ def get_station(interface):
       "signal_avg": sig_avg.strip(),
       "tx bitrate": tx.strip(),
       "rx bitrate": rx.strip(),
+    }
+    result.append(rules)
+  
+  return result
+
+def scan(interface):
+  """
+  <Purpose>
+    Collect a list of access points found with one WiFi. For each access point 
+    we collect BSSID, SSID and signal strength.
+
+  <Arguments>
+    interface: the name of the interface to gather network information.
+
+  <Exceptions>
+    FileNotFoundError is raised if iw tool does not exist.
+
+  <Side Effects>
+    None
+
+  <Returns>
+    A list of access points such as[{'BSSID': 2c:3e:cf:a0:23:51, 'SSID': nyu,
+    'signal': -78.00 dBm}]
+
+  """
+  if type(interface) is not str:
+    raise RepyArgumentError("scan() takes a string as argument.")
+
+  # Check the input arguments (sanity)
+  if interface not in get_network_interface():
+    raise RepyArgumentError("interface "+ interface + " is not available.")
+  try:
+    iw_process = portable_popen.Popen(['iw', 'dev', interface, 'scan'])
+  except:
+    raise FileNotFoundError('iw: command not found')
+    
+  iw_output, _ = iw_process.communicate()
+  iw_lines = textops.textops_rawtexttolines(iw_output)
+
+  BSSID = textops.textops_grep("BSS", iw_lines)
+  BSSID = textops.textops_cut(BSSID, delimiter=" ", fields=[1])
+
+  signal = textops.textops_grep("signal:", iw_lines)
+  signal = textops.textops_cut(signal, delimiter=":", fields=[1])         
+
+  SSID = textops.textops_grep("SSID", iw_lines)
+  SSID = textops.textops_cut(SSID, delimiter=":", fields=[1])                 
+
+  result = []
+
+  for bbs, sig, ssid in zip(BSSID, signal, SSID):
+    rules = {
+      "BSSID": bbs.strip(),
+      "Signal": sig.strip(),
+      "SSID": ssid.strip(),
     }
     result.append(rules)
   

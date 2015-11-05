@@ -623,6 +623,10 @@ USERCONTEXT_WRAPPER_INFO = {
       {'func' : openwrt_api.get_station,
        'args' : [Str()],
        'return' : List()},
+  'scan' :
+      {'func' : openwrt_api.scan,
+       'args' : [Str()],
+       'return' : List()},
   'gethostbyname' :
       {'func' : emulcomm.gethostbyname,
        'args' : [Str()],
