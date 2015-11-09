@@ -102,10 +102,11 @@ def traceroute(dest_ip, port, max_hops, waittime, ttl):
     nanny.tattle_quantity('netsend', 64 * max_hops)
     nanny.tattle_quantity('netrecv', 64 * max_hops)
 
+  icmp = socket.getprotobyname("icmp")
   # Infinite loop until reach destination or TTL reach maximum.
   while True:
-    recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
-      socket.IPPROTO_ICMP)
+    recv_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW,
+      icmp)
     send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,
       socket.IPPROTO_UDP)
     send_sock.setsockopt(socket.SOL_IP, socket.IP_TTL, ttl)
@@ -352,8 +353,9 @@ def _do_one(dest_addr, timeout):
   <Returns>
     The result of delay (in seconds).
   """
+  icmp = socket.gethostbyname("icmp")
   try:
-    my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_ICMP)
+    my_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, icmp)
   except socket.error, (errno, msg):
     if errno == 1:
       # Operation not permitted

@@ -197,21 +197,37 @@ def get_station(interface):
   signal_avg = textops.textops_grep("signal avg:", iw_lines)
   signal_avg = textops.textops_cut(signal_avg, delimiter=":", fields=[1])         
 
-  tx_bitrate = textops.textops_grep("tx bitrate:", iw_lines)
-  tx_bitrate = textops.textops_cut(tx_bitrate, delimiter=":", fields=[1])         
+  tx_packets = textops.textops_grep("tx packets:", iw_lines)
+  tx_packets = textops.textops_cut(tx_packets, delimiter=":", fields=[1])         
 
-  rx_bitrate = textops.textops_grep("rx bitrate:", iw_lines)
-  rx_bitrate = textops.textops_cut(rx_bitrate, delimiter=":", fields=[1])         
+  rx_packets = textops.textops_grep("rx packets:", iw_lines)
+  rx_packets = textops.textops_cut(rx_packets, delimiter=":", fields=[1]) 
+
+  rx_bytes = textops.textops_grep("rx bytes:", iw_lines)
+  rx_bytes = textops.textops_cut(rx_bytes, delimiter=":", fields=[1])
+
+  tx_bytes = textops.textops_grep("tx bytes:", iw_lines)
+  tx_bytes = textops.textops_cut(tx_bytes, delimiter=":", fields=[1])
+
+  tx_retries = textops.textops_grep("tx retries:", iw_lines)
+  tx_retries = textops.textops_cut(tx_retries, delimiter=":", fields=[1])
+
+  tx_failed = textops.textops_grep("tx failed:", iw_lines)
+  tx_failed  = textops.textops_cut(tx_failed , delimiter=":", fields=[1])        
 
   result = []
 
-  for st, sig, sig_avg, tx, rx in zip(station, signal, signal_avg, tx_bitrate, rx_bitrate):
+  for i in range(len(station)):
     rules = {
-      "station": st.strip(),
-      "signal": sig.strip(),
-      "signal_avg": sig_avg.strip(),
-      "tx bitrate": tx.strip(),
-      "rx bitrate": rx.strip(),
+      "station": station[i].strip(),
+      "signal": signal[i].strip(),
+      "signal_avg": signal_avg[i].strip(),
+      "tx packets": tx_packets[i].strip(),
+      "rx packets": rx_packets[i].strip(),
+      "tx bytes": tx_bytes[i].strip(),
+      "rx bytes": rx_bytes[i].strip(),
+      "tx retries": tx_retries[i].strip(),
+      "tx failed": tx_failed[i].strip(),            
     }
     result.append(rules)
   
@@ -221,7 +237,7 @@ def scan(interface):
   """
   <Purpose>
     Collect a list of access points found with one WiFi. For each access point 
-    we collect BSSID, SSID and signal strength.
+    we collect BSSID, SSID ,signal strength and channel.
 
   <Arguments>
     interface: the name of the interface to gather network information.
@@ -234,7 +250,7 @@ def scan(interface):
 
   <Returns>
     A list of access points such as[{'BSSID': 2c:3e:cf:a0:23:51, 'SSID': nyu,
-    'signal': -78.00 dBm}]
+    'signal': -78.00 dBm, 'Channel': 11}]
 
   """
   if type(interface) is not str:
@@ -258,15 +274,19 @@ def scan(interface):
   signal = textops.textops_cut(signal, delimiter=":", fields=[1])         
 
   SSID = textops.textops_grep("SSID", iw_lines)
-  SSID = textops.textops_cut(SSID, delimiter=":", fields=[1])                 
+  SSID = textops.textops_cut(SSID, delimiter=":", fields=[1])
+
+  channel = textops.textops_grep("primary channel", iw_lines)
+  channel = textops.textops_cut(channel, delimiter=":", fields=[1])                 
 
   result = []
 
-  for bbs, sig, ssid in zip(BSSID, signal, SSID):
+  for bbs, sig, ssid, chan in zip(BSSID, signal, SSID, channel):
     rules = {
       "BSSID": bbs.strip(),
       "Signal": sig.strip(),
       "SSID": ssid.strip(),
+      "channel": chan.strip(),
     }
     result.append(rules)
   
