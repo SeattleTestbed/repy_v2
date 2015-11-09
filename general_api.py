@@ -353,7 +353,7 @@ def _do_one(dest_addr, timeout):
   <Returns>
     The result of delay (in seconds).
   """
-  icmp = socket.gethostbyname("icmp")
+  icmp = socket.getprotobyname("icmp")
   try:
     my_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, icmp)
   except socket.error, (errno, msg):
