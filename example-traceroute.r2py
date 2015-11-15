@@ -1,1 +1,9 @@
-log(traceroute(gethostbyname('www.google.com'),33434 ,10,1,1),'\n')
+log("The route packets take to www.google.com")
+result = traceroute(gethostbyname('www.google.com'),33434 ,10,1,1)
+log(result,'\n')
+num = 0
+for i in range(1,11):
+  #log(result.get(i),'\n')
+  if(result.get(i) is not '*'):
+    num = num + 1
+log("The hop times: " + str(num),'\n')

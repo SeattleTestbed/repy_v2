@@ -1,1 +1,0 @@
-log(ping(gethostbyname('www.google.com'),4,2)['lost_rate'],'\n')

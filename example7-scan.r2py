@@ -1,1 +1,0 @@
-log(scan('wlan0'),'\n')

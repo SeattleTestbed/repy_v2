@@ -1,1 +1,6 @@
-log(get_network_packets('wlan0'),'\n')
+log("transmitted packets: " + str(get_network_packets('wlan0')['trans']),'\n')
+log("received packets: " + str(get_network_packets('wlan0')['recv']),'\n')
+log("received error: " + str(get_network_packets('wlan0')['rx_error']),'\n')
+log("transmitted error: " + str(get_network_packets('wlan0')['tx_error']),'\n')
+log("received drop: " + str(get_network_packets('wlan0')['rx_drop']),'\n')
+log("transmitted drop: " + str(get_network_packets('wlan0')['tx_drop']),'\n')

@@ -1,1 +1,4 @@
 log(get_station('wlan0'),'\n')
+log("The number of station: " + str(len(get_station('wlan0'))), '\n')
+for i in range(len(get_station('wlan0'))):
+  log(get_station('wlan0')[i]['station'] + get_station('wlan0')[i]['signal'], '\n')

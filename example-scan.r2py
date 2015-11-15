@@ -1,0 +1,4 @@
+#log(scan('wlan0'),'\n')
+log("The number of APs: " + str(len(scan('wlan0'))),'\n')
+for i in range(len(scan('wlan0'))):
+  log(scan('wlan0')[i]['SSID'] + ' ' + scan('wlan0')[i]['channel'], '\n')
