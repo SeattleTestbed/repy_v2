@@ -89,6 +89,14 @@ def traceroute(dest_ip, port, max_hops, waittime, ttl):
   if not emulcomm._is_valid_network_port(port):
     raise RepyArgumentError("Provided port is not valid! Port: '" + str(port) + "'")
 
+  # Check the input arguments (permission)
+  emulcomm.update_ip_cache()
+  if not emulcomm._ip_is_allowed(dest_ip):
+    raise ResourceForbiddenError("Provided localip is not allowed! IP: " + dest_ip)
+
+  if not emulcomm._is_allowed_localport("UDP", port):
+    raise ResourceForbiddenError("Provided localport is not allowed! Port: " + str(port))
+
   if max_hops > 255 or max_hops < 0:
     raise RepyArgumentError("Provided max_hops: " + str(max_hops) + " should not be larger than 255.'")
 
@@ -166,9 +174,9 @@ def ping(dest_ip, count, timeout):
 
   <Returns>
     ping statistics as a dict, such as { 'avg': '27.302', 'min': '14.861', 'host': 
-    '192.168.1.1', 'max': '39.743', 'lost_rate': 0.0}
+    '192.168.1.1', 'max': '39.743', 'loss_rate': 0.0}
     `host`: the target hostname that was pinged
-    `lost_rate`: the rate of packet loss
+    `loss_rate`: the rate of packet loss
     `min`: the minimum (fastest) round trip ping request/reply
         time in milliseconds
     `avg`: the average round trip ping time in milliseconds
@@ -224,7 +232,7 @@ def ping(dest_ip, count, timeout):
     avg = None
     lost_rate = 100.0
 
-  return {'max': maxping,'min': minping,'avg': avg, 'lost_rate': lost_rate, 'host': dest_ip}
+  return {'max': maxping,'min': minping,'avg': avg, 'loss_rate': lost_rate, 'host': dest_ip}
 
 ##### Private functions ##### 
 def _checksum(source_string):
