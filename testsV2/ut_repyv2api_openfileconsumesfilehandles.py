@@ -6,12 +6,12 @@ This test checks the behavior of openfile when filehandles should be exhausted.
 filehandles = []
 filenames = []
 
-rand_files_name = "random.files.to.create.number"
+RAND_FILE = "random.files.to.create.number"
 
 # Open random files, as many as the resource restrictions allows  
 for number in xrange(getresources()[0]['filesopened']):
-  filenames.append(rand_files_name + str(number + 1))
-  filehandles.append(openfile((rand_files_name + str(number + 1)), True))
+  filenames.append(RAND_FILE + str(number + 1))
+  filehandles.append(openfile((RAND_FILE + str(number + 1)), True))
 
 # Try to open this file with create, we should get an error
 # and the file should not be created
