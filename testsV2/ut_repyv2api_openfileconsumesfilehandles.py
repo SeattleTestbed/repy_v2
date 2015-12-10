@@ -15,23 +15,23 @@ for number in xrange(getresources()[0]['filesopened']):
 
 # Try to open this file with create, we should get an error
 # and the file should not be created
-tryfile = "trying.to.create.this.file"
+TRYFILE = "trying.to.create.this.file"
 
 try:
-  fileh = openfile(tryfile, True)
-  fileh.close()
+  fileh = openfile(TRYFILE, True)
 except ResourceExhaustedError:
   pass
 else:
   log("Opened file with no handles available!",'\n')
 # Check if the file exists
-if tryfile in listfiles():
+if TRYFILE in listfiles():
   log("The file was created with no handles available!",'\n')
-  removefile(tryfile)
+  fileh.close()
+  removefile(TRYFILE)
 
 #Close all random files opened
-for randFile in filehandles:
-  randFile.close()
+for randfile in filehandles:
+  randfile.close()
 
 #Clean up all random files
 for name in filenames:
