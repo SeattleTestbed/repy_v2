@@ -31,7 +31,8 @@
                          : This flag may be asserted multiple times.
   --nootherips           : Instructs Repy to only use IP's and interfaces that are explicitly given.
                          : It should be noted that loopback (127.0.0.1) is always permitted.
-  --logfile filename.txt : Set up a circular log buffer and output to logfilename.txt
+  --logfile filename     : Set up for circular log buffer of size 16KB.Suffix is .old/.new.
+                         : This file is created in the initial working directory which initializes the call.
   --stop filename        : Repy will watch for the creation of this file and abort when it happens
                          : File can have format EXITCODE;EXITMESG. Code 44 is Stopped and is the default.
                          : EXITMESG will be printed prior to exiting if it is non-null.
