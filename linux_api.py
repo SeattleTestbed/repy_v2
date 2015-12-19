@@ -333,27 +333,67 @@ def get_interface_ip_addresses(interfaceName):
 
   # Launch up a shell, get the feed back
   # We use ifconfig with the interface name.
-  ifconfig_process = portable_popen.Popen(["/sbin/ifconfig", interfaceName.strip()])
+  network_interface = None
 
-  ifconfig_output, _ = ifconfig_process.communicate()
-  ifconfig_lines = textops.textops_rawtexttolines(ifconfig_output)
-  
-  # Look for ipv4 addresses
-  target_lines = textops.textops_grep("inet", ifconfig_lines)
-  # and not ipv6
-  target_lines = textops.textops_grep("inet6", target_lines, exclude=True)
 
-  # Only take the ip(s)
-  target_lines = textops.textops_cut(target_lines, delimiter=":", fields=[1])
-  target_lines = textops.textops_cut(target_lines, delimiter=" ", fields=[0])
+  #ifconfig [interface] process
+  if(network_interface == None):
+    try:
+      network_interface = portable_popen.Popen(["/sbin/ifconfig", interfaceName.strip()])
+      network_interface_output, _ = network_interface.communicate()
+      network_interface_lines = textops.textops_rawtexttolines(network_interface_output)
 
-  # Create an array for the ip's
-  ipaddressList = []
-  
-  for line in target_lines:
-     # Strip the newline and any spacing
-     line = line.strip("\n\t ")
-     ipaddressList.append(line)
+      # Look for ipv4 addresses
+      target_lines = textops.textops_grep("inet", network_interface_lines)
 
-  # Done, return the interfaces
-  return ipaddressList
+      # and not ipv6
+      target_lines = textops.textops_grep("inet6", target_lines, exclude=True)
+
+      # Only take the ip(s)
+      target_lines = textops.textops_cut(target_lines, delimiter=":", fields=[1])
+      target_lines = textops.textops_cut(target_lines, delimiter=" ", fields=[0])
+
+      # Create an array for the ip's
+      ipaddressList = []
+      
+      for line in target_lines:
+         # Strip the newline and any spacing
+         line = line.strip("\n\t ")
+         ipaddressList.append(line)
+
+      # Done, return the interfaces
+      return ipaddressList
+    except Exception, e:
+      pass 
+
+  network_interface = None
+
+  #ip addr a show dev [interface] process
+  if(network_interface == None):
+    try:
+      network_interface = portable_popen.Popen(["ip", "a", "show", "dev", interfaceName.strip()])
+      network_interface_output, _ = network_interface.communicate()
+      network_interface_lines = textops.textops_rawtexttolines(network_interface_output)
+
+      # Look for ipv4 addresses
+      target_lines = textops.textops_grep("inet", network_interface_lines)
+
+      # and not ipv6
+      target_lines = textops.textops_grep("inet6", target_lines, exclude=True)
+
+      # Only take the ip(s)
+      target_lines = textops.textops_cut(target_lines, delimiter="/", fields=[0])
+      target_lines = textops.textops_cut(target_lines, delimiter=" ", fields=[-1])
+
+      ipaddressList = []
+      
+      for line in target_lines:
+         # Strip the newline and any spacing
+         line = line.strip("\n\t ")
+         ipaddressList.append(line)
+
+      # Done, return the interfaces
+      return ipaddressList
+
+    except Exception, e:
+      raise Exception('Both ifconfig and ip failed internally ' + str(e)) 
