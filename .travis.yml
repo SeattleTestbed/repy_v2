@@ -1,0 +1,72 @@
+# This file describes the combination of the different build configurations for seattle testbed
+# We create a matrix of machines with software configurations
+matrix:
+  include:
+  # Here we are using objective-c as currently there is no MAC + PYTHON combination available
+  # We use objective-c to install python version required for us
+  # Below are combinations for MAC instances
+  # Below we are installing python 2.5.6 on MAC        
+    - language: objective-c
+      os: osx
+      install:
+          - if [[ "$(uname -s)" == 'Darwin' ]]; then
+             pyenv install 2.5.6;
+             pyenv global 2.5.6;
+            fi
+          - export PYENV_ROOT="${HOME}/.pyenv"
+          - if [ -d "${PYENV_ROOT}" ]; then
+             export PATH="${PYENV_ROOT}/bin:${PATH}";
+             eval "$(pyenv init -)";
+            fi
+
+  # Below we are installing python 2.6.9 on MAC
+    - language: objective-c
+      os: osx
+      install:
+          - if [[ "$(uname -s)" == 'Darwin' ]]; then
+             pyenv install 2.6.9;
+             pyenv global 2.6.9;
+            fi
+          - export PYENV_ROOT="${HOME}/.pyenv"
+          - if [ -d "${PYENV_ROOT}" ]; then
+             export PATH="${PYENV_ROOT}/bin:${PATH}";
+             eval "$(pyenv init -)";
+            fi
+  # Below we are installing python 2.7.9 on MAC
+    - language: objective-c
+      os: osx
+      install:
+        - if [[ "$(uname -s)" == 'Darwin' ]]; then
+           brew update;
+           brew install python;
+          fi
+ # The below are configurations for Linux instances
+ # Python 2.5 on Linux
+    - language: perl
+      python: '2.5'
+      os: linux
+      install:
+        - export DEBIAN_FRONTEND=noninteractive
+        - sudo apt-add-repository -y ppa:fkrull/deadsnakes
+        - sudo apt-get update
+        - sudo apt-get -y install python2.5
+        - sudo ln -sf /usr/bin/python2.5 /usr/bin/python
+        - sudo ln -sf /usr/bin/python2.5 /usr/bin/python2
+        - sudo ln -sf /usr/bin/pydoc2.5 /usr/bin/pydoc
+        - sudo ln -sf /usr/bin/pygettext2.5 /usr/bin/pygettext
+ # Python 2.6 on Linux
+    - language: python
+      python: '2.6'
+      os: linux
+ # Python 2.7 on Linux
+    - language: python
+      python: '2.7'
+      os: linux
+
+script:
+  - python --version
+  - cd ./scripts
+  - python initialize.py
+  - python build.py -t
+  - cd ../RUNNABLE
+  - python utf.py -a
