@@ -1,0 +1,30 @@
+build: false
+
+os: Unstable
+
+environment:
+  matrix:
+    - PYTHON: "C:\\Python27"
+      PYTHON_VERSION: "2.7.x"
+
+    - PYTHON: "C:\\Python26"
+      PYTHON_VERSION: "2.6.x"
+
+    - PYTHON: "C:\\Python25"
+      PYTHON_VERSION: "2.5.x"
+
+platform:
+- x86
+- x64
+
+test_script:
+  - "python --version"
+  - "cd scripts"
+  - "python initialize.py"
+  - "python build.py -t"
+  - "cd ../RUNNABLE"
+  - "python utf.py -a"
+
+
+skip_commits:
+  message: /(Update README*|Created.*\.(png|jpg|jpeg|bmp|gif))/
