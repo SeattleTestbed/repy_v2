@@ -1,9 +1,20 @@
+# Seattle supports Python 2.5 through 2.7, per https://seattle.poly.edu/wiki/ProgrammersPage
+# AppVeyor provides Windows-based testing.
+
 build: false
 
-os: Unstable
+# Default OS is Windows Server 2012 R2
+# As an example, uncommenting the 3 lines below would
+# result in builds being run both on the current version
+# of Windows Server 2012 R2 and the previous version of
+# Windows Server 2012 R2.
+#os:
+#  - Previous Windows Server 2012 R2
+#  - Windows Server 2012 R2
 
 environment:
   matrix:
+    # Run on each of the following three Python setups.
     - PYTHON: "C:\\Python27"
       PYTHON_VERSION: "2.7.x"
 
@@ -13,10 +24,13 @@ environment:
     - PYTHON: "C:\\Python25"
       PYTHON_VERSION: "2.5.x"
 
+# Run on 32-bit and 64-bit platforms.
 platform:
-- x86
-- x64
+  - x86
+  - x64
 
+# Execute the following sequence of commands for a given
+# build.
 test_script:
   - "python --version"
   - "cd scripts"

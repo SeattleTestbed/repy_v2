@@ -1,14 +1,14 @@
-# <~> Travis integration file.
+# Travis integration file.
 # Seattle supports Python 2.5 through 2.7, per https://seattle.poly.edu/wiki/ProgrammersPage
 # Travis provides OS X and Linux (think generally Debian-based) OS instances.
-# AppVeyor provides Windows
 
 matrix:
   include:
+    # Linux Instances follow, one for each dash.
     - language: python          # Language to initiate linux VM
-      python: '2.7'             # Type of python to use     
+      python: '2.7'             # Version of python to use
       os: linux                 # The OS of the VM
-      install:                  # tool installation 
+      install:                  # tool installation
         - sudo apt-get update
         - sudo apt-get install net-tools
     - language: python
@@ -48,8 +48,8 @@ matrix:
       install:
           brew update;
           brew install python;
-          pyenv install 2.5.6;
-          pyenv global 2.5.6;
+          pyenv install 2.6.9;
+          pyenv global 2.6.9;
 
 script:
   - python --version
