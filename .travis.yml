@@ -1,6 +1,11 @@
 # Travis integration file.
-# Seattle supports Python 2.5 through 2.7, per https://seattle.poly.edu/wiki/ProgrammersPage
-# Travis provides OS X and Linux (think generally Debian-based) OS instances.
+# Seattle supports Python 2.5 through 2.7, per
+#   seattle.poly.edu/wiki/ProgrammersPage
+#
+# Travis provides OS X and Linux (specifically Ubuntu) OS instances.
+# The result of this configuration will be six separate builds on
+# Travis-CI VMs, 3 python versions each on Linux and OS X.
+
 
 matrix:
   include:
@@ -26,16 +31,21 @@ matrix:
 
 
     # OS X Instances follow
-    # Here, we are using objective-c as currently there is no MAC + PYTHON combination available by default
-    # We instead use objective-c to install the python version we want
+    # There is no OS X + PYTHON combination available by default, so we
+    # use the "language: generic" directive and we'll install python
+    # ourselves through some install directives.
+    # See references:
+    #   github.com/travis-ci/travis-ci/issues/2312
+    #   docs.travis-ci.com/user/languages/python
+    #   docs.travis-ci.com/user/multi-os/#Python-example-%28unsupported-languages%29
     # OS X Python current version (currently 2.7.11)
-    - language: objective-c
+    - language: generic
       os: osx
       install:
           brew update;
           brew install python;
     # OS X python 2.5.6
-    - language: objective-c
+    - language: generic
       os: osx
       install:
           brew update;
@@ -43,7 +53,7 @@ matrix:
           pyenv install 2.5.6;
           pyenv global 2.5.6;
     # OS X python 2.6.9
-    - language: objective-c
+    - language: generic
       os: osx
       install:
           brew update;
