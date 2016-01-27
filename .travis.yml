@@ -6,6 +6,10 @@
 # The result of this configuration will be six separate builds on
 # Travis-CI VMs, 3 python versions each on Linux and OS X.
 
+# Because of some manual fiddling to get python 2.5 tests to work,
+# we require the following directive - we need non-container-based
+# infrastructure so that Travis allows us to use sudo.
+sudo: required
 
 matrix:
   include:
@@ -13,22 +17,30 @@ matrix:
     - language: python          # Language to initiate linux VM
       python: '2.7'             # Version of python to use
       os: linux                 # The OS of the VM
+      env: Python='2.7' PythonBin="python"
       install:                  # tool installation
-        - sudo apt-get update
-        - sudo apt-get install net-tools
+        sudo apt-get update;
+
     - language: python
       python: '2.6'
       os: linux
+      env: Python='2.6' PythonBin="python"
       install:
-        - sudo apt-get update
-        - sudo apt-get install net-tools
-    - language: python
-      python: '2.5'
-      os: linux
-      install:
-        - sudo apt-get update
-        - sudo apt-get install net-tools
+        sudo apt-get update;
 
+    # Because Travis-CI no longer offers the 2.5 environment by default,
+    # we'll manually install 2.5.... It's not even available on the common
+    # ubuntu repos, so we'll use deadsnakes.
+    - language: python
+      os: linux
+      env: Python='2.5' PythonBin="/usr/bin/python2.5"
+      install:
+        sudo add-apt-repository "ppa:fkrull/deadsnakes" -y;
+        sudo apt-get update;
+        sudo mv /usr/bin/python /usr/bin/python_old;
+        sudo apt-get install python2.5;
+        sudo ln -s /usr/bin/python2.5 /usr/bin/python;
+        ls -la /usr/bin/python;
 
     # OS X Instances follow
     # There is no OS X + PYTHON combination available by default, so we
@@ -41,31 +53,28 @@ matrix:
     # OS X Python current version (currently 2.7.11)
     - language: generic
       os: osx
+      env: Python='2.7' PythonBin="python"
       install:
-          brew update;
+          #brew update;
           brew install python;
-    # OS X python 2.5.6
-    - language: generic
-      os: osx
-      install:
-          brew update;
-          brew install pyenv;
-          pyenv install 2.5.6;
-          pyenv global 2.5.6;
+
     # OS X python 2.6.9
     - language: generic
       os: osx
+      env: Python='2.6.9' PythonBin="/Users/travis/.pyenv/versions/2.6.9/bin/python"
       install:
-          brew update;
-          brew install python;
-          pyenv install 2.6.9;
-          pyenv global 2.6.9;
+        #brew update;
+        #brew install python26;
+        pyenv install 2.6.9;
+        pyenv global 2.6.9;
+        ls -la /Users/travis/.pyenv/versions/2.6.9/bin;
 
 script:
-  - python --version
-  - cd ./scripts
-  - python initialize.py
-  - python build.py -t
-  - cd ../RUNNABLE
-  - python utf.py -a
+  - if [ "$Python" == "2.6.9" ]; then pyenv global 2.6.9; fi;
+  - $PythonBin --version;
+  - cd ./scripts;
+  - $PythonBin initialize.py;
+  - $PythonBin build.py -t;
+  - cd ../RUNNABLE;
+  - $PythonBin utf.py -a;
 
