@@ -3,12 +3,13 @@
 #   seattle.poly.edu/wiki/ProgrammersPage
 #
 # Travis provides OS X and Linux (specifically Ubuntu) OS instances.
-# The result of this configuration will be six separate builds on
-# Travis-CI VMs, 3 python versions each on Linux and OS X.
+# The result of this configuration will be five separate builds on
+# Travis-CI VMs, 3 python versions on Linux and 2 on OS X.
 
-# Because of some manual fiddling to get python 2.5 tests to work,
-# we require the following directive - we need non-container-based
-# infrastructure so that Travis allows us to use sudo.
+# Primarily because of some manual fiddling to get python 2.5 tests
+# to work, we require the following directive - we need
+# non-container-based infrastructure so that Travis allows us to use
+# sudo.
 sudo: required
 
 matrix:
@@ -17,7 +18,9 @@ matrix:
     - language: python          # Language to initiate linux VM
       python: '2.7'             # Version of python to use
       os: linux                 # The OS of the VM
-      env: Python='2.7' PythonBin="python"
+      env: Python='2.7' PythonBin="python" # These are environment variables we'll use.
+        # In particular, PythonBin will specify the location of the python binary to use.
+        # The "Python" env variable there is redundant except for OS X runs below.
       install:                  # tool installation
         sudo apt-get update;
 
@@ -30,7 +33,7 @@ matrix:
 
     # Because Travis-CI no longer offers the 2.5 environment by default,
     # we'll manually install 2.5.... It's not even available on the common
-    # ubuntu repos, so we'll use deadsnakes.
+    # ubuntu repos, so we'll use the well-known deadsnakes repo.
     - language: python
       os: linux
       env: Python='2.5' PythonBin="/usr/bin/python2.5"
@@ -56,15 +59,23 @@ matrix:
           brew install python;
 
     # OS X python 2.6.9
+    # We have to use pyenv to compile and install Python 2.6.9
+    # ourselves for OS X, as Travis-CI offers no OS X Python
+    # environments, and homebrew no longer offers a python26
+    # recipe.
     - language: generic
       os: osx
       env: Python='2.6.9' PythonBin="/Users/travis/.pyenv/versions/2.6.9/bin/python"
       install:
         #brew update;
-        #brew install python26;
+        #brew install python26; # This is no longer available.
         pyenv install 2.6.9;
         pyenv global 2.6.9;
 
+# These are the commands we'll run for each build, posting the python
+# version we're *really* running, initializing to obtain needed common
+# seattle projects, building the current seattle project, and running
+# the seattle unit testing framework, with all tests.
 script:
   - $PythonBin --version;
   - cd ./scripts;

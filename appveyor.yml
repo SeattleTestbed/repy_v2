@@ -1,6 +1,11 @@
 # Seattle supports Python 2.5 through 2.7, per https://seattle.poly.edu/wiki/ProgrammersPage
 # AppVeyor provides Windows-based testing.
 # On Windows, we currently test on Python 2.6 and 2.7.
+# The result of the current configuration should be 4 runs:
+#   32bit platform, Python 2.6
+#   64bit platform, Python 2.6
+#   32bit platform, Python 2.7
+#   64bit platform, Python 2.7
 
 build: false
 
@@ -15,7 +20,7 @@ build: false
 
 environment:
   matrix:
-    # Run on each of the following three Python setups.
+    # Run on each of the following two Python setups.
     - PYTHON: "C:\\Python27"
       PYTHON_VERSION: "2.7.x"
 
@@ -28,13 +33,15 @@ environment:
     #- PYTHON: "C:\\Python25"
     #  PYTHON_VERSION: "2.5.x"
 
-# Run on 32-bit and 64-bit platforms.
+# Run each on 32-bit and 64-bit platforms.
 platform:
   - x86
-  #- x64
+  - x64
 
-# Execute the following sequence of commands for a given
-# build.
+# These are the commands we'll run for each build, posting the python
+# version we're *really* running, initializing to obtain needed common
+# seattle projects, building the current seattle project, and running
+# the seattle unit testing framework, with all tests.
 test_script:
   - "%PYTHON%\\python --version"
   - "cd scripts"
