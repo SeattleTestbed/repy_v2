@@ -37,10 +37,10 @@ matrix:
       install:
         sudo add-apt-repository "ppa:fkrull/deadsnakes" -y;
         sudo apt-get update;
-        sudo mv /usr/bin/python /usr/bin/python_old;
+        #sudo mv /usr/bin/python /usr/bin/python_old;
         sudo apt-get install python2.5;
-        sudo ln -s /usr/bin/python2.5 /usr/bin/python;
-        ls -la /usr/bin/python;
+        #sudo ln -s /usr/bin/python2.5 /usr/bin/python;
+        #ls -la /usr/bin/python;
 
     # OS X Instances follow
     # There is no OS X + PYTHON combination available by default, so we
@@ -67,10 +67,9 @@ matrix:
         #brew install python26;
         pyenv install 2.6.9;
         pyenv global 2.6.9;
-        ls -la /Users/travis/.pyenv/versions/2.6.9/bin;
+        #ls -la /Users/travis/.pyenv/versions/2.6.9/bin;
 
 script:
-  - if [ "$Python" == "2.6.9" ]; then pyenv global 2.6.9; fi;
   - $PythonBin --version;
   - cd ./scripts;
   - $PythonBin initialize.py;
