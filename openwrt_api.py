@@ -169,9 +169,9 @@ def get_station(interface):
    <Returns>
      station statistic informatio as a dict such as [{'signal': '-77 [-78, -83] dBm', 
     'station': '54:4e:90:06:f3:6f', 'tx bitrate': '57.8 MBit/s MCS 5 short GI', 'rx 
-    bitrate': '1.0 MBit/s', 'signal_avg': '-88 [-90, -92] dBm'}, {'signal': '-40 [-42, 
+    bitrate': '1.0 MBit/s', 'signal_avg': '-88 [-90, -92] dBm','ip': '192.168.1.109'}, {'signal': '-40 [-42, 
     -44] dBm', 'station': 'ac:81:12:53:8e:0f', 'tx bitrate': '65.0 MBit/s MCS 6 short 
-    GI', 'rx bitrate': '18.0 MBit/s', 'signal_avg': '-42 [-44, -48] dBm'}]
+    GI', 'rx bitrate': '18.0 MBit/s', 'signal_avg': '-42 [-44, -48] dBm', 'ip':'192.168.1.143'}]
 
   """
   if type(interface) is not str:
@@ -227,7 +227,8 @@ def get_station(interface):
       "tx bytes": tx_bytes[i].strip(),
       "rx bytes": rx_bytes[i].strip(),
       "tx retries": tx_retries[i].strip(),
-      "tx failed": tx_failed[i].strip(),            
+      "tx failed": tx_failed[i].strip(),
+      "ip": _get_client_ip()[station[i].strip()],            
     }
     result.append(rules)
   
@@ -328,3 +329,32 @@ def _get_interface_traffic_statistics(interface):
         'rx_error': rx_error, 'tx_error': tx_error, 'rx_drop': rx_drop, 'tx_drop': tx_drop}
   else:
     raise FileNotFoundError("Could not find /proc/net/dev!")
+
+def _get_client_ip():
+  """
+  <Purpose>
+    Return connected clients information. The information returned is 
+    looked up in the /tmp/dhcp.leases.
+
+  <Arguments>
+    None.
+
+  <Exceptions>
+    FileNotFoundError is raised if the file does not exist
+
+  <Returns>
+    Connected client as a dict such as {'ac:81:12:53:8e:0f' : '192.168.1.143'}
+  """
+
+  result = {}
+  if os.path.exists('/tmp/dhcp.leases'):
+    dev = safe_open('/tmp/dhcp.leases', 'r')
+    for line in dev:
+        data = line.split()
+        if data:
+          mac = data[1]
+          ip = data[2]
+          result[mac] = ip
+    return result
+  else:
+    raise FileNotFoundError("Could not find /tmp/dhcp.leases!")
