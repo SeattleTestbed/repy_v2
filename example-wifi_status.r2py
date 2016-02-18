@@ -1,0 +1,1 @@
+log(wifi_status('wlan0'),'\n')
