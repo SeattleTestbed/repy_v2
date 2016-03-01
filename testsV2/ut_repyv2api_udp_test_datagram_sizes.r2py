@@ -11,6 +11,7 @@ IPv6 jumbograms allow for UDP datagrams larger than that, but we ignore
 this for now. For reference, see Section 4 of RFC 2675.
 """
 #pragma repy
+#pragma out
 
 # Payload lengths to test
 lengths = [
