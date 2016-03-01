@@ -811,8 +811,8 @@ def sendmessage(destip, destport, message, localip, localport):
       ResourceForbiddenError (descends ResourceException?) when the local
         port isn't allowed
 
-      RepyArgumentError when the local IP and port aren't valid types
-        or values
+      RepyArgumentError when the IPs, ports, and message aren't valid types
+        or values, or the message is longer than 65,507 bytes
 
       AlreadyListeningError if there is an existing listening UDP socket
       on the same local IP and port.
@@ -843,6 +843,9 @@ def sendmessage(destip, destport, message, localip, localport):
 
   if type(message) is not str:
     raise RepyArgumentError("Provided message must be a string!")
+  if len(message) > 65507:
+    raise RepyArgumentError("Provided message is " + str(len(message)) + 
+        " bytes which is longer than allowed (65,507 bytes).")
 
 
   # Check the input arguments (sanity)
