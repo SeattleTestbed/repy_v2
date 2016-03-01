@@ -844,16 +844,6 @@ def sendmessage(destip, destport, message, localip, localport):
   if type(message) is not str:
     raise RepyArgumentError("Provided message must be a string!")
 
-  # Mac OS X has a maximum datagram size smaller than the theoretical 
-  # maximum for UDP: `sysctl net.inet.udp.maxdgram` is 9216, vs. a 
-  # possible 65,507 on IPv4 networks.
-  # Longer messages raise an `EMSGSIZE` error (socket.error [Errno 40] 
-  # Message too long)
-  OSX_MAXDGRAM_SIZE = 9216
-  if len(message) > OSX_MAXDGRAM_SIZE:
-    raise RepyArgumentError("Provided message is " + str(len(message)) + 
-        " bytes long, allowed maximum is " + str(OSX_MAXDGRAM_SIZE) + " bytes.")
-
 
   # Check the input arguments (sanity)
   if not _is_valid_ip_address(destip):
