@@ -243,9 +243,13 @@ def _check_node(node):
   <Return>
     None
   """
-  # Adjust line numbers to account for the encoding declaration header, 
-  # SeattleTestbed/repy_v2#95
+  # First, account for the shift in line numbers due to the addition of a
+  # safety-minded code header (ENCODING_DECLARATION) in virtual_namespace.py.
+  # (This addresses issue SeattleTestbed/repy_v2#95.)
   HEADERSIZE = len(virtual_namespace.ENCODING_DECLARATION.splitlines())
+
+  # Proceed with the node check.
+
   if node.__class__.__name__ not in _NODE_CLASS_OK:
     raise exception_hierarchy.CheckNodeException(node.lineno - HEADERSIZE, node.__class__.__name__)
   

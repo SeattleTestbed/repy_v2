@@ -44,9 +44,9 @@ import exception_hierarchy
 # needed to get the PID
 import os
 
-# Armon: These set contains all the modules which are black-listed
-# from the traceback, so that if there is an exception, they will
-# not appear in the "user" (filtered) traceback.
+# This list contains all the modules which are black-listed from the
+# traceback, so that if there is an exception, they will not appear in the
+# "user" (filtered) traceback.
 TB_SKIP_MODULES = ["repy.py", "safe.py", "virtual_namespace.py", 
     "namespace.py", "emulcomm.py", "emultimer.py", "emulmisc.py", 
     "emulfile.py", "nonportable.py", "socket.py"]
