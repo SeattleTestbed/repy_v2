@@ -52,10 +52,16 @@ TB_SKIP_MODULES = ["repy.py", "safe.py", "virtual_namespace.py",
     "emulfile.py", "nonportable.py", "socket.py"]
 
 
-# Import virtual_namespace so that we can refer to the encoding declaration 
-# that is prepended to user code. We adjust traceback line numbers 
-# accordingly (see SeattleTestbed/repy_v2#95).
-import virtual_namespace
+# virtual_namespace prepends a multiline ENCODING_DECLARATION to user 
+# code. This ENCODING_DECLARATION is imported from mini module encoding_header.
+# It has the effect of treating user code as having UTF-8 encoding, preventing
+# certain bugs. As a side effect, prepending this header to code also results
+# in traceback line numbers being off. To remedy this, we import the code
+# header in several modules so as to subtract the number of lines it contains
+# from such line counts. We place it in its own file so that it can be imported
+# by multiple files with interdependencies, to avoid import loops.
+# For more info, see SeattleTestbed/repy_v2#95 and #96.
+import encoding_header
 
 
 # sets the user's file name.
@@ -148,7 +154,9 @@ def format_exception():
 
     # Construct a frame of output.
     # Adjust traceback line numbers, see SeattleTestbed/repy_v2#95.
-    stack_frame = '  "' + filename + '", line ' + str(lineno - len(virtual_namespace.ENCODING_DECLARATION.splitlines())) + ", in " + modulename + "\n"
+    stack_frame = '  "' + filename + '", line ' + \
+      str(lineno - len(encoding_header.ENCODING_DECLARATION.splitlines())) + \
+      ", in " + modulename + "\n"
 
     # Always add to the full traceback
     full_tb += stack_frame

@@ -13,9 +13,15 @@ import safe
 import sys
 
 # virtual_namespace prepends a multiline ENCODING_DECLARATION to user 
-# code. We import it to adjust traceback line numbers accordingly 
-# (see SeattleTestbed/repy_v2#95).
-import virtual_namespace
+# code. This ENCODING_DECLARATION is imported from mini module encoding_header.
+# It has the effect of treating user code as having UTF-8 encoding, preventing
+# certain bugs. As a side effect, prepending this header to code also results
+# in traceback line numbers being off. To remedy this, we import the code
+# header in several modules so as to subtract the number of lines it contains
+# from such line counts. We place it in its own file so that it can be imported
+# by multiple files with interdependencies, to avoid import loops.
+# For more info, see SeattleTestbed/repy_v2#95 and #96.
+import encoding_header
 
 
 
@@ -38,7 +44,8 @@ if __name__ == "__main__":
     # so that the line number we output corresponds with the actual 
     # user code again (see SeattleTestbed/repy_v2#95).
     try:
-      e.lineno = e.lineno - len(virtual_namespace.ENCODING_DECLARATION.splitlines())
+      e.lineno = e.lineno - \
+                 len(encoding_header.ENCODING_DECLARATION.splitlines())
     except AttributeError:
       # Some exceptions may not have line numbers.  If so, ignore
       pass

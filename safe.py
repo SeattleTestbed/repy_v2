@@ -108,9 +108,15 @@ import exception_hierarchy # This is for exception classes shared with traceback
 
 
 # virtual_namespace prepends a multiline ENCODING_DECLARATION to user 
-# code. We import it to adjust traceback line numbers accordingly 
-# (see SeattleTestbed/repy_v2#95).
-import virtual_namespace
+# code. This ENCODING_DECLARATION is imported from mini module encoding_header.
+# It has the effect of treating user code as having UTF-8 encoding, preventing
+# certain bugs. As a side effect, prepending this header to code also results
+# in traceback line numbers being off. To remedy this, we import the code
+# header in several modules so as to subtract the number of lines it contains
+# from such line counts. We place it in its own file so that it can be imported
+# by multiple files with interdependencies, to avoid import loops.
+# For more info, see SeattleTestbed/repy_v2#95 and #96.
+import encoding_header
 
 
 # Fix to make repy compatible with Python 2.7.2 on Ubuntu 11.10 (ticket #1049)
@@ -246,9 +252,10 @@ def _check_node(node):
     None
   """
   # First, account for the shift in line numbers due to the addition of a
-  # safety-minded code header (ENCODING_DECLARATION) in virtual_namespace.py.
-  # (This addresses issue SeattleTestbed/repy_v2#95.)
-  HEADERSIZE = len(virtual_namespace.ENCODING_DECLARATION.splitlines())
+  # safety-minded code header (ENCODING_DECLARATION) in virtual_namespace.py
+  # from encoding_header.py.
+  # (This addresses issue SeattleTestbed/repy_v2#95. See it for more info.)
+  HEADERSIZE = len(encoding_header.ENCODING_DECLARATION.splitlines())
 
   # Proceed with the node check.
 

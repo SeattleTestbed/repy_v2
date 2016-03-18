@@ -11,9 +11,16 @@
   specified global context.
 """
 
-# Treat any user code as having UTF-8 encoding. For this, 
-# prepend this encoding string
-ENCODING_DECLARATION = "# coding: utf-8\n\n"
+# encoding_header contains a multi-line ENCODING_DECLARATION that is to be
+# prepended to user code loaded into an instantiated VirtualNamespace.
+# It has the effect of treating user code as having UTF-8 encoding, preventing
+# certain bugs. As a side effect, prepending this header to code also results
+# in traceback line numbers being off. To remedy this, we import the code
+# header in several modules so as to subtract the number of lines it contains
+# from such line counts. We place it in its own file so that it can be imported
+# by multiple files with interdependencies, to avoid import loops.
+# For more info, see SeattleTestbed/repy_v2#95 and #96.
+import encoding_header
 
 # Used for safety checking
 import safe
@@ -76,7 +83,7 @@ class VirtualNamespace(object):
     # safe_check.py by retrieving the length of
     # virtual_namespace.ENCODING_DECLARATION and subtracting it from reported
     # line numbers.
-    code = ENCODING_DECLARATION + code 
+    code = encoding_header.ENCODING_DECLARATION + code 
 
 
     # Do a safety check
