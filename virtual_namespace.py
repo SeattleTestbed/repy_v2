@@ -11,21 +11,8 @@
   specified global context.
 """
 
-# encoding_header contains a multi-line ENCODING_DECLARATION that is to be
-# prepended to user code loaded into an instantiated VirtualNamespace.
-# It has the effect of treating user code as having UTF-8 encoding, preventing
-# certain bugs. As a side effect, prepending this header to code also results
-# in traceback line numbers being off. To remedy this, we import the code
-# header in several modules so as to subtract the number of lines it contains
-# from such line counts. We place it in its own file so that it can be imported
-# by multiple files with interdependencies, to avoid import loops.
-# For more info, see SeattleTestbed/repy_v2#95 and #96.
-import encoding_header
-
-# Used for safety checking
-import safe
-
-# Get the errors
+import encoding_header # Subtract len(ENCODING_HEADER) from error line numbers.
+import safe # Used for safety checking
 from exception_hierarchy import *
 
 # This is to work around safe...

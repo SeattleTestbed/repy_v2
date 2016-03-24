@@ -11,17 +11,7 @@ Description:
 
 import safe
 import sys
-
-# virtual_namespace prepends a multiline ENCODING_DECLARATION to user 
-# code. This ENCODING_DECLARATION is imported from mini module encoding_header.
-# It has the effect of treating user code as having UTF-8 encoding, preventing
-# certain bugs. As a side effect, prepending this header to code also results
-# in traceback line numbers being off. To remedy this, we import the code
-# header in several modules so as to subtract the number of lines it contains
-# from such line counts. We place it in its own file so that it can be imported
-# by multiple files with interdependencies, to avoid import loops.
-# For more info, see SeattleTestbed/repy_v2#95 and #96.
-import encoding_header
+import encoding_header # Subtract len(ENCODING_HEADER) from error line numbers.
 
 
 

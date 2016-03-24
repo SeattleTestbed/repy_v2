@@ -1,11 +1,8 @@
 """
-<Author>
-  Sebastien Awwad /:
+<Program Name>
+  encoding_header.py
 
-<Start Date>
-  March 18, 2016
-
-<Description>
+<Purpose>
   This mini module provides the ENCODING_DECLARATION constant, a string that is
   prepended to code loaded into VirtualNamespace objects. This is prepended to
   such code in order to specify UTF-8 encoding and prevent certain bugs.
@@ -15,17 +12,16 @@
   would raise such exceptions, so as to subtract the number of lines it
   contains from reported line numbers.
 
-  Consequently, multiple modules import this, and because they also depend on
-  each other, it was decided to keep this in its own separate module in order
-  to help avoid import loops.
+  While it may seem silly to have a module for a single constant, multiple
+  modules import this, and because they also depend on each other, it was
+  decided to keep this in its own separate module in order to help avoid import
+  loops. In time, we may find more such things to pull together.
   
   As of this writing, it is used by:
     virtual_namespace.py
     tracebackrepy.py
     safe_check.py
     safe.py
-
-  It is my hope to restructure this sensibly in time.
 
   For history relevant to the above, see SeattleTestbed/repy_v2#95 and #96.
 

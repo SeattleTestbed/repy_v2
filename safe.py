@@ -104,19 +104,8 @@ import subprocess   # This is to start the external process
 import __builtin__
 import nonportable  # This is to get the current runtime
 import repy_constants # This is to get our start-up directory
-import exception_hierarchy # This is for exception classes shared with tracebackrepy
-
-
-# virtual_namespace prepends a multiline ENCODING_DECLARATION to user 
-# code. This ENCODING_DECLARATION is imported from mini module encoding_header.
-# It has the effect of treating user code as having UTF-8 encoding, preventing
-# certain bugs. As a side effect, prepending this header to code also results
-# in traceback line numbers being off. To remedy this, we import the code
-# header in several modules so as to subtract the number of lines it contains
-# from such line counts. We place it in its own file so that it can be imported
-# by multiple files with interdependencies, to avoid import loops.
-# For more info, see SeattleTestbed/repy_v2#95 and #96.
-import encoding_header
+import exception_hierarchy # For exception classes shared w/ tracebackrepy
+import encoding_header # Subtract len(ENCODING_HEADER) from error line numbers.
 
 
 # Fix to make repy compatible with Python 2.7.2 on Ubuntu 11.10 (ticket #1049)

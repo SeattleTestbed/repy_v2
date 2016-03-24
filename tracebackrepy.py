@@ -34,15 +34,10 @@ servicelog = False
 # when deciding where to write our service log.
 logdirectory = None
 
-
-# We need to be able to do a harshexit on internal errors.
-import harshexit
-
-# Get the exception hierarchy
+import harshexit # We need to be able to do a harshexit on internal errors.
 import exception_hierarchy
-
-# needed to get the PID
-import os
+import os # needed to get the PID
+import encoding_header # Subtract len(ENCODING_HEADER) from error line numbers.
 
 # This list contains all the modules which are black-listed from the
 # traceback, so that if there is an exception, they will not appear in the
@@ -51,17 +46,6 @@ TB_SKIP_MODULES = ["repy.py", "safe.py", "virtual_namespace.py",
     "namespace.py", "emulcomm.py", "emultimer.py", "emulmisc.py", 
     "emulfile.py", "nonportable.py", "socket.py"]
 
-
-# virtual_namespace prepends a multiline ENCODING_DECLARATION to user 
-# code. This ENCODING_DECLARATION is imported from mini module encoding_header.
-# It has the effect of treating user code as having UTF-8 encoding, preventing
-# certain bugs. As a side effect, prepending this header to code also results
-# in traceback line numbers being off. To remedy this, we import the code
-# header in several modules so as to subtract the number of lines it contains
-# from such line counts. We place it in its own file so that it can be imported
-# by multiple files with interdependencies, to avoid import loops.
-# For more info, see SeattleTestbed/repy_v2#95 and #96.
-import encoding_header
 
 
 # sets the user's file name.
