@@ -84,6 +84,10 @@ user_specified_ip_interface_list = []
 allowediplist = []
 cachelock = threading.Lock()  # This allows only a single simultaneous cache update
 
+# Trying to send a UDP datagram larger than this size will generate uncatchable
+# exceptions on some systems (OS X). See repy_v2 issue 113.
+MAX_ALLOWABLE_DGRAM_SIZE = 9216
+
 
 ##### Internal Functions
 
@@ -868,6 +872,18 @@ def sendmessage(destip, destport, message, localip, localport):
 
   if not _is_allowed_localport("UDP", localport):
     raise ResourceForbiddenError("Provided localport is not allowed! Port: "+str(localport))
+
+  # Dealing with github.com/SeattleTestbed/repy_v2/issues/113 large UDP dgrams
+  # crashing sandbox. Exceeding max dgram size of 9216 on OS X or 65507 on
+  # other systems results in an uncatchable exception that will crash the
+  # sandbox, so we prevent that here and instead raise a RepyArgumentError.
+  # We apply the same 9216-byte limit here on all systems to avoid treating
+  # different platforms differently. It is not generally wise to employ large
+  # UDP datagrams anyway, so this is something of an edge case, and we make
+  # that compromise.
+  if len(message) > MAX_ALLOWABLE_DGRAM_SIZE:
+    raise RepyArgumentError("Provided message is too long for UDP datagrams on"
+      " some platforms. Maximum length is 9216 bytes.")
 
   # Wait for netsend
   if _is_loopback_ipaddr(destip):
