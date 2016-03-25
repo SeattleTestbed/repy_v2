@@ -816,7 +816,7 @@ def sendmessage(destip, destport, message, localip, localport):
         port isn't allowed
 
       RepyArgumentError when the IPs, ports, and message aren't valid types
-        or values, or the message is longer than 65,507 bytes
+        or values, or the message is longer than 9,216 bytes
 
       AlreadyListeningError if there is an existing listening UDP socket
       on the same local IP and port.
