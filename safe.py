@@ -240,10 +240,8 @@ def _check_node(node):
   <Return>
     None
   """
-  # First, account for the shift in line numbers due to the addition of a
-  # safety-minded code header (ENCODING_DECLARATION) in virtual_namespace.py
-  # from encoding_header.py.
-  # (This addresses issue SeattleTestbed/repy_v2#95. See it for more info.)
+  # Subtract length of encoding header from traceback line numbers.
+  # (See Issue [SeattleTestbed/repy_v2#95])
   HEADERSIZE = len(encoding_header.ENCODING_DECLARATION.splitlines())
 
   # Proceed with the node check.

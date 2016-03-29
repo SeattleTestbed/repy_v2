@@ -27,12 +27,7 @@ if __name__ == "__main__":
     value = safe.safe_check(usercode)
     output += str(value)
   except Exception, e:
-    # In virtual_namespace.py, we prepend an encoding declaration to 
-    # each user file we read in.
-    # Now, we need to subtract the number of lines consumed by the 
-    # encoding declaration from the current exception's line number 
-    # so that the line number we output corresponds with the actual 
-    # user code again (see SeattleTestbed/repy_v2#95).
+    # Adjust traceback line numbers. See Issue [SeattleTestbed/repy_v2#95].
     try:
       e.lineno = e.lineno - \
                  len(encoding_header.ENCODING_DECLARATION.splitlines())

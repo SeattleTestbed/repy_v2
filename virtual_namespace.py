@@ -64,12 +64,8 @@ class VirtualNamespace(object):
     code = code.replace('\r\n','\n')
 
     # Prepend an encoding string to protect against bugs in that code (#982).
-    # Without further fixes, prepending the encoding string causes tracebacks 
-    # to have an inaccurate line number, see SeattleTestbed/repy_v2#95.
-    # Note that we work around this in tracebackrepy.py, safe.py, and
-    # safe_check.py by retrieving the length of
-    # virtual_namespace.ENCODING_DECLARATION and subtracting it from reported
-    # line numbers.
+    # This causes tracebacks to have an inaccurate line number, so we adjust
+    # them in multiple modules. See Issue [SeattleTestbed/repy_v2#95].
     code = encoding_header.ENCODING_DECLARATION + code 
 
 
