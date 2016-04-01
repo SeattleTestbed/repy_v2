@@ -104,7 +104,7 @@ import subprocess   # This is to start the external process
 import __builtin__
 import nonportable  # This is to get the current runtime
 import repy_constants # This is to get our start-up directory
-import exception_hierarchy # For exception classes shared w/ tracebackrepy
+import exception_hierarchy # For exception classes
 import encoding_header # Subtract len(ENCODING_HEADER) from error line numbers.
 
 

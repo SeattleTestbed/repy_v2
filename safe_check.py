@@ -11,7 +11,7 @@ Description:
 
 import safe
 import sys
-import encoding_header # Subtract len(ENCODING_HEADER) from error line numbers.
+import encoding_header
 
 
 
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     # Adjust traceback line numbers. See Issue [SeattleTestbed/repy_v2#95].
     try:
       e.lineno = e.lineno - \
-                 len(encoding_header.ENCODING_DECLARATION.splitlines())
+          len(encoding_header.ENCODING_DECLARATION.splitlines())
     except AttributeError:
       # Some exceptions may not have line numbers.  If so, ignore
       pass
