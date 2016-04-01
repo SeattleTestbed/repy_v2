@@ -18,7 +18,6 @@ IPv6 jumbograms allow for UDP datagrams larger than that, but we ignore
 this for now. For reference, see Section 4 of RFC 2675.
 """
 #pragma repy
-#pragma out
 
 # Payload lengths to test
 lengths_OK = [ # These we expect to succeed without exception.
@@ -49,7 +48,6 @@ for length in lengths_OK + lengths_BAD:
   try:
     sendmessage(ip, port1, length * ".", ip, port2)
   except RepyArgumentError:
-    # I think this is how we should handle too long messages
     if length in lengths_BAD:
       log("TEST OK: causes a RepyArgumentError as expected.")
     else:
