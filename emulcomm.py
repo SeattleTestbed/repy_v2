@@ -794,12 +794,12 @@ def sendmessage(destip, destport, message, localip, localport):
 
    <Arguments>
       destip:
-         The host to send a message to
+         The IP to send the message to
       destport:
          The port to send the message to
       message:
          The message to send
-      localhost:
+      localip:
          The local IP to send the message from 
       localport:
          The local port to send the message from
