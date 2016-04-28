@@ -237,12 +237,14 @@ def _check_node(node):
     None
   """
   if node.__class__.__name__ not in _NODE_CLASS_OK:
-    raise exception_hierarchy.CheckNodeException(node.lineno,node.__class__.__name__)
+    raise exception_hierarchy.CheckNodeException("Unsafe call '" +
+        str(node.__class__.__name__) + "' in line " + str(node.lineno))
   
   for attribute, value in node.__dict__.iteritems():
     # Don't allow the construction of unicode literals
     if type(value) == unicode:
-      raise exception_hierarchy.CheckStrException(node.lineno, attribute, value)
+      raise exception_hierarchy.CheckStrException("Unsafe string '" +
+          str(value) + "' in line " + str(node.lineno))
 
     if attribute in _NODE_ATTR_OK: 
       continue
@@ -255,7 +257,8 @@ def _check_node(node):
 
     # Check the safety of any strings
     if not _is_string_safe(value):
-      raise exception_hierarchy.CheckStrException(node.lineno, attribute, value)
+      raise exception_hierarchy.CheckStrException("Unsafe string '" +
+          str(value) + "' in line " + str(node.lineno))
 
   for child in node.getChildNodes():
     _check_node(child)
