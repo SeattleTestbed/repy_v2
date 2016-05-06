@@ -735,6 +735,14 @@ class SafeDict(UserDict.DictMixin):
   def copy(self):
     # Create a new instance
     copy_inst = SafeDict(self.__under__)
+    
+    # Fix for recursion depth reached issue #97 when copying and printing a   
+    # SafeDict containing a reference to itself.
+    # Caveat: dict.copy is expected to return a shallow copy, this fix 
+    # introduces a partial deep copy for the contained self reference
+    for key, value in self.__under__.iteritems():
+      if value is self:
+        copy_inst[key] = copy_inst
 
     # Return the new instance
     return copy_inst
