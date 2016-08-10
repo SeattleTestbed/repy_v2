@@ -110,7 +110,6 @@ def get_safe_context(args):
   usercontext["_context"] = usercontext
 
   # BAD:REMOVE all API imports
-  usercontext["getresources"] = nonportable.get_resources
   #usercontext["openfile"] = emulfile.emulated_open
   #usercontext["listfiles"] = emulfile.listfiles
   #usercontext["removefile"] = emulfile.removefile
