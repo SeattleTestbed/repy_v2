@@ -76,7 +76,6 @@ from exception_hierarchy import *
 
 # BAD: REMOVE these imports after we remove the API calls
 #import emulfile
-import emulmisc
 #import emultimer
 
 # Disables safe, and resumes normal fork
@@ -123,7 +122,6 @@ def get_safe_context(args):
   #usercontext["sleep"] = emultimer.sleep
   #usercontext["getthreadname"] = emulmisc.getthreadname
   usercontext["createvirtualnamespace"] = virtual_namespace.createvirtualnamespace
-  usercontext["getlasterror"] = emulmisc.getlasterror
       
   # call the initialize function
   usercontext['callfunc'] = 'initialize'
