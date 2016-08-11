@@ -74,9 +74,6 @@ import tracebackrepy
 
 from exception_hierarchy import *
 
-# BAD: REMOVE these imports after we remove the API calls
-#import emulfile
-#import emultimer
 
 # Disables safe, and resumes normal fork
 def nonSafe_fork():
@@ -109,18 +106,6 @@ def get_safe_context(args):
   # Allow some introspection by providing a reference to the context
   usercontext["_context"] = usercontext
 
-  # BAD:REMOVE all API imports
-  #usercontext["openfile"] = emulfile.emulated_open
-  #usercontext["listfiles"] = emulfile.listfiles
-  #usercontext["removefile"] = emulfile.removefile
-  #usercontext["exitall"] = emulmisc.exitall
-  #usercontext["createlock"] = emulmisc.createlock
-  #usercontext["getruntime"] = emulmisc.getruntime
-  #usercontext["randombytes"] = emulmisc.randombytes
-  #usercontext["createthread"] = emultimer.createthread
-  #usercontext["sleep"] = emultimer.sleep
-  #usercontext["getthreadname"] = emulmisc.getthreadname
-      
   # call the initialize function
   usercontext['callfunc'] = 'initialize'
   usercontext['callargs'] = args[:]
