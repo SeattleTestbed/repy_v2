@@ -120,7 +120,6 @@ def get_safe_context(args):
   #usercontext["createthread"] = emultimer.createthread
   #usercontext["sleep"] = emultimer.sleep
   #usercontext["getthreadname"] = emulmisc.getthreadname
-  usercontext["createvirtualnamespace"] = virtual_namespace.createvirtualnamespace
       
   # call the initialize function
   usercontext['callfunc'] = 'initialize'
