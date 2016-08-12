@@ -3,28 +3,36 @@ This test checks the behavior of openfile when filehandles should be exhausted.
 """
 
 #pragma repy
+filehandles = []
+filenames = []
 
-MAX_FILES = 5
+RAND_FILE = "random.files.to.create.number"
 
-files = listfiles()
-filehandles = [None, None, None, None, None]
-
-# Open random files
-for x in xrange(MAX_FILES):
-  filehandles[x] = openfile(files[x], False)
+# Open random files, as many as the resource restrictions allows  
+for number in xrange(getresources()[0]['filesopened']):
+  filenames.append(RAND_FILE + str(number + 1))
+  filehandles.append(openfile((RAND_FILE + str(number + 1)), True))
 
 # Try to open this file with create, we should get an error
 # and the file should not be created
-TRY_FILE = "trying.to.create.this.file"
+TRYFILE = "trying.to.create.this.file"
 
 try:
-  fileh = openfile(TRY_FILE, True)
+  fileh = openfile(TRYFILE, True)
 except ResourceExhaustedError:
   pass
 else:
   log("Opened file with no handles available!",'\n')
-
 # Check if the file exists
-if TRY_FILE in listfiles():
+if TRYFILE in listfiles():
   log("The file was created with no handles available!",'\n')
+  fileh.close()
+  removefile(TRYFILE)
 
+#Close all random files opened
+for randfile in filehandles:
+  randfile.close()
+
+#Clean up all random files
+for name in filenames:
+  removefile(name)
