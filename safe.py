@@ -254,7 +254,8 @@ def _check_node(node):
     # Don't allow the construction of unicode literals
     if type(value) == unicode:
       raise exception_hierarchy.CheckStrException("Unsafe string '" +
-          str(value) + "' in line " + str(node.lineno - HEADERSIZE))
+          str(value) + "' in line " + str(node.lineno - HEADERSIZE) +
+          ", node attribute '" + str(attribute) + "'")
 
     if attribute in _NODE_ATTR_OK: 
       continue
@@ -267,7 +268,8 @@ def _check_node(node):
     # Check the safety of any strings
     if not _is_string_safe(value):
       raise exception_hierarchy.CheckStrException("Unsafe string '" +
-          str(value) + "' in line " + str(node.lineno - HEADERSIZE))
+          str(value) + "' in line " + str(node.lineno - HEADERSIZE) +
+          ", node attribute '" + str(attribute) + "'")
 
   for child in node.getChildNodes():
     _check_node(child)
