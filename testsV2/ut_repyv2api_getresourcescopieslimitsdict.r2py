@@ -13,7 +13,10 @@ limits, usage, stoptimes = getresources()
 allowed_ports = limits["connport"]
 
 
-# Try to add an unprivileged port that wasn't allowed before
+# Try to add an unprivileged port that wasn't allowed before.
+# Assuming that we get only a copy of the ports list that 
+# `nanny.py` uses, we can add whatever we want, but this doesn't 
+# grant us any additional rights.
 for new_port in xrange(1024, 65536):
   if new_port not in allowed_ports:
     allowed_ports.add(new_port)
