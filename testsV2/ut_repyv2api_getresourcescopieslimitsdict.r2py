@@ -1,0 +1,36 @@
+"""Ensure that the `getresources` call returns a copy of the `limits` 
+dict (and not the original dict), thereby ensuring that user code can 
+inspect but not modify the resource restrictions that `nanny.py` enforces.
+
+We check this by trying to add a new, previously disallowed `connport` 
+and then using it. If the port is still not allowed, all is fine.
+"""
+#pragma repy
+limits, usage, stoptimes = getresources()
+
+# This is the set of allowed TCP ports. (We should see only a *copy* 
+# of the set that `nanny` uses.)
+allowed_ports = limits["connport"]
+
+
+# Try to add an unprivileged port that wasn't allowed before.
+# Assuming that we get only a copy of the ports list that 
+# `nanny.py` uses, we can add whatever we want, but this doesn't 
+# grant us any additional rights.
+for new_port in xrange(1024, 65536):
+  if new_port not in allowed_ports:
+    allowed_ports.add(new_port)
+    break
+else:
+  log("Premature error: All unprivileged ports are allowed already!\n")
+
+
+# Verify that we are still not allowed to use the newly added port
+try:
+  listen_socket = listenforconnection("127.0.0.1", new_port)
+except ResourceForbiddenError:
+  # This is the expected, correct error. (Any other exceptions are neither.)
+  pass
+else:
+  log("Bad: User code succeeded adding a port to the set of allowed connports and use it!\n")
+
