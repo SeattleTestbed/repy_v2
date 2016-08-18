@@ -21,23 +21,21 @@ assert(ip == localip)
 assert(port == localport)
 
 
-# shouldn't be able to buffer more than thins
+# shouldn't be able to buffer more than this
 MAXSENDSIZE = 1024*1024
 
-# send until it would block
+# Send until the socket would block or the full message has been sent
 totalamountsent = 0
-while True:
+while totalamountsent < MAXSENDSIZE:
   try:
     amountsent = serverconn.send('h'*(MAXSENDSIZE-totalamountsent))
   except SocketWouldBlockError:
     # This should happen at some point.
     break
   
-  assert(amountsent > 0)
-
   totalamountsent = totalamountsent + amountsent
 
-  assert(MAXSENDSIZE != totalamountsent)
+  assert MAXSENDSIZE >= totalamountsent, "Could send more bytes than the message contained"
 
 
 totalamountrecvd = 0
