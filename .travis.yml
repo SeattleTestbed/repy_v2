@@ -84,4 +84,3 @@ script:
   - $PythonBin build.py -t;
   - cd ../RUNNABLE;
   - $PythonBin utf.py -a;
-
