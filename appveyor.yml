@@ -1,0 +1,59 @@
+# Seattle supports Python 2.6 through 2.7, per
+# github.com/SeattleTestbed/docs/blob/master/Contributing/BuildInstructions.md
+# Python 2.5 is included for testing because this is what PlanetLab runs
+#
+# AppVeyor provides Windows-based testing.
+# On Windows, we currently test on Python 2.6 and 2.7.
+# The result of the current configuration should be 4 runs:
+#   32bit platform, Python 2.6
+#   64bit platform, Python 2.6
+#   32bit platform, Python 2.7
+#   64bit platform, Python 2.7
+
+build: false
+
+# Default OS is Windows Server 2012 R2
+# As an example, uncommenting the 3 lines below would
+# result in builds being run both on the current version
+# of Windows Server 2012 R2 and the previous version of
+# Windows Server 2012 R2.
+#os:
+#  - Previous Windows Server 2012 R2
+#  - Windows Server 2012 R2
+
+environment:
+  matrix:
+    # Run on each of the following two Python setups.
+    - PYTHON: "C:\\Python27"
+      PYTHON_VERSION: "2.7.x"
+
+    - PYTHON: "C:\\Python26"
+      PYTHON_VERSION: "2.6.x"
+
+    # AppVeyor no longer supports Python 2.5 by default. If necessary, we can
+    # try to figure out how to get it running, but it is not currently a
+    # priority.
+    #- PYTHON: "C:\\Python25"
+    #  PYTHON_VERSION: "2.5.x"
+
+# Run each on 32-bit and 64-bit platforms.
+platform:
+  - x86
+  - x64
+
+# These are the commands we'll run for each build, posting the python
+# version we're *really* running, initializing to obtain needed common
+# seattle projects, building the current seattle project, and ...
+build_script:
+  - "%PYTHON%\\python --version"
+  - "cd scripts"
+  - "%PYTHON%\\python initialize.py"
+  - "%PYTHON%\\python build.py -t"
+
+# ... running the seattle unit testing framework, with all tests.
+test_script:
+  - "cd ../RUNNABLE"
+  - "%PYTHON%\\python utf.py -a"
+
+skip_commits:
+  message: /(Update README*|Created.*\.(png|jpg|jpeg|bmp|gif))/
