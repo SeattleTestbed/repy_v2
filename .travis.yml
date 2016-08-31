@@ -35,13 +35,23 @@ matrix:
     # Because Travis-CI no longer offers the 2.5 environment by default,
     # we'll manually install 2.5.... It's not even available on the common
     # ubuntu repos, so we'll use the well-known deadsnakes repo.
+    #
+    # Also, using ideas from @kura in https://gist.github.com/kura/8517802 ,
+    # download and install a compatible version of easy_install,
+    # which gives us an old version of pip,
+    # which gives us argparse which our unit test framework requires.
     - language: python
       os: linux
       env: Python='2.5' PythonBin="/usr/bin/python2.5"
       install:
         sudo add-apt-repository "ppa:fkrull/deadsnakes" -y;
         sudo apt-get update;
-        sudo apt-get install python2.5;
+        sudo apt-get install python2.5 ;
+        wget https://raw.githubusercontent.com/pypa/setuptools/bootstrap-py24/ez_setup.py -O /tmp/ez_setup.py ;
+        sudo $PythonBin /tmp/ez_setup.py ;
+        sudo easy_install-2.5 pip==1.3.1 ;
+        pip-2.5 --version ;
+        sudo pip-2.5 install --insecure argparse ;
 
     # OS X Instances follow
     # There is no OS X + PYTHON combination available by default, so we
