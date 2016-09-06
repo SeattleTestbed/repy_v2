@@ -12,16 +12,18 @@
       are used and that no unsafe strings are present.
 
     Executing safe code
-      This is done by creating a dictionary with a key for each built-in function,
-      and then running the code using that dictionary as our 'context'.
+      This is done by creating a dictionary with a key for each built-in
+      function, and then running the code using that dictionary as our
+      'context'.
      
     SafeDict Class
       This is a dict that prevents 'unsafe' values from being added.
-      SafeDict is used by virtual_namespace (for the safe eval) as the dictionary
-      of variables that will be accessible to the running code. The reason it is
-      important to prevent unsafe keys is because it is possible to use them to
-      break out of the sandbox. For example, it is possible to change an objects
-      private variables by manually bypassing python's name mangling.
+      SafeDict is used by virtual_namespace (for the safe eval) as the
+      dictionary of variables that will be accessible to the running code. The
+      reason it is important to prevent unsafe keys is because it is possible
+      to use them to break out of the sandbox. For example, it is possible to
+      change an objects private variables by manually bypassing python's name
+      mangling.
 
   The original version of this file was written by Phil Hassey. it has since
   been heavily rewritten for use in the Seattle project.
@@ -102,7 +104,9 @@ import subprocess   # This is to start the external process
 import __builtin__
 import nonportable  # This is to get the current runtime
 import repy_constants # This is to get our start-up directory
-import exception_hierarchy # This is for exception classes shared with tracebackrepy
+import exception_hierarchy # For exception classes
+import encoding_header # Subtract len(ENCODING_HEADER) from error line numbers.
+
 
 # Fix to make repy compatible with Python 2.7.2 on Ubuntu 11.10 (ticket #1049)
 subprocess.getattr = getattr
@@ -221,9 +225,9 @@ _NODE_ATTR_OK = ['value']
 def _check_node(node):
   """
   <Purpose>
-    Examines a node, its attributes, and all of its children (recursively) for safety.
-    A node is safe if it is in _NODE_CLASS_OK and an attribute is safe if it is
-    not a unicode string and either in _NODE_ATTR_OK or is safe as is 
+    Examines a node, its attributes, and all of its children (recursively) for
+    safety. A node is safe if it is in _NODE_CLASS_OK and an attribute is safe
+    if it is not a unicode string and either in _NODE_ATTR_OK or is safe as is 
     defined by _is_string_safe()
   
   <Arguments>
@@ -236,13 +240,22 @@ def _check_node(node):
   <Return>
     None
   """
+  # Subtract length of encoding header from traceback line numbers.
+  # (See Issue [SeattleTestbed/repy_v2#95])
+  HEADERSIZE = len(encoding_header.ENCODING_DECLARATION.splitlines())
+
+  # Proceed with the node check.
+
   if node.__class__.__name__ not in _NODE_CLASS_OK:
-    raise exception_hierarchy.CheckNodeException(node.lineno,node.__class__.__name__)
+    raise exception_hierarchy.CheckNodeException("Unsafe call '" +
+        str(node.__class__.__name__) + "' in line " + str(node.lineno - HEADERSIZE))
   
   for attribute, value in node.__dict__.iteritems():
     # Don't allow the construction of unicode literals
     if type(value) == unicode:
-      raise exception_hierarchy.CheckStrException(node.lineno, attribute, value)
+      raise exception_hierarchy.CheckStrException("Unsafe string '" +
+          str(value) + "' in line " + str(node.lineno - HEADERSIZE) +
+          ", node attribute '" + str(attribute) + "'")
 
     if attribute in _NODE_ATTR_OK: 
       continue
@@ -252,10 +265,11 @@ def _check_node(node):
       ['Module', 'Function', 'Class']):
       continue
 
-
     # Check the safety of any strings
     if not _is_string_safe(value):
-      raise exception_hierarchy.CheckStrException(node.lineno, attribute, value)
+      raise exception_hierarchy.CheckStrException("Unsafe string '" +
+          str(value) + "' in line " + str(node.lineno - HEADERSIZE) +
+          ", node attribute '" + str(attribute) + "'")
 
   for child in node.getChildNodes():
     _check_node(child)
@@ -266,7 +280,8 @@ def safe_check(code):
   """
   <Purpose>
     Takes the code as input, and parses it into an AST.
-    It then calls _check_node, which does a recursive safety check for every node.
+    It then calls _check_node, which does a recursive safety check for every
+    node.
   
   <Arguments>
     code: A string representation of python code
@@ -289,9 +304,10 @@ def safe_check(code):
 def safe_check_subprocess(code):
   """
   <Purpose>
-    Runs safe_check() in a subprocess. This is done because the AST safe_check()
-    creates uses a large amount of RAM. By running safe_check() in a subprocess
-    we can guarantee that the memory will be reclaimed when the process ends.
+    Runs safe_check() in a subprocess. This is done because the AST
+    safe_check() uses a large amount of RAM. By running safe_check() in a
+    subprocess we can guarantee that the memory will be reclaimed when the
+    process ends.
   
   <Arguments>
     code: See safe_check.
@@ -307,7 +323,8 @@ def safe_check_subprocess(code):
   path_to_safe_check = os.path.join(repy_constants.REPY_START_DIR, "safe_check.py")
   
   # Start a safety check process, reading from the user code and outputing to a pipe we can read
-  proc = subprocess.Popen([sys.executable, path_to_safe_check],stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+  proc = subprocess.Popen([sys.executable, path_to_safe_check],
+                          stdin=subprocess.PIPE, stdout=subprocess.PIPE)
   
   # Write out the user code, close so the other end gets an EOF
   proc.stdin.write(code)

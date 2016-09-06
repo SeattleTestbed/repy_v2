@@ -11,10 +11,8 @@
   specified global context.
 """
 
-# Used for safety checking
-import safe
-
-# Get the errors
+import encoding_header # Subtract len(ENCODING_HEADER) from error line numbers.
+import safe # Used for safety checking
 from exception_hierarchy import *
 
 # This is to work around safe...
@@ -65,9 +63,11 @@ class VirtualNamespace(object):
     # Remove any windows carriage returns
     code = code.replace('\r\n','\n')
 
-    # Prepend an encoding string to protect against bugs in that code (ticket #982)
-    # Note that this will cause tracebacks to have an inaccurate line number.
-    code = "# coding: utf-8\n\n" + code 
+    # Prepend an encoding string to protect against bugs in that code (#982).
+    # This causes tracebacks to have an inaccurate line number, so we adjust
+    # them in multiple modules. See Issue [SeattleTestbed/repy_v2#95].
+    code = encoding_header.ENCODING_DECLARATION + code 
+
 
     # Do a safety check
     try:

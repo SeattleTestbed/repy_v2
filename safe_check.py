@@ -11,6 +11,9 @@ Description:
 
 import safe
 import sys
+import encoding_header
+
+
 
 if __name__ == "__main__":
   # Get the user "code"
@@ -23,7 +26,14 @@ if __name__ == "__main__":
   try:
     value = safe.safe_check(usercode)
     output += str(value)
-  except Exception,e:
+  except Exception, e:
+    # Adjust traceback line numbers. See Issue [SeattleTestbed/repy_v2#95].
+    try:
+      e.lineno = e.lineno - \
+          len(encoding_header.ENCODING_DECLARATION.splitlines())
+    except AttributeError:
+      # Some exceptions may not have line numbers.  If so, ignore
+      pass
     output += str(type(e)) + " " + str(e)
   
   # Write out
