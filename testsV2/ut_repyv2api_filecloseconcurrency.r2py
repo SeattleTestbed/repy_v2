@@ -1,9 +1,12 @@
 """
 This unit test checks the behavior of the fileobject when
-close is called concurrently with a read/write.
+`close` is called concurrently with `readat`/`writeat`.
+
+NOTE: We use a specific restrictions file with specific
+      `fileread` and `filewrite` values!
 """
 
-#pragma repy
+#pragma repy restrictions.file10k
 
 JUNK_FILE = "test.write.junk.data"
 
@@ -14,8 +17,8 @@ def closeit():
 # Get a handle to a junk file
 junkh = openfile(JUNK_FILE, True)
 
-# Try to write a lot of data, 150K bytes should take .5 seconds
-data = "--Is 15 bytes.\n" * 10000
+# Try to write a lot of data, 15K bytes should take 1.5 seconds
+data = "--Is 15 bytes.\n" * 1000
 
 createthread(closeit)
 junkh.writeat(data, 0)
@@ -31,12 +34,12 @@ except FileClosedError:
 # Open a handle to read now
 junkh = openfile(JUNK_FILE, False)
 
-# Try to read back all 150K bytes, should take .5 seconds
+# Try to read back all 15K bytes, should take 1.5 seconds
 createthread(closeit)
-data = junkh.readat(150000, 0)
+data = junkh.readat(15000, 0)
 
 # All the data should be read
-if len(data) != 150000:
+if len(data) != 15000:
   log("Read less data than expected!",'\n')
 
 # It should be closed now
