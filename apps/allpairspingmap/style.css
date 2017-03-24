@@ -1,0 +1,58 @@
+body {
+  margin: 0;
+  font-family: lucida grande, helvetica, sans-serif;
+  font-size: 85%;
+}
+
+ul#coords {
+   display: none;
+}
+
+#map {
+   width: 1024px;
+   height: 600px;
+}
+
+.gmnoprint {
+   font-family: sans-serif;
+}
+
+#message {
+  position: absolute;
+  padding: 8px;
+  background: #555;
+  border: 1px solid #ccc;
+  color: #fff;
+  font-size: 12px;
+  font-family: lucida grande, sans-serif;
+  width: 270px;
+}
+
+#message a {
+  color: #bee0f3;
+}
+
+#message a:hover {
+  color: #d7e3ea;
+}
+
+h2 {
+  margin-bottom: .5em;
+}
+
+table {
+  border-collapse: collapse;
+  margin-bottom: 2em;
+}
+
+th, td {
+  padding: 6px;
+}
+
+th {
+  background-color: #eaeaea;
+}
+
+td {
+  border: 1px solid #eeeeee;
+}
