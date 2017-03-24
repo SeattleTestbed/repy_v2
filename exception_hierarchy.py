@@ -148,10 +148,7 @@ class FileClosedError (FileError):
 
 class SafeException(RepyException):
     """Base class for Safe Exceptions"""
-    def __init__(self,*value):
-        self.value = str(value)
-    def __str__(self):
-        return self.value
+    pass
 
 class CheckNodeException(SafeException):
     """AST Node class is not in the whitelist."""
