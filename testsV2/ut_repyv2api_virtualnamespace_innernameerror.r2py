@@ -1,0 +1,23 @@
+#pragma repy
+#pragma out All is good! We caught the inner exception just fine.
+"""
+Create a virtual namespace that raises a `NameError` when `evaluate`d.
+Check that this "inner" error can be caugt in the surrounding context.
+
+See SeattleTestbed/repy_v2#132 for reference.
+"""
+# This piece of code should raise a `NameError: name 'x' is not defined`.
+# (Doing the `raise` directly would also work.)
+code = "x"
+
+# Creating the namespace is no problem -- no SyntaxError, no safety issues
+virtualnamespace = createvirtualnamespace(code, "NameError test")
+
+try:
+  virtualnamespace.evaluate({})
+except NameError:
+  # This is the expected result. Stay quiet, everything's alright!
+  pass
+
+log("All is good! We caught the inner exception just fine.\n")
+

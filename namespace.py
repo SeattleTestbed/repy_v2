@@ -1229,6 +1229,17 @@ class NamespaceAPIFunctionWrapper(object):
       raise
 
     except:
-      # Any other exception is unexpected and thus is a programming error on
+      # Code evaluated inside a `VirtualNamespace` may raise arbitrary
+      # errors, including plain Python exceptions. Reraise these errors
+      # so that the calling user code sees them.
+      # (Otherwise, things like `NameError`s in a virtual namespace
+      # crash the sandbox despite being wrapped in `try`/`except`,
+      # see SeattleTestbed/repy_v2#132.)
+      if type(args[0]) == virtual_namespace.VirtualNamespace:
+        raise
+
+      # Non-`RepyException`s outside of `VirtualNamespace` methods
+      # are unexpected and indicative of a programming error on
       # our side, so we terminate.
       _handle_internalerror("Unexpected exception from within Repy API", 843)
+
