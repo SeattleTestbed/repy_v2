@@ -139,7 +139,41 @@ if another_key not in s20 or a_default not in s20.values():
 
 
 ########################
-# Test SafeDict update
+# Test SafeDict update, see SeattleTestbed/repy_v2#125
+
 # From another dict
+s3 = SafeDict({"1":2, "3":4})
+a_problematic_dict = {4: 5}
+an_okay_dict = {"4": 5}
+a_safedict = SafeDict({"6": 7})
+
+try:
+  # A SafeDict must have keys of type str, so this must fail
+  s3.update(a_problematic_dict)
+except TypeError:
+  pass
+else:
+  log("Updating SafeDict from a dict with non-str keys worked", s3, "\n")
+
+# This should work fine
+s3.update(an_okay_dict)
+
+if an_okay_dict.keys()[0] not in s3.keys():
+  log("Updating SafeDict from a safe dict raised no error but failed",
+      s3, an_okay_dict, "\n")
 
 # From another SafeDict
+s3.update(a_safedict)
+if a_safedict.keys()[0] not in s3.keys():
+  log("Updating SafeDict from another SafeDict raised no error but failed",
+      s3, a_safedict, "\n")
+
+# From kwargs
+s3.update({}, one=12345)
+
+if "one" not in s3.keys():
+  log("Updating from kwargs raised no error but failed to add key", s3, "\n")
+
+if 12345 not in s3.values():
+  log("Updating from kwargs raised no error but failed to add value", s3, "\n")
+
