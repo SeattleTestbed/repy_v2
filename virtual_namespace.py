@@ -63,9 +63,10 @@ class VirtualNamespace(object):
     # Remove any windows carriage returns
     code = code.replace('\r\n','\n')
 
-    # Prepend an encoding string to protect against bugs in that code (#982).
+    # Prepend an encoding string to protect against bugs in that code,
+    # see SeattleTestbed/repy_v1#120.
     # This causes tracebacks to have an inaccurate line number, so we adjust
-    # them in multiple modules. See Issue [SeattleTestbed/repy_v2#95].
+    # them in multiple modules. See SeattleTestbed/repy_v2#95.
     code = encoding_header.ENCODING_DECLARATION + code 
 
 
