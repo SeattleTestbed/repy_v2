@@ -56,16 +56,16 @@ from exception_hierarchy import *
 
 ###### Module Data
 
-# This is a library of all currently bound sockets. Since multiple 
+# This is a dictionary of all currently bound sockets. Since multiple 
 # UDP bindings on a single port is hairy, we store bound sockets 
 # here, and use them for both sending and receiving if they are 
 # available. This feels slightly byzantine, but it allows us to 
-# avoid modifying the repy API.
+# avoid modifying the repy API. See also SeattleTestbed/repy_v2#9.
 #
 # Format of entries is as follows:
 # Key - 3-tuple of ("UDP", IP, Port)
 # Val - Bound socket object
-_BOUND_SOCKETS = {} # Ticket = 1015 (Resolved)
+_BOUND_SOCKETS = {}
 
 # If we have a preference for an IP/Interface this flag is set to True
 user_ip_interface_preferences = False
@@ -706,7 +706,7 @@ def _get_localIP_to_remoteIP(connection_type, external_ip, external_port=80):
   sockobj = socket.socket(socket.AF_INET, connection_type)
 
   # Make sure that the socket obj doesn't hang forever in 
-  # case connect() is blocking. Fix to #1003
+  # case connect() is blocking. Fix to SeattleTestbed/repy_v2#7.
   sockobj.settimeout(1.0)
 
   try:
@@ -1810,7 +1810,7 @@ class EmulatedSocket:
         raise KeyError # Socket is closed locally
  
       # Detect Socket Closed Remote
-      # Fixes ticket#974
+      # Fixes SeattleTestbed/repy_v2#4.
       (readable, writable, exception) = select.select([sock],[],[],0)
       # check if socket is readable.   This is true if the remote end closed.
       if readable:
