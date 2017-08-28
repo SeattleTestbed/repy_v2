@@ -175,7 +175,7 @@ def parse_resourcedict_from_string(resourcestring):
         raise ResourceParseError("Line '"+line+"' has an unknown resource '"+knownresourcename+"'")
 
       # and the last item should be a valid float or int, 
-      # depending on the resource type (#1374)
+      # depending on the resource type (SeattleTestbed/repy_v2#59)
       try:
         # Renewable resources should be cast as floats
         if knownresourcename in resource_constants.renewable_resources:
@@ -387,7 +387,7 @@ def subtract_resourcedicts(dict1, dict2):
     if resource not in retdict:
       retdict[resource] = 0.0
 
-    # ... if it's a float, we can just subtract...
+    # ... if it's a numeric value, we can just subtract...
     if type(retdict[resource]) in [float, int]:
       retdict[resource] = retdict[resource] - dict2[resource]
 
