@@ -82,8 +82,8 @@ import os           # This is for some path manipulation
 import sys          # This is to get sys.executable to launch the external process
 import time         # This is to sleep
 
-# Currently required to filter out Android-specific debug messages, cf #1080
-# and safe_check() below
+# Currently required to filter out Android-specific debug messages,
+# see SeattleTestbed/ATTIC#1080 and safe_check() below.
 try:
   import android
   IS_ANDROID = True
@@ -167,7 +167,8 @@ _STR_NOT_CONTAIN = ['__']
 _STR_NOT_BEGIN = ['im_','func_','tb_','f_','co_',]
 
 # Disallow these exact strings.
-#   encode and decode are not allowed because of the potential for encoding bugs (#982) 
+# encode and decode are not allowed because of the potential for
+# encoding bugs, see SeattleTestbed/repy_v1#120.
 _STR_NOT_ALLOWED = ['encode','decode'] 
 
 def _is_string_safe(token):
@@ -241,8 +242,8 @@ def _check_node(node):
   <Return>
     None
   """
-  # Subtract length of encoding header from traceback line numbers.
-  # (See Issue [SeattleTestbed/repy_v2#95])
+  # Subtract length of encoding header from traceback line numbers,
+  # see SeattleTestbed/repy_v2#95.
   HEADERSIZE = len(encoding_header.ENCODING_DECLARATION.splitlines())
 
   # Proceed with the node check.
@@ -452,7 +453,7 @@ def safe_type(*args, **kwargs):
     raise exception_hierarchy.RunBuiltinException(
       'type() may only take exactly one non-keyword argument.')
 
-  # Fix for SeattleTestbed/repy_v1#128, block access to `type`.
+  # Fix for SeattleTestbed/repy_v1#128, block access to Python's `type`.
 #  if _type(args[0]) is _type or _type(args[0]) is _compile_type:
 #    raise exception_hierarchy.RunBuiltinException(
 #      'unsafe type() call.')
