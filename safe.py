@@ -83,7 +83,7 @@ import sys          # This is to get sys.executable to launch the external proce
 import time         # This is to sleep
 
 # Currently required to filter out Android-specific debug messages,
-# see SeattleTestbed/ATTIC#1080 and safe_check() below.
+# see SeattleTestbed/attic#1080 and safe_check() below.
 try:
   import android
   IS_ANDROID = True
@@ -356,7 +356,7 @@ def safe_check_subprocess(code):
   proc.stdout.close()
 
 
-  # Interim fix for SeattleTestbed/ATTIC#1080:
+  # Interim fix for SeattleTestbed/attic#1080:
   # Get rid of stray debugging output on Android of the form
   # `dlopen libpython2.6.so` and `dlopen /system/lib/libc.so`,
   # yet preserve all of the other output (including empty lines).
