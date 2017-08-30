@@ -31,8 +31,9 @@ if __name__ == "__main__":
     try:
       e.lineno = e.lineno - \
           len(encoding_header.ENCODING_DECLARATION.splitlines())
-    except AttributeError:
-      # Some exceptions may not have line numbers.  If so, ignore
+    except (TypeError, AttributeError):
+      # Ignore exceptions with line numbers that are non-numeric (i.e.
+      # `None`), or have no `lineno` attribute altogether.
       pass
     output += str(type(e)) + " " + str(e)
   
