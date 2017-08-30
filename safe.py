@@ -82,8 +82,8 @@ import os           # This is for some path manipulation
 import sys          # This is to get sys.executable to launch the external process
 import time         # This is to sleep
 
-# Currently required to filter out Android-specific debug messages, cf #1080
-# and safe_check() below
+# Currently required to filter out Android-specific debug messages,
+# see SeattleTestbed/attic#1080 and safe_check() below.
 try:
   import android
   IS_ANDROID = True
@@ -108,13 +108,14 @@ import exception_hierarchy # For exception classes
 import encoding_header # Subtract len(ENCODING_HEADER) from error line numbers.
 
 
-# Fix to make repy compatible with Python 2.7.2 on Ubuntu 11.10 (ticket #1049)
+# Fix to make repy compatible with Python 2.7.2 on Ubuntu 11.10,
+# see SeattleTestbed/repy_v2#24.
 subprocess.getattr = getattr
 
 # Armon: This is how long we will wait for the external process
 # to validate the safety of the user code before we timeout, 
 # and exit with an exception
-# AR: Increasing timeout to 15 seconds, see r3410 / #744
+# Increased from 10 to 15 seconds per SeattleTestbed/repy_v1#90.
 EVALUTATION_TIMEOUT = 15
 
 if platform.machine().startswith('armv'):
@@ -166,7 +167,8 @@ _STR_NOT_CONTAIN = ['__']
 _STR_NOT_BEGIN = ['im_','func_','tb_','f_','co_',]
 
 # Disallow these exact strings.
-#   encode and decode are not allowed because of the potential for encoding bugs (#982) 
+# encode and decode are not allowed because of the potential for
+# encoding bugs, see SeattleTestbed/repy_v1#120.
 _STR_NOT_ALLOWED = ['encode','decode'] 
 
 def _is_string_safe(token):
@@ -240,8 +242,8 @@ def _check_node(node):
   <Return>
     None
   """
-  # Subtract length of encoding header from traceback line numbers.
-  # (See Issue [SeattleTestbed/repy_v2#95])
+  # Subtract length of encoding header from traceback line numbers,
+  # see SeattleTestbed/repy_v2#95.
   HEADERSIZE = len(encoding_header.ENCODING_DECLARATION.splitlines())
 
   # Proceed with the node check.
@@ -260,7 +262,8 @@ def _check_node(node):
     if attribute in _NODE_ATTR_OK: 
       continue
 
-    # JAC: don't check doc strings for __ and the like... (#889)
+    # JAC: don't check doc strings for __ and the like...,
+    # see SeattleTestbed/repy_v1#107.
     if attribute == 'doc' and (node.__class__.__name__ in
       ['Module', 'Function', 'Class']):
       continue
@@ -353,8 +356,9 @@ def safe_check_subprocess(code):
   proc.stdout.close()
 
 
-  # Interim fix for #1080: Get rid of stray debugging output on Android
-  # of the form "dlopen libpython2.6.so" and "dlopen /system/lib/libc.so",
+  # Interim fix for SeattleTestbed/attic#1080:
+  # Get rid of stray debugging output on Android of the form
+  # `dlopen libpython2.6.so` and `dlopen /system/lib/libc.so`,
   # yet preserve all of the other output (including empty lines).
 
   if IS_ANDROID:
@@ -449,7 +453,7 @@ def safe_type(*args, **kwargs):
     raise exception_hierarchy.RunBuiltinException(
       'type() may only take exactly one non-keyword argument.')
 
-  # Fix for #1189
+  # Fix for SeattleTestbed/repy_v1#128, block access to Python's `type`.
 #  if _type(args[0]) is _type or _type(args[0]) is _compile_type:
 #    raise exception_hierarchy.RunBuiltinException(
 #      'unsafe type() call.')
@@ -734,8 +738,9 @@ class SafeDict(UserDict.DictMixin):
     # Return the safe keys
     return safe_keys
 
-  # allow us to be printed
-  # this gets around the __repr__ infinite loop issue ( #918 ) for simple cases
+  # Allow us to be printed.
+  # Overriding __repr__ gets around an infinite loop issue,
+  # SeattleTestbed/repy_v1#111, for simple cases.
   # It seems unlikely this is adequate for more complex cases (like safedicts
   # that refer to each other)
   def __repr__(self):
