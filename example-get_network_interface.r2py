@@ -1,0 +1,2 @@
+log("The list of interface: " + str(get_network_interface()),'\n')
+log("The number of interface: " + str(len(get_network_interface())),'\n')

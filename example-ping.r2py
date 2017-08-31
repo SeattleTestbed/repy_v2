@@ -1,0 +1,5 @@
+log('host: ' + str(ping(gethostbyname('www.google.com'),4,2)['host']),'\n')
+log('max: ' + str(ping(gethostbyname('www.google.com'),4,2)['max']),'\n')
+log('min: ' + str(ping(gethostbyname('www.google.com'),4,2)['min']),'\n')
+log('avg: ' + str(ping(gethostbyname('www.google.com'),4,2)['avg']),'\n')
+log('loss rate: ' + str(ping(gethostbyname('www.google.com'),4,2)['loss_rate']),'\n')

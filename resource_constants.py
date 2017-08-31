@@ -16,11 +16,11 @@
 
 # These are resources that drain / replenish over time
 renewable_resources = ['cpu', 'filewrite', 'fileread', 'netsend', 'netrecv',
-	'loopsend', 'looprecv', 'lograte', 'random']
+	'loopsend', 'looprecv', 'lograte', 'random', 'procfsread']
 
 # These are resources where the quantity of use may vary by use 
 quantity_resources = ["cpu", "memory", "diskused", "filewrite", "fileread", 
-	'loopsend', 'looprecv', "netsend", "netrecv", "lograte", 'random']
+	'loopsend', 'looprecv', "netsend", "netrecv", "lograte", 'random', 'procfsread']
 
 # These are resources where the number of items is the quantity (events because
 # each event is "equal", insockets because a listening socket is a listening 
