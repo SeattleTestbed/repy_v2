@@ -1,6 +1,6 @@
 """
-Test all possible interactions with SafeDict.
-# XXX iter[items, keys, values] ?
+Test interactions with SafeDict.
+TODO: Add tests for the view* and iter* methods too!
 """
 #pragma repy
 
