@@ -1,0 +1,183 @@
+"""
+Test interactions with SafeDict:
+
+Create empty, create from mapping (i.e. a dict), clear, copy, get,
+has_key, items, keys, values, pop, popitem, setdefault, and update.
+
+TODO: Add tests for the iter* methods too!
+"""
+#pragma repy
+
+
+########################
+# Test SafeDict creation
+# Create an empty SafeDict
+s10 = SafeDict()
+
+# From mapping
+s11 = SafeDict({"one": 2, "three": 4})
+
+# XXX The following dict creation methods are currently not
+# XXX supported by SafeDict:
+"""
+# From iterable
+# s12 = SafeDict([("one",2), ("three",4)])
+
+# From kwargs
+# s13 = SafeDict(one=2, three=4)
+
+if not s11==s12==s13:
+  log("Error: Creation methods returned differing results", s11, s12, s13, "\n")
+
+# From keys
+s14 = SafeDict().fromkeys(["x", "y", "z"])
+s15 = SafeDict().fromkeys(["x", "y", "z"], "a common value")
+"""
+
+
+
+########################
+s11.clear()
+
+if s11 != s10:
+  log("Clearing did not empty the SafeDict!", s11, "\n")
+
+
+
+########################
+# Test copying
+
+# Note: s20 and s21 are "magic" in the sense that their structure and
+# keys/values are used for further tests below!
+s20 = SafeDict({"a": 1, "b": 2})
+s21 = s20.copy()
+
+# The two SafeDicts are identical at the moment
+if s20 != s21:
+  log("Copying failed", s20, s21, "\n")
+
+# Following `copy`, modifications of one SafeDict should not affect the other
+s21["c"] = 3
+
+if s20 == s21:
+  log("Copying did not yield independent copies", s20, s21, "\n")
+
+
+
+########################
+# Test element queries
+if s20.get("a") != 1:
+  log("Did not get expected value", s20, "\n")
+
+if s20.get("nonexistent key", "default value") != "default value":
+  log("Did not get default value", s20, "\n")
+
+
+if not s20.has_key("b"):
+  log("Lacks expected key", s20, "\n")
+
+if s20.has_key("this key shouldn't be here!"):
+  log("Has unexpected key", s20, "\n")
+
+
+s20items = s20.items()
+s20items.sort()
+if s20items != [("a", 1), ("b", 2)]:
+  log("Has unexpected items", s20, "\n")
+
+s20keys = s20.keys()
+s20keys.sort()
+if s20keys != ["a", "b"]:
+  log("Has unexpected keys", s20, "\n")
+
+s20values = s20.values()
+s20values.sort()
+if s20values != [1, 2]:
+  log("Has unexpected values", s20, "\n")
+
+
+should_be_one = s20.pop("a")
+if should_be_one != 1:
+  log("Popped unexpected value", should_be_one, ", rest", s20, "\n")
+
+should_be_default = s20.pop("a nonexistent key", "the default")
+if should_be_default != "the default":
+  log("Popped unexpected default", should_be_default, ", rest", s20, "\n")
+
+
+# This item from s20 should still be in s21!
+k, v = s20.popitem()
+if k not in s21.keys() or s21[k] != v:
+  log("Popitem returned unexpected item", k, v, "but dicts were", s20, s21, "\n")
+
+try:
+  s20.popitem()
+  log("s20 should be empty but isn't!\n")
+except KeyError:
+  # s20 is empty by now, this is expected!
+  pass
+
+
+a_new_key = "This key wasn't in the SafeDict previously"
+v = s20.setdefault(a_new_key)
+if v is not None:
+  log("Setdefault returned", repr(v), "for a new key, not the default None",
+      s20, "\n")
+
+if a_new_key not in s20:
+  log("Setdefault did not add new key", s20, "\n")
+
+
+a_default = "This is a default"
+another_key = "Yet another key"
+
+if another_key in s20:
+  log("Key is already in SafeDict", s20, "\n")
+
+v = s20.setdefault(another_key, a_default)
+if v != a_default:
+  log("Setdefault did not return supplied default", a_default, s20, "\n")
+
+if another_key not in s20 or a_default not in s20.values():
+  log("Setdefault did not set the desired value", s20, "\n")
+
+
+########################
+# Test SafeDict update, see SeattleTestbed/repy_v2#125
+
+# From another dict
+s3 = SafeDict({"1": 2, "3": 4})
+a_problematic_dict = {4: 5}
+an_okay_dict = {"4": 5}
+a_safedict = SafeDict({"6": 7})
+
+try:
+  # A SafeDict must have keys of type str, so this must fail
+  s3.update(a_problematic_dict)
+except TypeError:
+  pass
+else:
+  log("Updating SafeDict from a dict with non-str keys worked", s3, "\n")
+
+# This should work fine
+s3.update(an_okay_dict)
+
+if an_okay_dict.keys()[0] not in s3.keys():
+  log("Updating SafeDict from a safe dict raised no error but failed",
+      s3, an_okay_dict, "\n")
+
+# From another SafeDict
+s3.update(a_safedict)
+if a_safedict.keys()[0] not in s3.keys():
+  log("Updating SafeDict from another SafeDict raised no error but failed",
+      s3, a_safedict, "\n")
+
+# From kwargs
+s3.update({}, one=12345)
+
+if "one" not in s3.keys():
+  log("Updating from kwargs raised no error but failed to add key", s3, "\n")
+
+if 12345 not in s3.values():
+  log("Updating from kwargs raised no error but failed to add value", s3, "\n")
+

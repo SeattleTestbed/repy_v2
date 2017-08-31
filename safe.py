@@ -112,6 +112,9 @@ import encoding_header # Subtract len(ENCODING_HEADER) from error line numbers.
 # see SeattleTestbed/repy_v2#24.
 subprocess.getattr = getattr
 
+# SafeDict needs hasattr for `update`, see SeattleTestbed/repy_v2#125
+UserDict.hasattr = hasattr
+
 # Armon: This is how long we will wait for the external process
 # to validate the safety of the user code before we timeout, 
 # and exit with an exception
