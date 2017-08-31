@@ -1,3 +1,4 @@
-#pragma error line 3
+#pragma repy
+#pragma out line 4
 # syntax error on the next line
-This is not a valid line of python.
+This is not a valid line of Repy.

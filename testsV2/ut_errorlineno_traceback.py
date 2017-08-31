@@ -1,3 +1,4 @@
+#pragma repy
 #pragma error line 40
 #pragma error line 31
 #pragma error line 38
@@ -24,7 +25,6 @@ Exception (with type 'exceptions.TypeError'): unsupported operand type(s) for +:
 ---
 
 """
-
 # Check that the traceback's line numbers are also adjusted...
 
 def foo():
