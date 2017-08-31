@@ -1,3 +1,6 @@
+"""
+This unit test checks the getruntime call.
+"""
 #pragma repy
 
 getruntime()
