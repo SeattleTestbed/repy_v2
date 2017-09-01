@@ -18,6 +18,7 @@ IPv6 jumbograms allow for UDP datagrams larger than that, but we ignore
 this for now. For reference, see Section 4 of RFC 2675.
 """
 #pragma repy
+#pragma out
 
 # Payload lengths to test
 lengths_OK = [ # These we expect to succeed without exception.
@@ -25,6 +26,7 @@ lengths_OK = [ # These we expect to succeed without exception.
   1600, # larger than the typical Ethernet MTU, but still fine
   9216, # the upper limit on Mac OS X, see `net.inet.udp.maxdgram`
 ]
+
 lengths_BAD = [ # These are expected to raise RepyArgumentError.
   9217, # +1 beyond upper limit on Mac OS X
   10000, # this is kind of large already
@@ -34,6 +36,7 @@ lengths_BAD = [ # These are expected to raise RepyArgumentError.
   65536, # +1
   100000, # a nice round number to conclude
 ]
+
 # Validate test set: Assert that there are no lengths that appear in both the
 # OK set and the BAD set.
 for length in lengths_OK:
@@ -46,7 +49,8 @@ port1, port2 = list(getresources()[0]["messport"])[0:2]
 for length in lengths_OK + lengths_BAD:
   log("Message length", length)
   try:
-    sendmessage(ip, port1, length * ".", ip, port2)
+    bytes_sent = sendmessage(ip, port1, length * ".", ip, port2)
+    assert bytes_sent==length, "sendmessage did not send as many bytes as it should"
   except RepyArgumentError:
     if length in lengths_BAD:
       log("TEST OK: causes a RepyArgumentError as expected.")
@@ -54,7 +58,7 @@ for length in lengths_OK + lengths_BAD:
       log("TEST FAIL: should succeed, but instead raises RepyArgumentError:\n")
       raise
   except Exception, e:
-    log("TEST FAIL: unexpectedly raises ", type(e), repr(e))
+    log("TEST FAIL: unexpectedly raises ", repr(e))
     raise
   else:
     if length in lengths_OK:
@@ -65,3 +69,4 @@ for length in lengths_OK + lengths_BAD:
         "to raise a RepyArgumentError exception. Bad."
   finally:
     log("\n")
+

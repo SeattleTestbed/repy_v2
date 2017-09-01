@@ -84,8 +84,24 @@ user_specified_ip_interface_list = []
 allowediplist = []
 cachelock = threading.Lock()  # This allows only a single simultaneous cache update
 
-# Trying to send a UDP datagram larger than this size will generate uncatchable
-# exceptions on some systems (OS X). See repy_v2 issue 113.
+# Trying to send a UDP datagram of more than MAX_ALLOWABLE_DGRAM_SIZE
+# bytes will generate uncatchable exceptions on Mac OS X, see
+# SeattleTestbed/repy_v2#113.
+#
+# On most platforms, UDP over IPv4 can possibly handle: 65,507 bytes =
+# 65,535 bytes (per its 16 bit "length" field)
+#    - 8 bytes for the UDP header
+#    -20 bytes for the IPv4 header.
+#
+# The limit on OS X is instead 9216, which you can see by executing
+#    `sysctl net.inet.udp.maxdgram`
+# on an OS X system. Because we value consistency across platforms
+# and think that behavior should be indistinguishable across platforms,
+# we apply this limitation to all platforms, so 9217 and above should
+# fail via RepyArgumentError from sendmessage.
+#
+# IPv6 jumbograms allow for UDP datagrams larger than that, but we ignore
+# this for now. For reference, see Section 4 of RFC 2675.
 MAX_ALLOWABLE_DGRAM_SIZE = 9216
 
 
@@ -873,14 +889,7 @@ def sendmessage(destip, destport, message, localip, localport):
   if not _is_allowed_localport("UDP", localport):
     raise ResourceForbiddenError("Provided localport is not allowed! Port: "+str(localport))
 
-  # Dealing with github.com/SeattleTestbed/repy_v2/issues/113 large UDP dgrams
-  # crashing sandbox. Exceeding max dgram size of 9216 on OS X or 65507 on
-  # other systems results in an uncatchable exception that will crash the
-  # sandbox, so we prevent that here and instead raise a RepyArgumentError.
-  # We apply the same 9216-byte limit here on all systems to avoid treating
-  # different platforms differently. It is not generally wise to employ large
-  # UDP datagrams anyway, so this is something of an edge case, and we make
-  # that compromise.
+  # Fix SeattleTestbed/repy_v2#113, large UDP datagrams crash the sandbox
   if len(message) > MAX_ALLOWABLE_DGRAM_SIZE:
     raise RepyArgumentError("Provided message is too long for UDP datagrams on"
       " some platforms. Maximum length is 9216 bytes.")
