@@ -1,0 +1,72 @@
+"""
+This tries to send UDP datagrams of varying sizes and establish sane 
+upper limits for a message length check.
+
+On most platforms, UDP over IPv4 can possibly handle: 65,507 bytes =
+  65,535 bytes (per its 16 bit "length" field)
+     - 8 bytes for the UDP header
+     -20 bytes for the IPv4 header.
+
+The limit on OS X is instead 9216, which you can see by executing
+     ` sysctl net.inet.udp.maxdgram `
+on an OS X system. Because we value consistency across platforms and think that
+behavior should be indistinguishable across platforms, we apply this limitation
+to all platforms, so 9217 and above should fail via RepyArgumentError from
+sendmessage.
+
+IPv6 jumbograms allow for UDP datagrams larger than that, but we ignore 
+this for now. For reference, see Section 4 of RFC 2675.
+"""
+#pragma repy
+#pragma out
+
+# Payload lengths to test
+lengths_OK = [ # These we expect to succeed without exception.
+  1000, # should work without a problem
+  1600, # larger than the typical Ethernet MTU, but still fine
+  9216, # the upper limit on Mac OS X, see `net.inet.udp.maxdgram`
+]
+
+lengths_BAD = [ # These are expected to raise RepyArgumentError.
+  9217, # +1 beyond upper limit on Mac OS X
+  10000, # this is kind of large already
+  65507, # the theoretical max for UDP on IPv4, see docstring
+  65508, # +1
+  65535, # the maximum length encodable in the header
+  65536, # +1
+  100000, # a nice round number to conclude
+]
+
+# Validate test set: Assert that there are no lengths that appear in both the
+# OK set and the BAD set.
+for length in lengths_OK:
+  assert length not in lengths_BAD, \
+    "Bad test set: same test case in both OK and BAD set."
+
+ip = getmyip()
+port1, port2 = list(getresources()[0]["messport"])[0:2]
+
+for length in lengths_OK + lengths_BAD:
+  log("Message length", length)
+  try:
+    bytes_sent = sendmessage(ip, port1, length * ".", ip, port2)
+    assert bytes_sent==length, "sendmessage did not send as many bytes as it should"
+  except RepyArgumentError:
+    if length in lengths_BAD:
+      log("TEST OK: causes a RepyArgumentError as expected.")
+    else:
+      log("TEST FAIL: should succeed, but instead raises RepyArgumentError:\n")
+      raise
+  except Exception, e:
+    log("TEST FAIL: unexpectedly raises ", repr(e))
+    raise
+  else:
+    if length in lengths_OK:
+      log("TEST OK: sends as expected.")
+    else:
+      log("TEST FAIL: unexpectedly completes with no RepyArgumentError!\n")
+      assert False, "Test on length " + str(length) + " unexpectedly failed " \
+        "to raise a RepyArgumentError exception. Bad."
+  finally:
+    log("\n")
+

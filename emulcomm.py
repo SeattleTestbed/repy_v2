@@ -84,6 +84,26 @@ user_specified_ip_interface_list = []
 allowediplist = []
 cachelock = threading.Lock()  # This allows only a single simultaneous cache update
 
+# Trying to send a UDP datagram of more than MAX_ALLOWABLE_DGRAM_SIZE
+# bytes will generate uncatchable exceptions on Mac OS X, see
+# SeattleTestbed/repy_v2#113.
+#
+# On most platforms, UDP over IPv4 can possibly handle: 65,507 bytes =
+# 65,535 bytes (per its 16 bit "length" field)
+#    - 8 bytes for the UDP header
+#    -20 bytes for the IPv4 header.
+#
+# The limit on OS X is instead 9216, which you can see by executing
+#    `sysctl net.inet.udp.maxdgram`
+# on an OS X system. Because we value consistency across platforms
+# and think that behavior should be indistinguishable across platforms,
+# we apply this limitation to all platforms, so 9217 and above should
+# fail via RepyArgumentError from sendmessage.
+#
+# IPv6 jumbograms allow for UDP datagrams larger than that, but we ignore
+# this for now. For reference, see Section 4 of RFC 2675.
+MAX_ALLOWABLE_DGRAM_SIZE = 9216
+
 
 ##### Internal Functions
 
@@ -811,8 +831,8 @@ def sendmessage(destip, destport, message, localip, localport):
       ResourceForbiddenError (descends ResourceException?) when the local
         port isn't allowed
 
-      RepyArgumentError when the local IP and port aren't valid types
-        or values
+      RepyArgumentError when the IPs, ports, and message aren't valid types
+        or values, or the message is longer than 9,216 bytes
 
       AlreadyListeningError if there is an existing listening UDP socket
       on the same local IP and port.
@@ -868,6 +888,11 @@ def sendmessage(destip, destport, message, localip, localport):
 
   if not _is_allowed_localport("UDP", localport):
     raise ResourceForbiddenError("Provided localport is not allowed! Port: "+str(localport))
+
+  # Fix SeattleTestbed/repy_v2#113, large UDP datagrams crash the sandbox
+  if len(message) > MAX_ALLOWABLE_DGRAM_SIZE:
+    raise RepyArgumentError("Provided message is too long for UDP datagrams on"
+      " some platforms. Maximum length is 9216 bytes.")
 
   # Wait for netsend
   if _is_loopback_ipaddr(destip):
