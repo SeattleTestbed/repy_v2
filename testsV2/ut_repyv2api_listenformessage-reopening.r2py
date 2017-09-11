@@ -5,7 +5,10 @@ and then re-open a socket.
 
 #pragma repy
 
-s = listenformessage('127.0.0.1', 12345)
+listenip = "127.0.0.1"
+listenport = 63100
+
+s = listenformessage(listenip, listenport)
 s.close()
-s = listenformessage('127.0.0.1', 12345)
+s = listenformessage(listenip, listenport)
 s.close()

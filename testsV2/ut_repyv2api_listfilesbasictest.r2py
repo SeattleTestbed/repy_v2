@@ -1,18 +1,21 @@
 """
-This unit test checks the listfiles API call.
+This unit test checks the listfiles API call via a few basic (and
+usually-met) assumptions about the files in the current directory.
 
 We check:
-  1) That z_testlistfiles.py is listed
+  1) That our filename is listed
   2) That repy.py is listed
   3) There are more that 50 files
 """
 
 #pragma repy
 
+this_filename = "ut_repyv2api_listfilesbasictest.r2py"
+
 # Get the list of files
 files = set(listfiles())
 
-if "ut_repyv2api_listfilesbasictest.py" not in files:
+if this_filename not in files:
   log("This unit test is not in the list of files!",'\n')
 
 if "repy.py" not in files:

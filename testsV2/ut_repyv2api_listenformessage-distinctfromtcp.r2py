@@ -1,11 +1,14 @@
 """
-This unit test checks the listenformessage() API call to make sure it can close
-and then re-open a socket.
+This unit test checks that listening UDP and TCP ports do not
+interfere from the perspective of resource accounting.
 """
 
 #pragma repy
 
-ds = listenformessage('127.0.0.1', 12345)
-ts = listenforconnection('127.0.0.1', 12345)
+listenip = "127.0.0.1"
+listenport = 63100
+
+ds = listenformessage(listenip, listenport)
+ts = listenforconnection(listenip, listenport)
 ds.close()
 ts.close()
