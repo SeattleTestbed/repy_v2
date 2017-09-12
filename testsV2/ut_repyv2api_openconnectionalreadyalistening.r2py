@@ -1,10 +1,10 @@
 """
 Check that open after listen is forbidden.
 """
-#pragma repy restrictions.fixed
+#pragma repy
 
 localip = "127.0.0.1"
-localport = 12345
+localport = 63129
 remoteip = "127.0.0.1"
 remoteport = 43214
 timeout = 1.0

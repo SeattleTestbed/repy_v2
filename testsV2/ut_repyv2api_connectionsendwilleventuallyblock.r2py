@@ -1,12 +1,12 @@
 """
 Check that send will eventually block in different situations...
 """
-#pragma repy restrictions.twoports
+#pragma repy
 
 localip = "127.0.0.1"
-localport = 12345
+localport = 63112
 targetip = "127.0.0.1"
-targetport = 12346
+targetport = 63113
 timeout = 1.0
 
 

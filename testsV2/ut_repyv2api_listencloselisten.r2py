@@ -1,12 +1,12 @@
 """
 Check that I can receive connections after stopping listening...
 """
-#pragma repy restrictions.twoports
+#pragma repy
 
 localip = "127.0.0.1"
-localport = 12345
+localport = 63118
 targetip = "127.0.0.1"
-targetport = 12346
+targetport = 63119
 timeout = 1.0
 
 

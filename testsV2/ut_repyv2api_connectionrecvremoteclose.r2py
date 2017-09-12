@@ -1,12 +1,12 @@
 """
 Check what happens when trying to recv from a socket that was closed on the remote end.
 """
-#pragma repy restrictions.twoports
+#pragma repy
 
 localip = "127.0.0.1"
-localport = 12345
+localport = 63104
 targetip = "127.0.0.1"
-targetport = 12346
+targetport = 63105
 timeout = 1.0
 
 

@@ -1,12 +1,12 @@
 """
 Check that connecting from a non-local IP will result in an AddressBindingError
 """
-#pragma repy restrictions.twoports
+#pragma repy
 
 localip = "127.0.0.1"
-localport = 12345
+localport = 63130
 targetip = "127.0.0.1"
-targetport = 12346
+targetport = 63131
 timeout = 1.0
 
 tcpserversocket = listenforconnection(targetip, targetport)

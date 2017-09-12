@@ -1,12 +1,12 @@
 """
 Check what happens with duplicates close
 """
-#pragma repy restrictions.twoports
+#pragma repy
 
 localip = "127.0.0.1"
-localport = 12345
+localport = 63100
 targetip = "127.0.0.1"
-targetport = 12346
+targetport = 63101
 timeout = 1.0
 
 

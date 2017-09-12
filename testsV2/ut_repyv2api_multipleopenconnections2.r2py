@@ -2,13 +2,13 @@
 Check that I can open two connections to a listening socket at a time
 Issue both before getting either connection
 """
-#pragma repy restrictions.threeports
+#pragma repy
 
 localip = "127.0.0.1"
-localport1 = 12345
-localport2 = 12347
+localport1 = 63126
+localport2 = 63127
 targetip = "127.0.0.1"
-targetport = 12346
+targetport = 63128
 timeout = 1.0
 
 

@@ -1,12 +1,12 @@
 """
 Check that send will not block in different situations...
 """
-#pragma repy restrictions.twoports
+#pragma repy
 
 localip = "127.0.0.1"
-localport = 12345
+localport = 63114
 targetip = "127.0.0.1"
-targetport = 12346
+targetport = 63115
 timeout = 1.0
 
 tcpserversocket = listenforconnection(targetip, targetport)
