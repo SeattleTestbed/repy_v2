@@ -1,5 +1,13 @@
 """
-Check that closing a server socket doesn't impact connected sockets
+Check that closing a listening (or "server") socket doesn't
+impact existing connected sockets which that server socket returned
+earlier via `getconnection`.
+
+We do this by setting up a listening socket, initiating and
+accepting an incoming connection, then closing the listening
+socket, and lastly transferring data across the still-established
+connection. The server socket's `close` must not affect the
+connection.
 """
 #pragma repy
 
@@ -27,23 +35,18 @@ tcpserversocket.close()
 
 # now let's test the client socket...
 
-# shouldn't be able to buffer more than thins
 MAXSENDSIZE = 1024*1024
 
-# send until it would block
+# Send until the socket would block or the full message has been sent
 totalamountsent = 0
-while True:
+while totalamountsent < MAXSENDSIZE:
   try:
     amountsent = conn.send('h'*(MAXSENDSIZE-totalamountsent))
   except SocketWouldBlockError:
     # This should happen at some point.
     break
   
-  assert(amountsent > 0)
-
   totalamountsent = totalamountsent + amountsent
-
-  assert(MAXSENDSIZE != totalamountsent)
 
 
 totalamountrecvd = 0
@@ -57,15 +60,6 @@ while totalamountrecvd < totalamountsent:
 
 
 assert totalamountrecvd == totalamountsent
-
-
-# but no more
-try: 
-  serverconn.recv(1)
-except SocketWouldBlockError:
-  pass
-else:
-  log("Should not be able to recv more than was sent...",'\n')
 
 
 conn.close()

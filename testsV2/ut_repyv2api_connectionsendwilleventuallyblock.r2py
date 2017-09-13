@@ -1,5 +1,9 @@
 """
-Check that send will eventually block in different situations...
+Check that a client's socket.send will raise a SocketWouldBlockError
+after we have tried to exhaust the socket buffer up to a sane maximum
+(which needs some fine-tuning). Also check that the server side of the
+connection receives exactly as many bytes as we had put in when
+socket.send blocked. We test this on a connection on localhost.
 """
 #pragma repy
 
@@ -9,6 +13,9 @@ targetip = "127.0.0.1"
 targetport = 63113
 timeout = 1.0
 
+# We assume this to be an okay socket buffer size. If the buffer is
+# larger than this, the unit test fails!
+SANE_MAX_BUFFER_SIZE = 1024 * 1024
 
 tcpserversocket = listenforconnection(targetip, targetport)
 
@@ -21,44 +28,39 @@ assert(ip == localip)
 assert(port == localport)
 
 
-# shouldn't be able to buffer more than thins
-MAXSENDSIZE = 1024*1024
 
-# send until it would block
+# Keep sending until the socket would block (OK, no problem) or the
+# buffer is more than exhausted (BAD).
 totalamountsent = 0
 while True:
   try:
-    amountsent = conn.send('h'*(MAXSENDSIZE-totalamountsent))
+    amountsent = conn.send('h' * SANE_MAX_BUFFER_SIZE)
   except SocketWouldBlockError:
     # This should happen at some point.
     break
-  
-  assert(amountsent > 0)
-
   totalamountsent = totalamountsent + amountsent
+  assert totalamountsent <= SANE_MAX_BUFFER_SIZE, ("The socket buffered " +
+    "more than the sane maximum buffer size.")
+  break
 
-  assert(MAXSENDSIZE != totalamountsent)
 
-
+# The server should be able to receive that amount of data...
 totalamountrecvd = 0
 
 while totalamountrecvd < totalamountsent:
-  
-  # now the server should be able to recv that amount of data...
   data = serverconn.recv(totalamountsent-totalamountrecvd)
-
   totalamountrecvd = totalamountrecvd + len(data)
 
+assert totalamountrecvd == totalamountsent, ("Received more than the " +
+    str(totalamountsent) + " bytes sent previously!")
 
-assert totalamountrecvd == totalamountsent
-
-
-# but no more
+# ...but no more
 try: 
   serverconn.recv(1)
 except SocketWouldBlockError:
   pass
 else:
-  log("Should not be able to recv more than was sent...",'\n')
+  log("Receive buffer should be empty but did not block on recv!\n")
 
+tcpserversocket.close()
 
