@@ -112,7 +112,7 @@ def preparesocket(socketobject):
     pass
 	
   else:
-    raise UnsupportedSystemException, "Unsupported system type: '"+osrealtype+"' (alias: "+ostype+")"
+    raise UnsupportedSystemException("Unsupported system type: '"+osrealtype+"' (alias: "+ostype+")")
   
 
 # Armon: Also launches the nmstatusinterface thread.
@@ -134,7 +134,7 @@ def monitor_cpu_disk_and_mem():
     # process, so pass None instead of a process id.
     nmstatusinterface.launch(None)
   else:
-    raise UnsupportedSystemException, "Unsupported system type: '"+osrealtype+"' (alias: "+ostype+")"
+    raise UnsupportedSystemException("Unsupported system type: '"+osrealtype+"' (alias: "+ostype+")")
 
 
 
@@ -193,7 +193,7 @@ def getruntime():
       # If the difference is less than 1 second, that is okay, since
       # The boot time is only precise to 1 second
       if (last_uptime - uptime) > 1:
-        raise EnvironmentError, "Uptime is going backwards!"
+        raise EnvironmentError("Uptime is going backwards!")
       else:
         # Use the last uptime
         uptime = last_uptime
@@ -217,7 +217,7 @@ def getruntime():
      
   # Who knows...  
   else:
-    raise EnvironmentError, "Unsupported Platform!"
+    raise EnvironmentError("Unsupported Platform!")
   
   # Current uptime minus start time
   runtime = uptime - starttime
@@ -257,7 +257,7 @@ def getruntime():
 get_resources_lock = threading.Lock()
 
 # Cache the disk used from the external process
-cached_disk_used = 0L
+cached_disk_used = 0
 
 # This array holds the times that repy was stopped.
 # It is an array of tuples, of the form (time, amount)
@@ -382,14 +382,14 @@ class WindowsNannyThread(threading.Thread):
 
         if memused > nanny.get_resource_limit("memory"):
           # We will be killed by the other thread...
-          raise Exception, "Memory use '"+str(memused)+"' over limit '"+str(nanny.get_resource_limit("memory"))+"'"
+          raise Exception("Memory use '"+str(memused)+"' over limit '"+str(nanny.get_resource_limit("memory"))+"'")
 
         # Check if we should check the disk
         if (counter % disk_to_memory_ratio) == 0:
           # Check diskused
           diskused = compute_disk_use(repy_constants.REPY_CURRENT_DIR)
           if diskused > nanny.get_resource_limit("diskused"):
-            raise Exception, "Disk use '"+str(diskused)+"' over limit '"+str(nanny.get_resource_limit("diskused"))+"'"
+            raise Exception("Disk use '"+str(diskused)+"' over limit '"+str(nanny.get_resource_limit("diskused"))+"'")
         # Sleep until the next iteration of checking the memory
         time.sleep(memory_check_interval)
 
@@ -401,7 +401,7 @@ class WindowsNannyThread(threading.Thread):
 
       except:
         tracebackrepy.handle_exception()
-        print >> sys.stderr, "Nanny died!   Trying to kill everything else"
+        print("Nanny died!   Trying to kill everything else", file=sys.stderr)
         harshexit.harshexit(20)
 
 
@@ -506,7 +506,7 @@ class WinCPUNannyThread(threading.Thread):
         
       except:
         tracebackrepy.handle_exception()
-        print >> sys.stderr, "CPU Nanny died!   Trying to kill everything else"
+        print("CPU Nanny died!   Trying to kill everything else", file=sys.stderr)
         harshexit.harshexit(25)
               
               
@@ -520,8 +520,8 @@ class WinCPUNannyThread(threading.Thread):
 # This method handles messages on the "diskused" channel from
 # the external process. When the external process measures disk used,
 # it is piped in and cached for calls to getresources.
-def IPC_handle_diskused(bytes):
-  cached_disk_used = bytes
+def IPC_handle_diskused(some_bytes):
+  cached_disk_used = some_bytes
 
 
 # This method handles messages on the "repystopped" channel from
@@ -577,10 +577,10 @@ def write_message_to_pipe(writehandle, channel, data):
   # Send this
   index = 0
   while index < len(mesg):
-    bytes = os.write(writehandle, mesg[index:])
-    if bytes == 0:
-      raise EnvironmentError, "Write send 0 bytes! Pipe broken!"
-    index += bytes
+    some_bytes = os.write(writehandle, mesg[index:])
+    if some_bytes == 0:
+      raise EnvironmentError("Write send 0 bytes! Pipe broken!")
+    index += some_bytes
 
 
 # Armon: Method to read a message from the pipe, used for IPC.
@@ -614,7 +614,7 @@ def read_message_from_pipe(readhandle):
       # Read 8 bytes at a time
       mesg = os.read(readhandle,8)
       if len(mesg) == 0:
-        raise EnvironmentError, "Read returned empty string! Pipe broken!"
+        raise EnvironmentError("Read returned empty string! Pipe broken!")
       data += mesg
 
     # Increment the index while there is data and we have not found a colon
@@ -633,7 +633,7 @@ def read_message_from_pipe(readhandle):
       while more_data > 0:
         mesg = os.read(readhandle, more_data)
         if len(mesg) == 0:
-          raise EnvironmentError, "Read returned empty string! Pipe broken!"
+          raise EnvironmentError("Read returned empty string! Pipe broken!")
         data += mesg
         more_data -= len(mesg)
 
@@ -676,7 +676,7 @@ class parent_process_checker(threading.Thread):
       # Read a message
       try:
         mesg = read_message_from_pipe(self.readhandle)
-      except Exception, e:
+      except Exception as e:
         break
 
       # Check for a handler function
@@ -687,14 +687,14 @@ class parent_process_checker(threading.Thread):
 
       # Print a message if there is a message on an unknown channel
       else:
-        print "[WARN] Message on unknown channel from parent process:", mesg[0]
+        print("[WARN] Message on unknown channel from parent process:" + mesg[0])
 
 
     ### We only leave the loop on a fatal error, so we need to exit now
 
     # Write out status information, our parent would do this, but its dead.
     statusstorage.write_status("Terminated")  
-    print >> sys.stderr, "Monitor process died! Terminating!"
+    print("Monitor process died! Terminating!", file=sys.stderr)
     harshexit.harshexit(70)
 
 
@@ -735,7 +735,7 @@ def do_forked_resource_monitor():
   # Small internal error handler function
   def _internal_error(message):
     try:
-      print >> sys.stderr, message
+      print(message, file=sys.stderr)
       sys.stderr.flush()
     except:
       pass
@@ -760,12 +760,12 @@ def do_forked_resource_monitor():
     # Launch the resource monitor, if it fails determine why and restart if necessary
     resource_monitor(childpid, writehandle)
     
-  except ResourceException, exp:
+  except ResourceException as exp:
     # Repy exceeded its resource limit, kill it
     _internal_error(str(exp)+" Impolitely killing child!")
     harshexit.harshexit(98)
     
-  except Exception, exp:
+  except Exception as exp:
     # There is some general error...
     try:
       (pid, status) = os.waitpid(childpid,os.WNOHANG)
@@ -866,7 +866,7 @@ def resource_monitor(childpid, pipe_handle):
     
     # Check if it is using too much memory
     if memused > nanny.get_resource_limit("memory"):
-      raise ResourceException, "Memory use '"+str(memused)+"' over limit '"+str(nanny.get_resource_limit("memory"))+"'."
+      raise ResourceException("Memory use '"+str(memused)+"' over limit '"+str(nanny.get_resource_limit("memory"))+"'.")
     
     ########### End Check Memory ###########
     # 
@@ -884,7 +884,7 @@ def resource_monitor(childpid, pipe_handle):
 
       # Raise exception if we are over limit
       if diskused > nanny.get_resource_limit("diskused"):
-        raise ResourceException, "Disk use '"+str(diskused)+"' over limit '"+str(nanny.get_resource_limit("diskused"))+"'."
+        raise ResourceException("Disk use '"+str(diskused)+"' over limit '"+str(nanny.get_resource_limit("diskused"))+"'.")
 
       # Send the disk usage information, raw bytes used
       write_message_to_pipe(pipe_handle, "diskused", diskused)
@@ -949,7 +949,7 @@ elif ostype == "Windows":
   import windows_api as os_api
 else:
   # This is a non-supported OS
-  raise UnsupportedSystemException, "The current Operating System is not supported! Fatal Error."
+  raise UnsupportedSystemException("The current Operating System is not supported! Fatal Error.")
   
 # Set granularity
 calculate_granularity()  
@@ -966,5 +966,6 @@ else:
 
   # Reset elapsed time 
   elapsedtime = 0
+
 
 

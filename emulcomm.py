@@ -230,7 +230,7 @@ def _is_already_connected_exception(exceptionobj):
   # Convert the errno to and error string name
   try:
     errname = errno.errorcode[errnum]
-  except Exception,e:
+  except Exception as e:
     # The error is unknown for some reason...
     errname = None
   
@@ -267,7 +267,7 @@ def _is_addr_in_use_exception(exceptionobj):
   # Convert the errno to and error string name
   try:
     errname = errno.errorcode[errnum]
-  except Exception,e:
+  except Exception as e:
     # The error is unknown for some reason...
     errname = None
   
@@ -304,7 +304,7 @@ def _is_addr_unavailable_exception(exceptionobj):
   # Convert the errno to and error string name
   try:
     errname = errno.errorcode[errnum]
-  except Exception,e:
+  except Exception as e:
     # The error is unknown for some reason...
     errname = None
   
@@ -341,7 +341,7 @@ def _is_conn_refused_exception(exceptionobj):
   # Convert the errno to and error string name
   try:
     errname = errno.errorcode[errnum]
-  except Exception,e:
+  except Exception as e:
     # The error is unknown for some reason...
     errname = None
   
@@ -379,7 +379,7 @@ def _is_conn_aborted_exception(exceptionobj):
   # Convert the errno to and error string name
   try:
     errname = errno.errorcode[errnum]
-  except Exception,e:
+  except Exception as e:
     # The error is unknown for some reason...
     errname = None
 
@@ -419,7 +419,7 @@ def _is_network_down_exception(exceptionobj):
   # Convert the errno to and error string name
   try:
     errname = errno.errorcode[errnum]
-  except Exception,e:
+  except Exception as e:
     # The error is unknown for some reason...
     errname = None
   
@@ -460,7 +460,7 @@ def _is_recoverable_network_exception(exceptionobj):
   # Convert the errno to and error string name
   try:
     errname = errno.errorcode[errnum]
-  except Exception,e:
+  except Exception as e:
     # The error is unknown for some reason...
     errname = None
   
@@ -960,7 +960,7 @@ def sendmessage(destip, destport, message, localip, localport):
 
     return bytessent
 
-  except Exception, e:
+  except Exception as e:
         
     try:
       # If we're borrowing the socket, closing is not appropriate.
@@ -1064,7 +1064,7 @@ def listenformessage(localip, localport):
     # preserve send functionality on this port.
     _BOUND_SOCKETS[("UDP", localip, localport)] = sock
 
-  except Exception, e:    
+  except Exception as e:    
 
     # Check if this an already in use error
     if _is_addr_in_use_exception(e):  
@@ -1218,7 +1218,7 @@ def _timed_conn_initialize(localip,localport,destip,destport, timeout):
         sock.connect((destip, destport))
         connected = True
         break
-      except Exception, e:
+      except Exception as e:
         # Check if we are already connected
         if _is_already_connected_exception(e):
           connected = True     
@@ -1385,7 +1385,7 @@ def openconnection(destip, destport,localip, localport, timeout):
     
     # Register this socket as an outsocket
     nanny.tattle_add_item('outsockets',id(sock))
-  except Exception, e:
+  except Exception as e:
 
     # Check if this an already in use error
     if _is_addr_in_use_exception(e):
@@ -1498,7 +1498,7 @@ def listenforconnection(localip, localport):
     else:
       sock.listen(5)
 
-  except Exception, e:
+  except Exception as e:
     
     # Check if this an already in use error
     if _is_addr_in_use_exception(e): 
@@ -1593,7 +1593,7 @@ def _check_socket_state(realsock, waitfor="rw", timeout=0.0):
   """
   # Check that waitfor is valid
   if waitfor not in ["rw","r","w"]:
-    raise Exception, "Illegal waitfor argument!"
+    raise Exception("Illegal waitfor argument!")
 
   # Array to hold the socket
   sock_array = [realsock]
@@ -1755,7 +1755,7 @@ class EmulatedSocket:
 
 
 
-  def recv(self,bytes):
+  def recv(self,some_bytes):
     """
       <Purpose>
         Receives data from a socket.   It may receive fewer bytes than 
@@ -1801,7 +1801,7 @@ class EmulatedSocket:
         raise KeyError # Socket is closed locally
 
       # Try to recieve the data
-      data_recieved = sock.recv(bytes)
+      data_recieved = sock.recv(some_bytes)
 
       # Calculate the length of the data
       data_length = len(data_recieved)
@@ -1825,7 +1825,7 @@ class EmulatedSocket:
     except RepyException:
       raise # Pass up from inner block
 
-    except Exception, e:
+    except Exception as e:
       # Check if this a recoverable error
       if _is_recoverable_network_exception(e):
         # Operation would block
@@ -1924,7 +1924,7 @@ class EmulatedSocket:
       raise SocketClosedLocal("The socket is closed!")
     except RepyException:
       raise # pass up from inner block
-    except Exception, e:
+    except Exception as e:
       # Check if this a recoverable error
       if _is_recoverable_network_exception(e):
         # Operation would block
@@ -2075,7 +2075,7 @@ class UDPServerSocket:
       # Let these through from the inner block
       raise
 
-    except Exception, e:
+    except Exception as e:
       # Check if this is a would-block error
       if _is_recoverable_network_exception(e):
         raise SocketWouldBlockError("No messages currently available!")
@@ -2267,7 +2267,7 @@ class TCPServerSocket (object):
       # Let these through from the inner block
       raise
 
-    except Exception, e:
+    except Exception as e:
       # Check if this is a would-block error
       if _is_recoverable_network_exception(e):
         raise SocketWouldBlockError("No connections currently available!")

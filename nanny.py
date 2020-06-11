@@ -89,7 +89,7 @@ def _sleep_until_resource_drains(resource, resourcesalloweddict, resourcesuseddi
 
   # It'll never drain!
   if resourcesalloweddict[resource] == 0:
-    raise InternalRepyError, "Resource '"+resource+"' limit set to 0, won't drain!"
+    raise InternalRepyError("Resource '"+resource+"' limit set to 0, won't drain!")
     
 
   # We may need to go through this multiple times because other threads may
@@ -263,7 +263,7 @@ def _tattle_add_item(resource, item, resourcesalloweddict, resourcesuseddict):
       return
 
     if len(resourcesuseddict[resource]) > resourcesalloweddict[resource]:
-      raise InternalRepyError, "Should not be able to exceed resource count"
+      raise InternalRepyError("Should not be able to exceed resource count")
 
     if len(resourcesuseddict[resource]) == resourcesalloweddict[resource]:
       # it's clobberin time!
@@ -528,5 +528,6 @@ def get_resource_information():
 
   # and that's it!
   return (resource_limit_dict, resource_use_dict)
+
 
 

@@ -15,7 +15,7 @@ import loggingrepy_core
 
 
 get_size = loggingrepy_core.get_size
-myfile = loggingrepy_core.myfile
+#myfile = loggingrepy_core.myfile
 
 
 class flush_logger(loggingrepy_core.flush_logger_core):
@@ -27,19 +27,19 @@ class flush_logger(loggingrepy_core.flush_logger_core):
 
   def write(self, writeitem):
     # block if already over
-    nanny.tattle_quantity('lograte', 0)
+    #nanny.tattle_quantity('lograte', 0)
 
     # do the actual write
     loggingrepy_core.flush_logger_core.write(self, writeitem)
 
     # block if over after log write
     writeamt = len(str(writeitem))
-    nanny.tattle_quantity('lograte', writeamt)
+    #nanny.tattle_quantity('lograte', writeamt)
 
 
   def writelines(self, writelist):
     # block if already over
-    nanny.tattle_quantity('lograte', 0)
+    #nanny.tattle_quantity('lograte', 0)
 
     # do the actual writelines()
     loggingrepy_core.flush_logger_core.writelines(self, writelist)
@@ -48,7 +48,7 @@ class flush_logger(loggingrepy_core.flush_logger_core):
     writeamt = 0
     for writeitem in writelist:
       writeamt = writeamt + len(str(writeitem))
-    nanny.tattle_quantity('lograte', writeamt)
+    #nanny.tattle_quantity('lograte', writeamt)
 
 
 
@@ -71,7 +71,7 @@ class circular_logger(loggingrepy_core.circular_logger_core):
   """
 
 
-  def __init__(self, fnp, mbs = 16*1024, use_nanny=True):
+  def __init__(self, fnp, mbs = 16*1024, use_nanny=False):
     loggingrepy_core.circular_logger_core.__init__(self, fnp, mbs)
 
     # Should we be using the nanny to limit the lograte
@@ -87,13 +87,14 @@ class circular_logger(loggingrepy_core.circular_logger_core):
       if self.should_nanny:
         # Only invoke the nanny if the should_nanny flag is set.
         # block if already over
-        nanny.tattle_quantity('lograte',0)
-
+        #nanny.tattle_quantity('lograte',0)
+        pass
       writeamt = self.writedata(writeitem)
 
       if self.should_nanny:
         # Only invoke the nanny if the should_nanny flag is set.
-        nanny.tattle_quantity('lograte',writeamt)
+        #nanny.tattle_quantity('lograte',writeamt)
+        pass
 
     finally:
       self.writelock.release()
@@ -108,7 +109,8 @@ class circular_logger(loggingrepy_core.circular_logger_core):
       if self.should_nanny:
         # Only invoke the nanny if the should_nanny flag is set.
         # block if already over
-        nanny.tattle_quantity('lograte',0)
+        #nanny.tattle_quantity('lograte',0)
+        pass
   
       writeamt = 0
       for writeitem in writelist:
@@ -116,7 +118,8 @@ class circular_logger(loggingrepy_core.circular_logger_core):
 
       if self.should_nanny:
         # Only invoke the nanny if the should_nanny flag is set.
-        nanny.tattle_quantity('lograte',writeamt)
+        #nanny.tattle_quantity('lograte',writeamt)
+        pass
   
     finally:
       self.writelock.release()

@@ -10,46 +10,38 @@ makes the output look nicer so the programmer can tell what is happening...
 """
 
 
-# we'll print our own exceptions
-import traceback
-# This needs hasattr.   I'll allow it...
-traceback.hasattr = hasattr
-
-# and don't want traceback to use linecache because linecache uses open
-import fakelinecache
-traceback.linecache = fakelinecache
-
-# Need to be able to reference the last traceback...
+#  and don't want traceback to use linecache because linecache uses open
+#  Need to be able to reference the last traceback...
 import sys
+import traceback
 
-# We need the service logger to log internal errors -Brent
+#  We need the service logger to log internal errors -Brent
 # import servicelogger
 
-# Used to determine whether or not we use the service logger to log internal
-# errors.  Defaults to false. -Brent
-# WARNING: Changing this to True manually may break tracebackrepy
+  #Used to determine whether or not we use the service logger to log internal
+  #errors.  Defaults to false. -Brent
+  #WARNING: Changing this to True manually may break tracebackrepy
 servicelog = False
 
-# this is the directory where the node manager resides.   We will use this
-# when deciding where to write our service log.
+  #this is the directory where the node manager resides.   We will use this
+  #when deciding where to write our service log.
 logdirectory = None
 
-import harshexit # We need to be able to do a harshexit on internal errors.
+import harshexit
 import exception_hierarchy
-import os # needed to get the PID
-import encoding_header # Subtract len(ENCODING_HEADER) from error line numbers.
+import os 
 
-# This list contains all the modules which are black-listed from the
-# traceback, so that if there is an exception, they will not appear in the
-# "user" (filtered) traceback.
+  #This list contains all the modules which are black-listed from the
+  #traceback, so that if there is an exception, they will not appear in the
+  #"user" (filtered) traceback.
 TB_SKIP_MODULES = ["repy.py", "safe.py", "virtual_namespace.py", 
     "namespace.py", "emulcomm.py", "emultimer.py", "emulmisc.py", 
     "emulfile.py", "nonportable.py", "socket.py"]
 
 
 
-# sets the user's file name.
-# also sets whether or not the servicelogger is used. -Brent
+  #sets the user's file name.
+  #also sets whether or not the servicelogger is used. -Brent
 def initialize(useservlog=False, logdir = '.'):
   global servicelog
   global logdirectory
@@ -138,9 +130,8 @@ def format_exception():
 
     # Construct a frame of output.
     # Adjust traceback line numbers, see SeattleTestbed/repy_v2#95.
-    stack_frame = '  "' + filename + '", line ' + \
-      str(lineno - len(encoding_header.ENCODING_DECLARATION.splitlines())) + \
-      ", in " + modulename + "\n"
+    stack_frame = '  "' + filename + '", line ' + str(lineno) + ", in " +\
+        modulename + "\n"
 
     # Always add to the full traceback
     full_tb += stack_frame
@@ -174,19 +165,22 @@ def format_exception():
   debug_str += "\n---"
 
   # Clear the exception being handled
-  sys.exc_clear()
+  try:
+    sys.exc_clear()
+  except:
+    pass
 
   # Return the debug string
   return debug_str
 
 
-# This function is called when there is an uncaught exception prior to exiting
+  #This function is called when there is an uncaught exception prior to exiting
 def handle_exception():
   # Get the debug string
   debug_str = format_exception()
 
   # Print "Uncaught exception!", followed by the debug string
-  print >> sys.stderr, "---\nUncaught exception!\n",debug_str 
+  print("---\nUncaught exception!\n",debug_str) 
 
 
 
@@ -210,11 +204,12 @@ def handle_internalerror(error_string, exitcode):
   <Return>
     Shouldn't return because harshexit will always be called.
   """
+  #pass
   if servicelog:
     import servicelogger
 
   try:
-    print >> sys.stderr, "Internal Error"
+    print("Internal Error")
     handle_exception()
     if not servicelog:
       # If the service log is disabled, lets just exit.
@@ -247,18 +242,18 @@ def handle_internalerror(error_string, exitcode):
       # Again we want to ensure that even if we fail to log, we still exit.
       try:
         servicelogger.multi_process_log(exceptionstring, identifier, logdirectory)
-      except Exception, e:
+      except Exception as e:
         # if an exception occurs, log it (unfortunately, to the user's log)
-        print 'Inner abort of servicelogger'
-        print e,type(e)
+        print('Inner abort of servicelogger')
+        print(e,type(e))
         traceback.print_exc()
       finally:
         harshexit.harshexit(exitcode)
 
-  except Exception, e:
+  except Exception as e:
     # if an exception occurs, log it (unfortunately, to the user's log)
-    print 'Outer abort of servicelogger'
-    print e,type(e)
+    print('Outer abort of servicelogger')
+    print(e,type(e))
     traceback.print_exc()
   finally:
     harshexit.harshexit(842)

@@ -15,26 +15,10 @@ _EXPORTED_EXCEPTIONS = ["RepyException",
                         "ResourceUsageError",
                         "ResourceExhaustedError",
                         "ResourceForbiddenError",
+                        "LockDoubleReleaseError",
+                        "TimeoutError",
                         "FileError",
                         "FileNotFoundError",
-                        "FileInUseError",
-                        "SeekPastEndOfFileError",
-                        "FileClosedError",
-                        "LockDoubleReleaseError",
-                        "NetworkError",
-                        "NetworkAddressError",
-                        "AlreadyListeningError",
-                        "DuplicateTupleError",
-                        "CleanupInProgressError",
-                        "InternetConnectivityError",
-                        "AddressBindingError",
-                        "ConnectionRefusedError",
-                        "LocalIPChanged",
-                        "SocketClosedLocal",
-                        "SocketClosedRemote",
-                        "SocketWouldBlockError",
-                        "TCPServerSocketInvalidError",
-                        "TimeoutError",
                        ]
 
 
@@ -108,6 +92,37 @@ class ResourceForbiddenError (ResourceUsageError):
   pass
 
 
+##### Safety exceptions from safe.py
+
+class SafeException(RepyException):
+    """Base class for Safe Exceptions"""
+    def __init__(self,*value):
+        self.value = str(value)
+    def __str__(self):
+        return self.value
+
+class CheckNodeException(SafeException):
+    """AST Node class is not in the whitelist."""
+    pass
+
+class CheckStrException(SafeException):
+    """A string in the AST looks insecure."""
+    pass
+
+class RunBuiltinException(SafeException):
+    """During the run a non-whitelisted builtin was called."""
+    pass
+
+
+##### Lock related exceptions
+
+class LockDoubleReleaseError(RepyException):
+  """
+  This exception indicates that an attempt was made to
+  release a lock that was not acquired.
+  """
+  pass
+
 ##### File Related Exceptions
 
 class FileError (RepyException):
@@ -142,121 +157,3 @@ class FileClosedError (FileError):
   and that the operation is therfor invalid.
   """
   pass
-
-
-##### Safety exceptions from safe.py
-
-class SafeException(RepyException):
-    """Base class for Safe Exceptions"""
-    def __init__(self,*value):
-        self.value = str(value)
-    def __str__(self):
-        return self.value
-
-class CheckNodeException(SafeException):
-    """AST Node class is not in the whitelist."""
-    pass
-
-class CheckStrException(SafeException):
-    """A string in the AST looks insecure."""
-    pass
-
-class RunBuiltinException(SafeException):
-    """During the run a non-whitelisted builtin was called."""
-    pass
-
-
-##### Lock related exceptions
-
-class LockDoubleReleaseError(RepyException):
-  """
-  This exception indicates that an attempt was made to
-  release a lock that was not acquired.
-  """
-  pass
-
-
-##### Network exceptions
-
-class NetworkError (RepyException):
-  """
-  This exception parent-classes all of the networking exceptions.
-  """
-  pass
-
-class NetworkAddressError (NetworkError):
-  """
-  This exception is raised when a DNS lookup fails.
-  """
-  pass
-
-class AlreadyListeningError (NetworkError):
-  """
-  This exception indicates that there is an existing
-  listen on the local IP / Port pair that are specified.
-  """
-  pass
-
-class DuplicateTupleError (NetworkError):
-  """
-  This exception indicates that there is another socket
-  which has a duplicate tuple (local ip, local port, remote ip, remote port)
-  """
-  pass
-
-class CleanupInProgressError (NetworkError):
-  """
-  This exception indicates that the socket is still
-  being cleaned up by the operating system, and that
-  it is unavailable.
-  """
-  pass
-
-class InternetConnectivityError (NetworkError):
-  """
-  This exception is raised when there is no route to an IP passed to
-  sendmessage or openconnection.
-  """
-  pass
-
-class AddressBindingError (NetworkError):
-  """
-  This exception is raised when binding to an ip and port fails.
-  """
-  pass
-
-class ConnectionRefusedError (NetworkError):
-  """
-  This exception is raised when a TCP connection request is refused.
-  """
-  pass
-
-class LocalIPChanged (NetworkError):
-  """
-  This exception indicates that the local IP has changed.
-  """
-  pass
-
-class SocketClosedLocal (NetworkError):
-  """
-  This indicates that the socket was closed locally.
-  """
-  pass
-
-class SocketClosedRemote (NetworkError):
-  """
-  This indicates that the socket was closed on the remote end.
-  """
-  pass
-
-class SocketWouldBlockError (NetworkError):
-  """
-  This indicates that the socket operation would have blocked.
-  """
-  pass
-
-class TCPServerSocketInvalidError(NetworkError):
-  """
-  This indicates that the TCP server socket has become invalid, e.g. 
-  because the local IP address changed.
-  """

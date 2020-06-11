@@ -32,11 +32,11 @@ from exception_hierarchy import *
 # Fix for SeattleTestbed/attic#983.
 # By retaining a reference to unicode, we prevent os.path.abspath from
 # failing in some versions of python when the unicode builtin is overwritten.
-os.path.unicode = unicode
+#os.path.unicode = unicode
 
 # Store a reference to open, so that we retain access
 # after the builtin's are disabled
-safe_open = open
+#safe_open = open
 
 ##### Constants
 
@@ -81,7 +81,7 @@ def listfiles():
       A list of strings (file names)
   """
   # We will consume 4K of fileread
-  nanny.tattle_quantity('fileread', 4096)
+  #nanny.tattle_quantity('fileread', 4096)
 
   # Get the list of files from the current directory
   files = os.listdir(repy_constants.REPY_CURRENT_DIR)
@@ -129,12 +129,12 @@ def removefile(filename):
     absolute_filename = os.path.abspath(os.path.join(repy_constants.REPY_CURRENT_DIR, filename))
 
     # Check if the file exists
-    nanny.tattle_quantity('fileread', 4096)
+    #nanny.tattle_quantity('fileread', 4096)
     if not os.path.isfile(absolute_filename):
       raise FileNotFoundError('Cannot remove non-existent file "'+filename+'".')
 
     # Consume the filewrite resources
-    nanny.tattle_quantity('filewrite',4096)
+    #nanny.tattle_quantity('filewrite',4096)
 
     # Remove the file (failure is an internal error)
     os.remove(absolute_filename)
@@ -272,16 +272,16 @@ class emulated_file (object):
 
       # Get the absolute file name
       self.abs_filename = os.path.abspath(os.path.join(repy_constants.REPY_CURRENT_DIR, filename))
-      
+
 
       # Here is where we try to allocate a "file" resource from the
       # nanny system.   We will restore this below if there is an exception
       # This may raise a ResourceExhautedError
-      nanny.tattle_add_item('filesopened', self.abs_filename)
+      #nanny.tattle_add_item('filesopened', self.abs_filename)
 
       
       # charge for checking if the file exists.
-      nanny.tattle_quantity('fileread', 4096)
+      #nanny.tattle_quantity('fileread', 4096)
       exists = os.path.isfile(self.abs_filename)
 
       # if there isn't a file already...
@@ -291,13 +291,13 @@ class emulated_file (object):
           raise FileNotFoundError('Cannot openfile non-existent file "'+filename+'" without creating it!')
 
         # okay, we should create it...
-        nanny.tattle_quantity('filewrite', 4096)
-        safe_open(self.abs_filename, "w").close() # Forces file creation
+        #nanny.tattle_quantity('filewrite', 4096)
+        open(self.abs_filename, "w").close() # Forces file creation
 
       # Store a file handle
       # Always open in mode r+b, this avoids Windows text-mode
       # quirks, and allows reading and writing
-      self.fobj = safe_open(self.abs_filename, "r+b")
+      self.fobj = open(self.abs_filename, "r+")
 
       # Add the filename to the open files
       OPEN_FILES.add(filename)
@@ -307,7 +307,7 @@ class emulated_file (object):
 
     except RepyException:
       # Restore the file handle we tattled
-      nanny.tattle_remove_item('filesopened', self.abs_filename)
+      #nanny.tattle_remove_item('filesopened', self.abs_filename)
       raise
 
     finally:
@@ -336,7 +336,7 @@ class emulated_file (object):
     OPEN_FILES_LOCK.acquire()
 
     # Tell nanny we're gone.
-    nanny.tattle_remove_item('filesopened', self.abs_filename)
+    #nanny.tattle_remove_item('filesopened', self.abs_filename)
     
     # Acquire the seek lock
     self.seek_lock.acquire()
@@ -386,7 +386,7 @@ class emulated_file (object):
       end of the file, or if the sizelimit was 0.
     """
     # Check the arguments
-    if sizelimit < 0 and sizelimit != None:
+    if sizelimit != None and sizelimit < 0:
       raise RepyArgumentError("Negative sizelimit specified!")
     if offset < 0:
       raise RepyArgumentError("Negative read offset speficied!")
@@ -408,7 +408,7 @@ class emulated_file (object):
       fobj.seek(offset)
 
       # Wait for available file read resources
-      nanny.tattle_quantity('fileread',0)
+      #nanny.tattle_quantity('fileread',0)
 
       if sizelimit != None:
         # Read the data
@@ -428,7 +428,7 @@ class emulated_file (object):
       disk_blocks_read += 1
 
     # Charge 4K per block
-    nanny.tattle_quantity('fileread', disk_blocks_read*4096)
+    #nanny.tattle_quantity('fileread', disk_blocks_read*4096)
 
     # Return the data
     return data
@@ -464,6 +464,7 @@ class emulated_file (object):
       raise RepyArgumentError("Negative read offset speficied!")
     if type(data) is not str:
       raise RepyArgumentError("Data must be specified as a string!")
+    #data = data.encode('utf-8')
 
     # Get the seek lock
     self.seek_lock.acquire()
@@ -482,7 +483,7 @@ class emulated_file (object):
       fobj.seek(offset)
 
       # Wait for available file write resources
-      nanny.tattle_quantity('filewrite',0)
+      #nanny.tattle_quantity('filewrite',0)
 
       # Write the data and flush to disk
       fobj.write(data)
@@ -503,7 +504,7 @@ class emulated_file (object):
       disk_blocks_written += 1
 
     # Charge 4K per block
-    nanny.tattle_quantity('filewrite', disk_blocks_written*4096)
+    #nanny.tattle_quantity('filewrite', disk_blocks_written*4096)
 
 
   def __del__(self):
