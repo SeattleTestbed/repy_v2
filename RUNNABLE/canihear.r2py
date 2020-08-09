@@ -1,0 +1,680 @@
+"""
+canihear.r2py -- test whether this host can receive (i.e. hear) incoming 
+  connections from a ``canihear'' server, or run such a server.
+
+USAGE as a client-side library:
+* check
+    to check if you can hear an incoming connection from one of 
+    Seattle's ``canihear'' servers (randomly chosen) on a TCP port 
+    (also randomly chosen).
+    This function returns a bool:
+        True if you could hear the connection, 
+        False if you could not hear it.
+
+The following functions allow for more fine-grained testing, and 
+return more detailed (port / IP remapping) information.
+Either function will return a tuple
+  (i_can_hear, apparent_ip, outgoing_port_is_remapped).
+
+* check_random_port
+    as with `check` above, but returning extra details
+* check_specific_port
+    to check if you can hear on your desired port with a randomly 
+    chosen server
+* check_port_with_specific_server
+    to check your desired port with a server you specify
+
+
+
+USAGE as a server-side library:
+* start_server 
+  to run a ``canihear'' server on an available port
+* start_server(SERVER_PORT)
+  to run a server on SERVER_PORT. 
+
+The server will always advertise its IP and port using the key 
+in CAN_I_HEAR_KEY on Seattle's advertisement services.
+
+
+
+USAGE as a stand-alone program in client mode:
+  python repy.py restrictionsfile dylink.r2py canihear.r2py [ PORT ]
+where PORT is an optional port you would like to listen on (and have tested).
+If not specified, a usable port is auto-detected.
+
+USAGE as a stand-alone program in server mode:
+  python repy.py restrictionsfile dylink.r2py canihear.r2py server [ PORT ]
+where ``server'' is a verbatim command to start server mode, and 
+PORT is an optional listen port for the server. If not specified, a usable 
+port is auto-detected.
+
+
+
+IMPLEMENTATION DETAILS
+Approximate flow of events between client and server:
+* Servers announces ("canihear", its IP + ":" + its port)
+* Client calls listenforconnection on the desired port
+* Client looks up "canihear", receives server IP and port
+* Client contacts server: "My local IP is ....., please connect back to me 
+    on port ...."
+* Server replies: "Your apparent IP is ....., I'll connect to you now. 
+    My test message will be ...."
+* Server connects to apparent IP : port
+* Server sends test message
+* Both hang up.
+
+Technical description:
+* Client sends serialize_serializedata({
+    "scrambled local ip and desired port": SCRAMBLED_IP_AND_PORT, 
+    "magic cookie": MAGIC_COOKIE
+    })
+  where SCRAMBLED_IP_AND_PORT is a string such as "131.130.125.5:63107" XORed 
+  with the value of MAGIC_COOKIE; 
+  and MAGIC_COOKIE is a random string equal in length to SCRAMBLED_IP_AND_PORT.
+  (The XORing method is proposed in the STUN/TURN RFCs to protect against 
+  NAT boxes inspecting and modifying the application-layer contents.)
+* Service replies with serialize_serializedata({
+    "scrambled apparent ip and source port": SCRAMBLED_IP_AND_PORT,
+    "magic cookie": MAGIC_COOKIE, 
+    "test message": TEST_MESSAGE
+    })
+  Here, the client's apparent (``external'') IP address and the source 
+  port it is using on the connection is returned. That way, the client 
+  can see whether its IP or port mapping is modified in transit.
+  TEST_MESSAGE is a random circa-1kB message that the client can use to 
+  verify that it is seeing the expected incoming connection from the 
+  canihear server.
+
+
+TODO
+We should allow running servers or clients on specific interfaces 
+(on machines that have multiple). Right now, we use whatever getmyip() 
+gives us.
+"""
+
+CAN_I_HEAR_KEY = "canihear"
+
+
+advertise = dy_import_module("advertise.r2py")
+advertisepipe = dy_import_module("advertisepipe.r2py")
+listops = dy_import_module("listops.r2py")
+session = dy_import_module("session.r2py")
+random = dy_import_module("random.r2py")
+serialize = dy_import_module("serialize.r2py")
+sockettimeout = dy_import_module("sockettimeout.r2py")
+time = dy_import_module("time.r2py")
+
+
+########################################################################
+# Common definitions
+
+class CanIHearError(RepyException):
+  """Error raised by client-oriented check functions."""
+  pass
+
+
+
+def xor_strings(string1, string2):
+  """
+  XOR two strings of same length, character by character.
+
+  A RepyArgumentError is raised if the strings have different lenghts. 
+  (This is in contrast to Python's zip() function that is used below, 
+  which silently truncates.)
+  """
+  if len(string1) != len(string2):
+    raise RepyArgumentError("xor_strings expects two strings of same length!")
+
+  result = ""
+  for char1, char2 in zip(string1, string2):
+    result += chr(ord(char1) ^ ord(char2))
+
+  return result
+
+
+
+def logtn(*args):
+  """
+  Helper function to output timestamped strings (just like log()), 
+  suffixed by a newline character.
+  """
+  argstrings = []
+  for arg in args:
+    argstrings.append(str(arg))
+
+  # Take care of cases when the time wasn't updated with NTP...
+  mytime = time.time_getunixtime
+  try:
+    mytime()
+  except time.TimeError:
+    mytime = getruntime
+
+  logstring = str(mytime()) + " " + " ".join(argstrings) + "\n"
+  log(logstring)
+
+
+
+
+########################################################################
+# Server-oriented functions
+
+def create_client_handler(remote_ip, remote_port, client_socket):
+  """
+  Server-mode function to construct a function that handles 
+  the client connected over client_socket. (The returned function 
+  cannot take arguments as it will be called by createthread.)
+  """
+  def client_handler():
+    """
+    Receive a message from the client, reply with the client's apparent 
+    IP and source port, and connect to the apparent IP on the desired 
+    port to see if the client can hear there. If the client is able 
+    to accept the incoming connection, send a test message.
+    """
+    try:
+      # Receive the client's message
+      raw_client_message = session.session_recvmessage(client_socket)
+
+      # Parse it
+      client_message = serialize.serialize_deserializedata(raw_client_message)
+      local_ip_and_port = xor_strings(
+          client_message["scrambled local ip and desired port"], 
+          client_message["magic cookie"])
+      # We don't actually use the client's local IP 
+      # in the server code...
+      local_ip, port_string = local_ip_and_port.split(":")
+
+      # This is the port we will connect to
+      desired_port = int(port_string)
+    
+      apparent_ip_and_port = remote_ip + ":" + str(remote_port)
+
+      magic_cookie = randombytes()[:len(apparent_ip_and_port)]
+      scrambled_apparent_ip_and_port = xor_strings(apparent_ip_and_port, 
+	  magic_cookie)
+
+      test_message = randombytes()
+      reply_dict = {"scrambled apparent ip and source port": 
+	  scrambled_apparent_ip_and_port,
+	  "magic cookie": magic_cookie,
+	  "test message": test_message} 
+      reply = serialize.serialize_serializedata(reply_dict)
+      session.session_sendmessage(client_socket, reply)
+      # Give the client some time to parse and get ready for 
+      # receiving the test message.
+      sleep(2)
+
+      # The client now knows its apparent IP and source port from 
+      # the control connection; let's open up a connection to the 
+      # desired port.
+      allowed_ports = list(getresources()[0]["connport"])
+      random.random_shuffle(allowed_ports)
+      for local_port in allowed_ports:
+	try:
+          logtn("Trying to connect to client", remote_ip, "on port", 
+              desired_port, "from", getmyip(), "port", local_port)
+          # Again, use a timeoutsocket to protect against malicious clients
+	  probe_socket = sockettimeout.timeout_openconnection(remote_ip, 
+              desired_port, getmyip(), local_port, 10)
+          logtn("Connected!")
+          break
+	except (AddressBindingError, DuplicateTupleError, 
+	    AlreadyListeningError, CleanupInProgressError, 
+	    RepyArgumentError), e:
+          logtn("Unsuccessful,", repr(e))
+	  continue
+	except (TimeoutError, ConnectionRefusedError, 
+            sockettimeout.SocketTimeoutError):
+	  # Notify the client that we couldn't connect. 
+	  session.session_sendmessage(client_socket, 
+	      "Connection from " + getmyip() + ":" + str(local_port) + 
+	      " to " + remote_ip + ":" + str(desired_port) + 
+	      " refused (or timed out). Giving up.")
+	  client_socket.close()
+          raise
+
+      # We have a probe_socket! Send the test message and close it, 
+      # report over the control connection that we succeeded.
+      logtn("Sending test message")
+      session.session_sendmessage(probe_socket, test_message)
+      logtn("Done.")
+      try:
+	probe_socket.close()
+      except SocketClosedRemote:
+	# The remote side closed before us. Never mind.
+	pass
+
+      success_message = "Successfully connected from " + getmyip() + \
+          ":" + str(local_port) + " to " + remote_ip + ":" + str(desired_port)
+
+      logtn(success_message)
+      session.session_sendmessage(client_socket, success_message)
+      try:
+	client_socket.close()
+      except SocketClosedRemote:
+	# The remote side closed before us. Never mind.
+	pass
+
+    except Exception, e:
+      # This is the catch-all clause for things we can't sensibly handle
+      logtn("Caught error when serving client", remote_ip, "on port", 
+          remote_port, " -- ", repr(e))
+      # Close down all of our sockets. (We need to try/except here 
+      # as the sockets needn't exist or could have been closed on the 
+      # remote side already).
+      try:
+        client_socket.close()
+      except:
+        pass
+      try:
+        probe_socket.close()
+      except:
+        pass
+          
+  # Return the inner function that uses the outer function's parameters
+  return client_handler
+
+
+
+
+
+def start_server(server_port=None):
+  """
+  Start a canihear server listening on server_port. 
+  If server_port is left undefined, try all of the allowed 
+  ports until one succeeds.
+  """
+  logtn("Setting up the listening socket")
+  # Autoconfigure the server port if necessary
+  if server_port is None:
+    allowed_tcp_ports = list(getresources()[0]["connport"])
+    random.random_shuffle(allowed_tcp_ports)
+  else:
+    allowed_tcp_ports = [server_port]
+
+  for server_port in allowed_tcp_ports:
+    try:
+      server_socket = listenforconnection(getmyip(), server_port)
+      break
+    except Exception, e:
+      logtn("Error in listenforconnection on", getmyip(), "port", 
+          server_port, repr(e))
+      sleep(1)
+  else:
+    logtn("Could not find a port I can listen on. Exiting.")
+    exitall()
+
+  # If we reach this, we have a server_socket. Announce our existence, 
+  # wait for incoming connections, serve them in separate threads.
+  # XXX We silently assume that our IP doesn't change!
+  logtn("Listening on " + getmyip() + ":" + str(server_port))
+  advertise_handle = advertisepipe.add_to_pipe(CAN_I_HEAR_KEY, 
+      getmyip() + ":" + str(server_port))
+
+  while True:
+    try:
+      (remote_ip, remote_port, raw_client_socket) = server_socket.getconnection()
+      logtn("Got connection from", remote_ip, remote_port)
+      # Enforce timeout on the connection so that evil clients 
+      # can't block us indefinitely
+      client_socket = sockettimeout.timeout_socket(raw_client_socket)
+      client_handler = create_client_handler(remote_ip, remote_port, 
+        client_socket)
+      try:
+        logtn("Starting handler for", remote_ip, remote_port)
+        createthread(client_handler)
+      except ResourceExhaustedError:
+        logtn("Insufficient resources for client", remote_ip, "on port", 
+            remote_port, " -- closing socket.")
+        client_socket.close()
+    except (SocketWouldBlockError, ResourceExhaustedError):
+      sleep(1)
+
+
+
+
+
+########################################################################
+# Client-oriented functions
+
+
+
+def check():
+  """
+  See if a randomly chosen TCP port allowed on this vessel can be used to 
+  listen for incoming connections.
+
+  Return True if the incoming connection could be heard, and False if not.
+  """
+  return check_random_port()[0]
+
+
+
+def check_random_port():
+  """
+  See if a randomly chosen TCP port allowed on this vessel can be used to 
+  listen for incoming connections.
+  """
+  allowed_ports = list(getresources()[0]["connport"])
+  random.random_shuffle(allowed_ports)
+
+  exceptions_list = []
+  for port in allowed_ports:
+    try:
+      return check_specific_port(port)
+    except Exception, e:
+      exceptions_list.append((time.time_gettime(), "Listenport: " + 
+          str(port), repr(e)))
+  else:
+    raise CanIHearError("Checked all of the allowed ports " + 
+        str(allowed_ports) + ", but only found exceptions: " + str(exceptions_list))
+
+
+
+
+def check_specific_port(desired_port):
+  """
+  Check whether we can hear incoming connections on desired_port (TCP) 
+  from a randomly chosen ``canihear'' server.
+  """
+  try:
+    server_address_list = advertise.advertise_lookup(CAN_I_HEAR_KEY)
+  except advertise.AdvertiseError, e:
+    raise CanIHearError("Exception looking up " + CAN_I_HEAR_KEY + ": " +
+        repr(e))
+
+  if not server_address_list:
+    raise CanIHearError("Did not find any servers advertising " + 
+        CAN_I_HEAR_KEY)
+
+  listen_socket = sockettimeout.timeout_listenforconnection(getmyip(), desired_port)
+
+  exceptions_list = []
+  random.random_shuffle(server_address_list)
+  for server_address in server_address_list:
+    try:
+      server_ip, server_port_string = server_address.split(":")
+      server_port = int(server_port_string)
+    except ValueError:
+      # Bogus server address, try the next one
+      continue
+    else:
+      # We have a valid-looking server IP and port
+      try:
+        return check_port_with_specific_server(server_ip, server_port, listen_socket, desired_port)
+      except (ConnectionRefusedError, CanIHearError), e:
+        exceptions_list.append((getruntime(), "Server address " + server_address, 
+            repr(e)))
+        continue
+  else:
+    raise CanIHearError("Tried servers " + str(server_address_list) + 
+        " unsuccessfully. Exceptions seen: " + str(exceptions_list))
+
+
+
+
+def check_port_with_specific_server(server_ip, server_port, listen_socket, desired_port):
+  """
+  This function performs the actual ``canihear'' test with a server. 
+  It returns a tuple
+    (i_can_hear, apparent_ip, outgoing_port_is_remapped) where
+
+  i_can_hear is True if the server was able to connect to us on 
+    desired_port and send its test message
+  apparent_ip is this node's IP address as seen by the server, i.e. our 
+    "external IP" in the case of a NATted node
+  outgoing_port_is_remapped is False only if the source_port we use to 
+    connect out to the server is seen unchanged by the server as well.
+
+  Exceptions raised are
+    CanIHearError to signal multiple failure conditions XXX as there are???
+    ConnectionRefusedError if the server could not be contacted on its 
+      stipulated server_port
+    ValueError if data on the control or probe connections could 
+      not be decoded
+    session.SessionEOF if the server signals it closes the control 
+      or probe connections 
+  """
+  i_can_hear, apparent_ip, outgoing_port_is_remapped = None, None, None
+
+  # Open the control connection to the server
+  server_socket, source_port = \
+      get_control_connection_to_server(server_ip, server_port)
+
+  # We have a server_socket. Request the server to connect back in, 
+  # and learn our apparent IP address and port.
+  apparent_ip, apparent_source_port, test_message = \
+      request_connection_and_get_apparent_address(server_socket, desired_port)
+
+  # Determine port remapping
+  outgoing_port_is_remapped = (apparent_source_port != source_port)
+
+  # See if the server can connect back in
+  try:
+    probe_socket = get_probe_socket(listen_socket, server_ip)
+  except sockettimeout.SocketTimeoutError:
+    # We timed out waiting for the incoming connection.
+    # Close down the sockets and return the test result.
+    for socket in [server_socket, listen_socket]:
+      try:
+        socket.close()
+      except SocketClosedRemote:
+        pass
+    return (False, apparent_ip, outgoing_port_is_remapped)
+
+  logtn("Probe socket connected. Now receive the test message")
+  comparison_test_message = session.session_recvmessage(probe_socket)
+
+  try:
+    probe_socket.close()
+  except SocketClosedRemote:
+    # The remote side closed before us. Never mind.
+    pass
+
+  # What's the server's view of our little experiment?
+  # (If we don't find out, that's not tragic.)
+  try:
+    server_status = session.session_recvmessage(server_socket)
+  except Exception, e:
+    server_status = "Did not receive server response due to error: " + repr(e)
+
+  try:
+    server_socket.close()
+  except SocketClosedRemote:
+    # The remote side closed before us. Never mind.
+    pass
+
+  if comparison_test_message == test_message:
+    logtn("Server concluded:", server_status)
+    return (True, apparent_ip, outgoing_port_is_remapped)
+  else:
+    # That's very strange. The server was able to connect back in, 
+    # but the test message I received was different from the one 
+    # agreed on. I'll cautiously make this an error.
+    raise CanIHearError("Did not receive the expected test message!")
+
+
+
+
+def get_control_connection_to_server(server_ip, server_port):
+  """
+  Helper function to connect to the specified canihear server.
+
+  Returns a tuple (server_socket, source_port) where
+  server_socket is the socket-like object to communicate with the server;
+  source_port is the TCP source port we locally use on that socket. (Use  
+    this to see if ports are remapped on outgoing connections.)
+  """
+  allowed_ports = list(getresources()[0]["connport"])
+  random.random_shuffle(allowed_ports)
+  exceptions_list = []
+  for source_port in allowed_ports:
+    logtn("Trying canihear server", server_ip, "on port", server_port)
+    try:
+      return (sockettimeout.timeout_openconnection(server_ip, server_port, 
+          getmyip(), source_port, 5), source_port)
+    except (RepyArgumentError, AddressBindingError, DuplicateTupleError, 
+        AlreadyListeningError, CleanupInProgressError, TimeoutError, 
+        sockettimeout.SocketTimeoutError), e:
+      exceptions_list.append((getruntime(), "Source port: " + 
+          str(source_port), repr(e)))
+      continue
+    except ConnectionRefusedError:
+      raise
+  else:
+    raise CanIHearError("Could not contact canihear server" + 
+        server_ip + ":" + str(server_port) + ". Exceptions encountered:" + 
+        str(exceptions_list))
+
+
+
+
+def request_connection_and_get_apparent_address(server_socket, desired_port):
+  """
+  Helper function to contact the canihear server, request it to 
+  connect back in to us on desired_port, and also learn the apparent IP 
+  address and source port the server sees on the control connection.
+
+  Returns a tuple (apparent_ip, apparent_source_port) received from the 
+  server that contains the IP and port the server sees on the control 
+  connection.
+  """
+  logtn("Connected to the server, sending my local IP and desired port")
+  local_ip_and_desired_port = getmyip() + ":" + str(desired_port)
+  magic_cookie = randombytes()[:len(local_ip_and_desired_port)]
+  scrambled_local_ip_and_desired_port = xor_strings(
+      local_ip_and_desired_port, magic_cookie)
+  my_properties_dict = {"scrambled local ip and desired port": 
+      scrambled_local_ip_and_desired_port, "magic cookie": magic_cookie}
+  message = serialize.serialize_serializedata(my_properties_dict)
+  session.session_sendmessage(server_socket, message)
+
+  logtn("Receive my apparent IP and source port, and the test message")
+  raw_response = session.session_recvmessage(server_socket)
+  response_dict = serialize.serialize_deserializedata(raw_response)
+
+  test_message = response_dict["test message"]
+
+  apparent_ip_and_port = xor_strings(
+      response_dict["scrambled apparent ip and source port"], 
+      response_dict["magic cookie"])
+
+  apparent_ip, apparent_portstring = apparent_ip_and_port.split(":")
+  apparent_source_port = int(apparent_portstring)
+
+  logtn("Apparent IP", apparent_ip, "port", apparent_source_port)
+  return (apparent_ip, apparent_source_port, test_message)
+
+
+
+
+def get_probe_socket(listen_socket, server_ip):
+  logtn("Waiting for a connection on the listening socket")
+  while True:
+    try:
+      (remote_ip, remote_port, raw_probe_socket) = \
+          listen_socket.getconnection(timeout=10)
+      if remote_ip != server_ip:
+        # Someone else is connecting, not the expected canihear 
+        # server. Close and keep listening.
+        raw_probe_socket.close()
+      else:
+        # The expected server connected back in!
+        # Wrap the raw socket to use timeouts, and return it
+        return sockettimeout.timeout_socket(raw_probe_socket)
+    except SocketWouldBlockError:
+      sleep(1)
+
+
+
+
+########################################################################
+# Functions for interactive use
+
+def usage():
+  log("""
+canihear.r2py -- 
+
+SERVER mode: Run a ``canihear'' server to connect back to a client 
+  on a TCP port they specify, and send a test message. Useful for checking 
+  for firewalls and NATs.
+
+USAGE:
+python repy.py restrictionsfile dylink.r2py canihear.r2py server [ PORT ]
+
+where the optional callarg PORT is the server port I will listen on. If 
+omitted, I will choose a port on my own. I'll later advertise my IP and 
+server port under the ```canihear'' key on the Seattle advertise services, 
+so you will still be able to find me.
+
+
+CLIENT mode: query a canihear_server for this host's hear-abilities.
+
+USAGE:
+  python repy.py restrictionsfile dylink.r2py canihear.r2py [ PORT ]
+
+PORT is an optional listening port you would like the server to check. 
+If omitted, a random allowed port is chosen instead.
+""")
+
+
+
+if callfunc == "initialize":
+  """
+  This is the "executable" portion of canihear.r2py. 
+  It lets you run a ``canihear'' server or client 
+  interactively.
+  """
+  # Find a port for getting an NTP timestamp. 
+  # (The sibling connport for contacting a Seattle ``time-server''
+  # might now be available, but let's not complicate the logic here.)
+  usable_ports_for_time = list(getresources()[0]["messport"])
+  
+  for time_port in usable_ports_for_time:
+    try:
+      log("Getting an NTP timestamp via port", time_port, "...\n")
+      time.time_updatetime(time_port)
+      break
+    except Exception, e:
+      log("Problem getting an NTP timestamp:", repr(e), "\n")
+  else:
+    # None of the ports succeeded (or there were none.)
+    # Complain and work around.
+    log("Could not get an NTP timestamp. Proceeding with time_gettime = getruntime.\n")
+    time.time_gettime = getruntime
+
+  # We assume to start in client mode
+  try:
+    client_port = int(callargs[0])
+    success, ip, port_remapped = check_specific_port(client_port)
+    log("I could " + "not" * (not success) + " hear on port " + 
+        str(client_port) + ". My local/external IPs are " + getmyip() + "/" + 
+        ip + ", and my outgoing port was " + "not" * (not port_remapped) + " remapped.\n")
+    exitall()
+  except IndexError:
+    # There is no callarg -- we are in client auto-configure mode.
+    success, ip, port_remapped = check_random_port()
+    log("I could " + "not" * (not success) + " hear on a random port." + 
+        "My local/external IPs are " + getmyip() + "/" + ip + 
+        ", and my outgoing port was " + "not " * (not port_remapped) + "remapped.\n")
+    exitall()
+  except ValueError:
+    # There is a callarg, but it's not castable -- 
+    # Are we supposed to be in server mode instead?
+    if callargs[0].lower() == "server":
+      # We are a server. What port should we use?
+      try:
+        server_port = int(callargs[1])
+        start_server(server_port)
+      except IndexError:
+        # We should auto-configure a port.
+        start_server()
+      except ValueError:
+        pass
+
+  # If the callarg is neither an int nor the string "server", or 
+  # the given server port is not an int, then educate the user 
+  # about how to call us...
+  usage()
+  exitall()
+

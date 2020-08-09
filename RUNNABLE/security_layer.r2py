@@ -1,0 +1,137 @@
+"""
+This security layer adequately handles A/B storage for files in RepyV2.
+
+
+
+Note:
+    This security layer uses encasementlib.r2py, restrictions.default, repy.py and Python
+    Also you need to give it an application to run.
+    python repy.py restrictions.default encasementlib.r2py [security_layer].r2py [attack_program].r2py 
+    
+    """ 
+TYPE="type"
+ARGS="args"
+RETURN="return"
+EXCP="exceptions"
+TARGET="target"
+FUNC="func"
+OBJC="objc"
+
+# handle 3 cases: 
+# if create = true, and a file already exists
+# you want to keep the file the same, read the Afile and copy the Afile to the Bfile 
+# if create = false, and a file already exists
+# keep file same, read the afile and copy afile to bfile 
+# if create = true, and a file does not exist
+
+class ABFile():
+  def __init__(self,filename,create):
+    # globals
+    mycontext['debug'] = False   
+    # local (per object) reference to the underlying file
+    self.Afn = filename+'.a' #backup file - you want to save it every time you do a valid write in .b
+    self.Bfn = filename+'.b' #file to which you write - attack program interacts with
+
+    try:
+      self.Afile = openfile(self.Afn,create) #is an file object made of textfile.txt.a
+      self.Bfile = openfile(self.Bfn,create)
+    except (RepyArgumentError, FileInUseError, ResourceExhaustedError, FileNotFoundError):
+      pass
+    if create:
+      Acontents = self.Afile.readat(None,0)
+      if Acontents == '':
+        self.Afile.writeat('SE',0)
+      else:
+      	# Afile is not empty, file already exists, keep it the same
+      	self.Afile.writeat(Acontents,0)
+
+     # !!!! what happens if create=true but the file already exists - dont overwrite SE onto already existing files!
+
+
+  def writeat(self,data,offset):	# dont write past EOF
+    
+    # Write the requested data to the B file using the sandbox's writeat call
+    self.Bfile.writeat(data,offset) #writing without checking, as per Must 1.4
+  
+  def readat(self,bytes,offset): #put in try except block to test for invalid read - read past EOF
+
+    try:
+      return self.Afile.readat(bytes,offset)
+    except:
+      pass
+ 
+
+ ###
+ # def close(self):
+ # 	Bdata = self.Bfile.readat(None,0)
+ # 	if(Bdata != "") and (Bdata[0] == "S" and Bdata[-1] == "E"):
+ # 		self.Afile.writeat(Bdata,0)
+ # 	else:
+ # 		Adata = self.Afile.readat(None,0)
+ # 		self.Bfile.close()
+ # 		removefile(self.Bfn)
+ # 		self.Bfile = openfile(self.Bfn,True)
+ # 			self.Bfile.writeat(Adata,0)
+ # 			self.Afile.close()
+ # 			self.Bfile.close()
+ ###
+
+  def close(self): 
+    Bcontents = self.Bfile.readat(None,0)
+    # log(Bcontents)
+    if (Bcontents != "") and (Bcontents[0] == 'S' and Bcontents[-1] == 'E'):
+    	try:
+		    # close Afile	
+		    # remove Afile	
+		    # self.Afile = openfile(self.Afn, True)
+        	self.Afile.writeat(Bcontents, 0)
+    	except RepyArgumentError:
+        	pass
+    	try:
+      		self.Afile.close()
+      		self.Bfile.close()
+    	except (RepyArgumentError, FileClosedError):
+      		pass
+    		# except (IndentationError, RepyArgumentError, SeekPastEndOfFileError, FileClosedError):
+    		#   pass
+    else:
+    	Acontents = self.Afile.readat(None,0)
+    	self.Bfile.close()
+    	removefile(self.Bfn)
+    	self.Bfile = openfile(self.Bfn, True)
+    	self.Bfile.writeat(Acontents,0)
+    	self.Afile.close()
+    	self.Bfile.close()
+
+
+    
+
+#line 11 in attackcase2 calls this (for example)
+def ABopenfile(filename, create):
+  return ABFile(filename,create)
+
+
+
+
+# The code here sets up type checking and variable hiding for you.  You
+# should not need to change anything below here.
+sec_file_def = {"obj-type":ABFile,
+                "name":"ABFile",
+                "writeat":{"type":"func","args":(str,(int,long)),"exceptions":Exception,"return":(int,type(None)),"target":ABFile.writeat},
+                "readat":{"type":"func","args":((int,long,type(None)),(int,long)),"exceptions":Exception,"return":str,"target":ABFile.readat},
+                "close":{"type":"func","args":None,"exceptions":None,"return":(bool,type(None)),"target":ABFile.close}
+           }
+
+CHILD_CONTEXT_DEF["ABopenfile"] = {TYPE:OBJC,ARGS:(str,bool),EXCP:Exception,RETURN:sec_file_def,TARGET:ABopenfile}
+
+# Execute the user code
+secure_dispatch_module()
+
+
+# attack case overwriting shorter valid string with
+# overwrite B file with A contents after removing it 
+# remove file just b then open b 
+# just repy openfile(self.Bfn, true), dont use ABopenfile
+# 
+
+

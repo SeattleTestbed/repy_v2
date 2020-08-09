@@ -1,0 +1,102 @@
+"""
+
+<Author>
+  advertise_object.r2py:
+    Eric Kimbrel kimbrl@cs.washington.edu
+    Monzur Muhammad
+  This library:
+    albert.rafetseder@univie.ac.at
+
+<Start Date>
+  2014-03-25
+
+<Purpose>
+  This library provides a lookup cache layer between the application 
+  and the actual advertise services. The lookup cache stores items 
+  once looked up (and updates them too) so that later lookups can be 
+  served faster. It also serves items advertised through the advertisepipe 
+  library.
+
+  Note: If no value is advertised under a key we look up, the empty 
+  result is returned to the caller but not cached.
+
+  Note also that the lookup cache as a whole and its use of advertisepipe's 
+  advertise_dict in particular hide from you what is really going on on the 
+  advertise services, e.g. whether keys were advertised at all, whether 
+  others advertised values under this key too, etc.
+"""
+
+
+advertise = dy_import_module('advertise.r2py')
+advertisepipe = dy_import_module('advertisepipe.r2py')
+listops = dy_import_module('listops.r2py')
+
+# Here we store our lookup results
+lookup_cache = {}
+
+# Amount of time for which we will return results
+# from the cache without doing a new lookup
+refresh_time = 120
+
+
+
+
+def lookup(key, maxvals=100, lookuptype=None, concurrentevents=4, 
+  graceperiod=5, timeout=10):    
+  """
+  <Purpose>
+    Look up the values stored at the given key; serve from cache if possible.
+
+  <Arguments>
+    As with advertise.r2py's advertise_lookup function:
+    key:
+      Advertised key to look up
+    maxvals:
+      Maximum number of values to return
+    lookuptype (optional, defaults to all advertise services):
+      Which services to employ looking up values
+    concurrentevents (optional, default 4):
+      Number of lookup threads to spawn
+    graceperiod (optional, default 5):
+      Return after this many seconds already if at least one result is available
+    timeout (optional, default 10):
+      Give up after this many seconds. For fastest (but least complete) 
+      lookup, set to 0. Then, only local sources, i.e. our lookup_cache 
+      and advertisepipe's advertise_dict, are queried.
+    
+    Note: Optional arguments are passed on to advertise.r2py if a new
+    advertisement is performed. If cached values are returned, nothing is 
+    done with the extra arguments.
+
+    <Returns>
+      A list of unique values advertised at the key
+
+    <Exceptions>
+      See advertise_lookup from advertise.r2py
+  """
+  results = []
+
+  if key in advertisepipe.advertise_dict:
+    # The key is in advertisepipe's cache.
+    try:
+      results += advertisepipe.advertise_dict[key].keys()
+    except KeyError:
+      # The key has been removed between my first check and now.
+      pass
+
+  if key in lookup_cache and \
+    0 < getruntime() - lookup_cache[key]['time'] < refresh_time:
+    # The key is in the cache, and it is fresh
+    results += lookup_cache[key]['results']
+  elif timeout > 0:
+    # The key is not in the cache, or it expired. Look it up 
+    # if the timeout is positive.
+    fresh_values = advertise.advertise_lookup(key, maxvals, lookuptype, 
+      concurrentevents, graceperiod, timeout)
+    if len(fresh_values) > 0:
+      # Cache results on successful lookups only
+      lookup_cache[key] = {'results': fresh_values[:], 'time': getruntime()}
+
+    results += fresh_values
+  return listops.listops_uniq(results)
+

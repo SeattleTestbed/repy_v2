@@ -1,0 +1,20 @@
+baseaffix = dy_import_module("baseaffix.r2py")
+
+class NoopAffix(baseaffix.BaseAffix):
+  """
+  A affix that does nothing (no-operation). For debug purpose only.
+
+  """
+
+  def copy(self):
+    if self.affix_context['next_affix']:
+      next_affix_copy = self.affix_context['next_affix'].copy()
+    else:
+      next_affix_copy = None
+    return NoopAffix(next_affix_copy, self.affix_context['optional_args'])
+
+
+  
+  def get_advertisement_string(self):
+    return '(NoopAffix)' + self.peek().get_advertisement_string()
+

@@ -1,0 +1,27 @@
+# Test multiple valid writes to a file
+
+# New File Operation
+
+# Clean up of existing file
+if "testfile.txt.a" in listfiles():
+    removefile("testfile.txt.a")
+if "testfile.txt.b" in listfiles():
+    removefile("testfile.txt.b")
+
+# Open File Function Call
+myfile=ABopenfile("testfile.txt",True)  #Create an AB file
+
+# Multiple valid writes
+myfile.writeat("SnakE",0)
+myfile.writeat("Snake shakE",0)
+
+myfile.close()
+
+myfile=ABopenfile("testfile.txt", True)  #Reopen AB File
+
+try:
+    assert('Snake shakE' == myfile.readat(11,0))
+    myfile.close()
+except:
+    myfile.close()
+    log("Valid write (line 27) to file unsuccessful!")

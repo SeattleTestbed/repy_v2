@@ -1,0 +1,57 @@
+#Test Case - write valid data to an existing file, offset=0, and read the value to check the value
+#This test case include write shorter and longer data to see the result too
+
+# Clean up of existing file
+if "testfile.txt.a" in listfiles():
+    removefile("testfile.txt.a")
+if "testfile.txt.b" in listfiles():
+    removefile("testfile.txt.b")
+
+# Open File Function Call
+myfile = ABopenfile("testfile.txt", True)  #Create an AB file
+myfile.writeat("StesttestE",0) #Write valid data
+myfile.close()
+
+myfile=ABopenfile("testfile.txt", False)  #Open the AB file
+# Read the file to check the contents
+try:
+ assert('StesttestE' == myfile.readat(10,0))
+ #Close the file
+ myfile.close()
+except:
+ #Close the file
+ myfile.close()
+ log("Valid Data write to a file is unsuccessful!\r\n")
+
+#Test Case - Write a shorter string with length = 6
+myfile=ABopenfile("testfile.txt",False)  #Open the AB file
+myfile.writeat("S00E",0)
+myfile.close()
+
+myfile=ABopenfile("testfile.txt",False)  #Open the AB file
+# Read the file to check the contents
+try:
+ assert('S00EttestE' == myfile.readat(10,0))
+ #Close the file
+ myfile.close()
+except:
+ #Close the file
+ myfile.close()
+ log("Valid Data (shorter) write to a file is unsuccessful!\r\n")
+
+
+#Test Case - Write a longer string with length = 16
+myfile=ABopenfile("testfile.txt",False)  #Open the AB file
+myfile.writeat("S12345678901234E",0)
+myfile.close()
+
+myfile=ABopenfile("testfile.txt",False)  #Open the AB file
+# Read the file to check the contents
+try:
+ assert('S12345678901234E' == myfile.readat(16,0))
+ #Close the file
+ myfile.close()
+except:
+ #Close the file
+ myfile.close()
+ log("Valid Data (longer) write to a file is unsuccessful!\r\n")

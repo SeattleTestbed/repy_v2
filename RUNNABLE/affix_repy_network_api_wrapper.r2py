@@ -1,0 +1,94 @@
+"""
+affix_repy_network_api_wrapper.r2py
+
+This implements a class to represent the original Repy network call 
+definitions. It defines network calls like an Affix component (so 
+another component can point its methods to ours) but raises 
+AffixStackError's when its stack manipulation methods are called 
+(as it is destined to sit immutably at the bottom of an Affix stack).
+
+This design was chosen so that Affix components need not worry 
+(i.e. special-case) whether or not the Repy API or further Affix 
+components are below them.
+"""
+
+affix_exceptions = dy_import_module("affix_exceptions.r2py")
+base_affix = dy_import_module("baseaffix.r2py")
+
+class RepyNetworkAPIWrapper(base_affix.BaseAffix):
+  def __init__(self, next_affix=None):
+    """
+    The constructor. Must not be called with a next_affix, as this 
+    would imply we are not at the bottom of the Affix stack.
+    """
+    assert next_affix is None, "RepyNetworkAPIWrapper initialized with next_affix='" + str(next_affix) + "' (not None), implying it is not at the bottom of the Affix stack."
+
+    # Save references to the Repy network API calls of the outer scope
+    self.getmyip = getmyip
+    self.gethostbyname = gethostbyname
+    self.sendmessage = sendmessage
+    self.listenformessage = listenformessage
+    self.openconnection = openconnection
+    self.listenforconnection = listenforconnection
+
+
+  # Override BaseAffix's socket.* functions. (They use peek(), 
+  # we don't allow that.)
+  def socket_close(self, socket):
+    return socket.close()
+
+
+  def socket_send(self, socket, msg):
+    return socket.send(msg)
+
+
+  def socket_recv(self, socket, bytes):
+    return socket.recv(bytes)
+
+
+  def tcpserversocket_getconnection(self, tcpserversocket):
+    return tcpserversocket.getconnection()
+
+
+  def tcpserversocket_close(self, tcpserversocket):
+    return tcpserversocket.close()
+
+
+  def udpserversocket_getmessage(self, udpserversocket):
+    return udpserversocket.getmessage()
+
+
+  def udpserversocket_close(self, udpserversocket):
+    return udpserversocket.close()
+
+
+  # Raise errors when someone tries to modify the stack below us.
+  def peek(self):
+    raise affix_exceptions.AffixStackError("Cannot peek() past the bottom of the stack!")
+
+
+  def pop(self):
+    raise affix_exceptions.AffixStackError("Nothing left on the stack to pop() below me!")
+
+
+  def push(self, new_affix_object):
+    raise affix_exceptions.AffixStackError("Cannot push() " + str(new_affix_object) + 
+        "to below the bottom of the stack!")
+
+  def copy(self):
+    """
+    I don't believe it makes sense to create a new RepyNetworkAPIWrapper 
+    object providing the same functionality as this one does....
+    """
+    return self
+
+
+  def get_advertisement_string(self):
+    """
+    RepyNetworkAPIWrapper is implicitly there at the bottom of 
+    the stack. We don't advertise.
+    """
+    return ""
+
+  def __str__(self):
+    return repr(self).replace(' instance at', '')

@@ -1,0 +1,1243 @@
+"""
+<Program Name>
+  dnscommon.repy
+
+<Started>
+  January 29, 2011
+
+<Author>
+  sebass63@u.washington.edu
+  Sebastian Morgan
+
+<Purpose>
+  Abstraction layer for DNS-related functionality used in most of seattle's
+  DNS utilities. This was originally intended to reduce the filesize of 
+  dnsclient.repy's imports, but it looks like there's some non-migrable 
+  functionality in dnsserver that it still needs.
+
+  There is no outward change from this for clients writing DNS-based 
+  applications with dnsserver.repy or zenodotus.repy. dnscommon is an 
+  internal incapsulation in this respect. Since the packet-
+  dictionary conversion methods have been migrated, those methods are now 
+  public. This is the only big change for external applications.
+"""
+
+
+
+
+# These are DNS-specific error codes used in the RCODE value of transactions.
+# Since they're constant and lead to confusing magical values, they get to sit 
+# at the top of the file.
+_FORMAT_ERROR_CODE = 1
+_SERVER_FAIL_CODE = 2
+_NAME_ERROR_CODE = 3
+_NOT_IMPLEMENTED_CODE = 4
+_REFUSED_CODE = 5
+
+
+
+
+# The following flag set is used to simplify packet construction from scratch.
+# Users may want to deviate from the default flags, and if so it's easy for 
+# them to modify this directly.
+default_flags = {
+                 'communication_id': 'a7',
+                 'query_response': False,
+                 'operation_code': 0,
+                 'authority_advisory': False,
+                 'truncation': False,
+                 'recursion_desired': True,
+                 'recursion_accepted': False,
+                 'z': False,
+                 'authentic_data': False,
+                 'checking_disabled': False,
+                 'error_code': 0,
+                 'answer_count': 0,
+                 'authority_record_count': 0,
+                 'additional_record_count': 0,
+                 'answers': []
+                }
+
+
+
+
+# These exceptions are used for packet flagging in dnsserver, and might see 
+# other utility in the future. Note that there is no corresponding exception 
+# for RCODE = 4, as we will simply use a NotImplementedError in that case.
+
+class MalformedPacketError(Exception):
+   # Used to indicate that we received a malformed packet.
+   pass
+
+class ServerFailedError(Exception):
+   # Used to indicate that the server was unable to process the request 
+   # for an unknown reason.
+   pass
+
+class NonexistentDomainError(Exception):
+  # Used to indicate that there was no entry for the requested name.
+  pass
+
+class RefusedError(Exception):
+  # Used to indicate that the server actively refused the client's request.
+  pass
+
+class InvalidArgumentError(Exception):
+  # Used to indicate that one of our methods was passed bad arguments.
+  pass
+
+
+
+
+# This is a dictionary for quick lookups of TYPE data fields. Note that 
+# every entry has a reverse duplicate, allowing for lookups during both 
+# parsing and composition of packets.
+_type_lookup_table = {
+  1 : 'A',          # Host address lookup
+  2 : 'NS',         # Authoritative Name Server
+  3 : 'MD',         # Mail Destination                 (Obsolete)
+  4 : 'MF',         # Mail Forwarder                   (Obsolete)
+  5 : 'CNAME',      # Canonical Name for an Alias
+  6 : 'SOA',        # Start Of Authority               (Start of a ZOA)
+  7 : 'MB',         # Mailbox Domain Name              (Experimental)
+  8 : 'MG',         # Mail Group Member                (Experimental)
+  9 : 'MR',         # Mail Rename Domain Name          (Experimental)
+  10 : 'NULL',      # A Null PR                        (Experimental)
+  11 : 'WKS',       # Well Known Service Description
+  12 : 'PTR',       # Domain Name Pointer
+  13 : 'HINFO',     # Host Information
+  14 : 'MINFO',     # Mailbox Information
+  15 : 'MX',        # Mail Exchange
+  16 : 'TXT',       # Text Strings
+  252 : 'AXFR',     # Request for transfer of zone
+  253 : 'MAILB',    # Request for mailbox-related RRs
+  254 : 'MAILA',    # Request for mail agent RRs       (Obsolete)
+  255 : '*',        # Request for all records
+
+  'A' : 1, 
+  'NS' : 2,
+  'MD' : 3,
+  'MF' : 4,
+  'CNAME' : 5,
+  'SOA' : 6,
+  'MB' : 7,
+  'MG' : 8,
+  'MR' : 9,
+  'NULL' : 10,
+  'WKS' : 11,
+  'PTR' : 12,
+  'HINFO' : 13,
+  'MINFO' : 14,
+  'MX' : 15,
+  'TXT' : 16,
+  'AXFR' : 252,
+  'MAILB' : 253,
+  'MAILA' : 254,
+  '*' : 255          }
+
+
+
+
+
+# This is a dictionary for quick lookups of CLASS data fields. Note that just 
+# like its larger cousin above, it also has entries for backwards lookup.
+_class_lookup_table = {
+  1 : 'IN',        # Internet
+  2 : 'CS',        # CSNet         (Obsolete)
+  3 : 'CH',        # CHAOS
+  4 : 'HS',        # Hesiod
+
+  'IN' : 1,
+  'CS' : 2,
+  'CH' : 3,
+  'HS' : 4            }
+
+
+
+
+def convert_packet_to_dictionary(dns_packet_data):
+  """
+  <Purpose>
+    This function abstracts the details of actual dictionary construction, so 
+    that the functionality in our callback doesn't become a headache to read. 
+    This method takes a raw UDP packet and parses it in to a dictionary with 
+    useful information.
+
+    Hypothetically this could be used with custom-generated packet strings, 
+    but it is intended for parsing data after receiving it from the network.
+
+  <Arguments>
+    dns_packet_string
+      A raw packet received from a listen port in string form. We assume that 
+      this packet is correctly formatted.
+
+  <Exceptions>
+    There are a lot of things that can go wrong here if the argument isn't 
+    correctly formatted. Use this as a feature: If there's something 
+    physically wrong with the packet, this method will crash. If it's fine,
+    it won't crash.
+
+    While I have attempted to give some measure of sensibility to how this 
+    can fail, the permutations of malformed packets are virtually endless.
+
+  <Side Effects>
+    None
+
+  <Returns>
+    A dictionary with the following form:
+
+  {
+    'raw_data':                <long string> (network raw)
+    'remote_ip':               string (formatted unicode, IP Address)
+    'remote_port':             integer
+    'communication_id'         string (network raw)
+    'query_response'           boolean
+    'operation_code'           integer
+    'authority_advisory'       boolean
+    'truncation'               boolean
+    'recursion_desired'        boolean
+    'recursion_accepted'       boolean
+    'z'                        boolean
+    'authentic_data'           boolean
+    'checking_disabled'        boolean
+    'error_code'               integer (4 bit)
+    'question_count'           integer (16 bit)
+    'answer_count'             integer (16 bit)
+    'authority_record_count'   integer (16 bit)
+    'additional_record_count'  integer (16 bit)   )
+    'questions': array of dictionaries containing:
+    'name'                  string (formatted unicode, IP Address)
+    'type'                  string (formatted unicode, eg A, AAAA, MX)
+    'class'                 string (formatted unicode, eg IN, HE, CH)
+    'answers': array of dictionaries containing:
+    'name'                  string (formatted unicode, IP Address)
+        'type'                  string (formatted unicode, eg A, AAAA, MX)
+        'class'                 string (formatted unicode, eg IN, HE, CH)
+        'time_to_live'          integer (seconds, 32 bit)
+        'answer_data'           dictionary (format based on type)
+
+  }
+
+    The 'answer_data' dictionary field can have various formats. Here are the
+    three which are currently supported:
+    SOA:
+      'mname' <IP>
+      'rname' <IP>
+      'serial' <32 bit int>
+      'refresh' <32 bit int>
+      'retry' <32 bit int>
+      'expire' <32 bit int>
+      'minimum' <32 bit int>
+    NS:
+      'address' <Domain Name>
+    A:
+      'address' <IP>
+
+  """
+  # Initialize the dictionary which will contain the packet data.
+  packet_dict = {}
+
+  # Before anything else, reference the raw packet data in the dictionary.
+  packet_dict['raw_data'] = dns_packet_data
+
+  # Locate the communication ID for later use. This is an arbitrary two 
+  # bytes, which the client uses to distinguish between different queries 
+  # that it is waiting for responses to. All we have to do is use the same 
+  # two bytes in our response.
+  packet_dict['communication_id'] = dns_packet_data[0:2]
+
+  # The DNS header bytes at indices 2 and 3 are monstrously dense in terms 
+  # of information. That at index two contains the query/response bit, 
+  # a four bit number for opcode, an authority bit, a truncation bit, and 
+  # the recursion_desired bit. Index three contains recursion_accepted, 
+  # Z, authentic_data, checking_disabled, and error_code. We're going to 
+  # be needing to access these two bits a lot here, so let's make them 
+  # more easily accessed.
+  two_byte = ord(dns_packet_data[2])
+  three_byte = ord(dns_packet_data[3])
+
+  # Find the state of the query/response bit, determined by the first 
+  # bit of the two_byte. This bit simply identifies the message as either a 
+  # query or response. If it is a query, it should be set to zero. If it is 
+  # a response, it should be a one. Since we, the server are receiving it, 
+  # we'd expect it to be a zero. For simplicity of use on our client side, 
+  # we abstract this to a boolean value, where 1 = true and 0 = false.
+  packet_dict['query_response'] = False
+  if two_byte & 128 != 0:
+    packet_dict['query_response'] = True
+
+  # Locate the opcode value, determined by the second, third, 
+  # fourth, and fifth bits of the two-byte. Opcode is a number, so we can't just
+  # test for an existing value, as we did with query_response.
+
+  # First, let's make a placeholder for our opcode value.
+  operation_code = 0
+
+  # To get the correct value for opcode, we need to check each of the concerned 
+  # bits in turn.
+
+  if two_byte & 64 != 0:
+    # Since this is the highest order bit in the four-bit opcode, we add eight 
+    # to opcode's value if it is set to one.
+    operation_code += 8
+
+  if two_byte & 32 != 0:
+    operation_code += 4
+
+  if two_byte & 16 != 0:
+    operation_code += 2
+
+  if two_byte & 8 != 0:
+    operation_code += 1
+
+  packet_dict['operation_code'] = operation_code
+
+  # Next we move on to the authority advisory: The sixth bit in two_byte. This 
+  # is used to indicate whether or not the data sent to the user came from the 
+  # sever's cache or from the network. If it is from the network, AA will be 
+  # equal to one. If it is from the cache, it will be equal to zero. In a 
+  # message from a user, we anticipate that it will be zero, since the bit 
+  # itself is invalid in queries.
+  packet_dict['authority_advisory'] = False
+  if two_byte & 4 != 0:
+    packet_dict['authority_advisory'] = True
+
+  # Next is 'truncation', the seventh bit in two_byte. This indicates whether 
+  # the message we've received has been truncated due to exceeding the 512 
+  # byte limit on UDP DNS transmissions. Once again, TC = 1 indicates that 
+  # truncation has taken place, and TC = 0 indicates that this is not so.
+  packet_dict['truncation'] = False
+  if two_byte & 2 != 0:
+    packet_dict['truncation'] = True
+
+  # The last bit in two_byte is recursion_desired, which indicates that 
+  # either the user desires us to perform our lookups recursively (1) or 
+  # that they should be performed in the most expedient way for the name sever 
+  # itself (0), even if this means that the server merely returns the IP of 
+  # another name server that it thinks the user could get its information from.
+  # (Note that a recursive lookup simply means that we are willing to ask 
+  # other name servers for information, not just ourselves.)
+  packet_dict['recursion_desired'] = False
+  if two_byte & 1 != 0:
+    packet_dict['recursion_desired'] = True
+
+  # Moving on to the first bit of three_byte, we now log recursion_accepted. 
+  # This is a bit that the server will set if recursive services are 
+  # available. If they are, it will be set to one. If not, it will be set to 
+  # zero. However, that is only the case in replies. Since this is most likely 
+  # a lookup request, we'd expect it to always be zero.
+  packet_dict['recursion_accepted'] = False
+  if three_byte & 128 != 0:
+    packet_dict['recursion_accepted'] = True
+
+  # Bit two of three_byte is the Z bit. Over the years, Z has been used by 
+  # IETF standards as a placeholder for future revisions to the DNS, gradually 
+  # decreasing as more and more bits were assigned meaning. Now, it is only one 
+  # bit long, and must be zero. (It is reserved, so assigning it value has no 
+  # meaning within the DNS.)
+  packet_dict['z'] = False
+  if three_byte & 64 != 0:
+    packet_dict['z'] = True
+
+  # authentic_data is the third bit in three_byte, and it is invalid in queries.
+  # It indicates, in responses, whether the server has verified the data it is 
+  # returning to the client or not. If it has, this bit is assigned a value of 
+  # one. Otherwise, it is assigned a value of zero.
+  packet_dict['authentic_data'] = False
+  if three_byte & 32 != 0:
+    packet_dict['authentic_data'] = True
+
+  # 'checking_disabled' occupies the fourth bit of three_byte, and indicates 
+  # whether the client desires that data be verified by the server or that they 
+  # do not care. If they want the data they receive to be verified, this will 
+  # be equal to zero. Otherwise, it will be equal to one.
+  packet_dict['checking_disabled'] = False
+  if three_byte & 16 != 0:
+    packet_dict['checking_disabled'] = True
+
+  # The last chunk of three_byte is four bits long, and is called 'error_code'.
+  # This section is used to send error messages back to users. For example, if 
+  # a user's query is answered with an error code of one, it means that their 
+  # query was malformed somehow. As you can imagine, this section will usually 
+  # be zero in responses.
+
+  packet_dict['error_code'] = three_byte & 15
+
+  # Having exhausted the two densest bytes of the packet, next is the two-byte 
+  # question_count value. Since it's a int16, parsing the string directly 
+  # won't give us a correct value. Since it's not an immediately obvious 
+  # process, there's a helper method to do this for us.
+  packet_dict['question_count'] = _charpair_to_int16(dns_packet_data[4:6])
+
+  # Following question_count is the 'answer_count' byte pair. This indicates the
+  # number of answers to the query enclosed in the message. As you can imagine, 
+  # we expect this to be zero in queries.
+  packet_dict['answer_count'] = _charpair_to_int16(dns_packet_data[6:8])
+
+  # Next, we parse in another int16 called 'nscount'. This number indicates 
+  # the amount of authoritative answers (resource records) which are appended 
+  # to the end of the message. In queries, we expect this value to be zero.
+  packet_dict['authority_record_count'] = _charpair_to_int16(dns_packet_data[8:10])
+
+  # The last segment of the header is yet another int16, this one named 
+  # 'arcount'. This is used to indicate the number of additional records 
+  # which are appended to the end of the message. Similar to ancount and 
+  # nscount, we expect this to be zero in queries.
+  packet_dict['additional_record_count'] = _charpair_to_int16(dns_packet_data[10:12])
+
+  # This next section is where we read in the questions that our user has sent. 
+  packet_dict['questions'], read_index = _read_question_section(
+                              packet_dict['question_count'], dns_packet_data)
+
+  # We need to initialize the answers section. If there are no RRs provided, we will
+  # not populate it.
+  packet_dict['answers'] = []
+
+  total_answers = packet_dict['answer_count']
+  total_answers += packet_dict['authority_record_count']
+  total_answers += packet_dict['additional_record_count']
+
+  if total_answers > 0:
+    packet_dict['answers'], read_index =  _read_answer_section(
+                              total_answers, read_index, dns_packet_data)
+
+  # We're done!
+  return packet_dict
+
+
+
+
+def _read_answer_section(answer_count, answer_index, dns_query_data):
+  """
+  <Purpose>
+    Parses the answers in a DNS query. This is code relocation similar 
+    to _read_question_section.
+
+  <Arguments>
+    answer_count
+      The number of answers in the query.
+
+    answer_index
+      The index at which to start reading.
+
+    dns_query_data
+      A string of raw network input. This is the query.
+
+  <Exceptions>
+    Indexing and numeric parsing errors can arise here if the packet is 
+    malformed.
+
+  <Side Effects>
+    None
+
+  <Returns>
+    A tuple containing the array of answers and the read index that we
+    finish at.
+
+    The array of answers, in order of occurrence in the packet. These 
+    answers are in dictionary form, and each contains the following:
+
+    'name'                   string (formatted unicode, IP Address)
+    'type'                   string (formatted unicode, A AAAA MX etc)
+    'class'                  string (formatted unicode, HS CH IN etc)
+    'time_to_live'           integer (32 bit)
+    'answer_data'            Dictionary (Format varies.)
+  """
+  # Set the read index to the specified index.
+  read_index = answer_index
+
+  # Create a list for our dictionaries to be placed in as they are
+  # constructed.
+  answer_list = []
+
+  # This loop will execute once for each question in our data.
+  for answer_iteration in range(answer_count):
+    index, answer = _read_single_answer(read_index, dns_query_data)
+    answer_list.append(answer)
+    read_index = index
+
+  return  answer_list, read_index
+
+
+
+
+def _read_single_answer(answer_index, dns_query_data):
+  """
+  <Purpose>
+    Reads in a single answer from a DNS query at the index provided.
+  
+  <Arguments>
+    answer_index
+      The location of the first label length of the answer.
+
+    dns_query_data
+      The query itself, in string form. (Network raw)
+
+  <Exceptions>
+    NotImplementedError
+      The answer was of a type whose RDATA format we don't know how to read.
+
+  <Side Effects>
+    None
+
+  <Returns>
+   A tuple containing the final index after parsing, and a dictionary. 
+
+    The dictionary has the following 
+    relationships:
+
+    'name'         string (formatted unicode, IP Address)
+    'type'         string (formatted unicode, A AAAA MX etc)
+    'class'        string (formatted unicode, HS CH IN etc)
+    'time_to_live' integer
+    'answer_data'  dictionary (Contains differing keyes based on type)
+  """
+  # Parse answer address.
+  read_index, answer_name = _parse_address(answer_index, dns_query_data)
+
+  # Read the type.
+  answer_type = _type_lookup_table[
+                      _charpair_to_int16(dns_query_data[read_index:read_index + 2])]
+  read_index += 2
+
+  # Read the class.
+  answer_class = _class_lookup_table[
+                     _charpair_to_int16(dns_query_data[read_index:read_index + 2])]
+  read_index += 2
+
+  # Some math magic with the TTL.
+  time_to_live = _charpair_to_int16(dns_query_data[read_index:read_index + 2]) * 2 ** 16
+  read_index += 2
+  time_to_live += _charpair_to_int16(dns_query_data[read_index:read_index + 2])
+  read_index += 2
+
+  # Create a holding space for our data.
+  resource_data = { }
+
+  # RDLength isn't important.
+  read_index += 2
+
+  # There are a lot of different types of queries. We can parse all of these ones 
+  # in the same way, though.
+  simple_answers = ['A', 'NS', 'CNAME', 'MD', 'MB', 'MF', 'MG', 'MR', 'MX', 'PTR']
+  if answer_type in simple_answers:
+    read_index, resource_data['address'] = _parse_answer_address(read_index, dns_query_data)
+  elif answer_type == 'SOA':
+    read_index, mname = _parse_address(read_index, dns_query_data)
+    resource_data['mname'] = mname
+    read_index, rname = _parse_address(read_index, dns_query_data)
+    resource_data['rname'] = rname
+    serial  = _charpair_to_int16(dns_query_data[read_index:read_index + 2]) * 2 ** 16
+    read_index += 2
+    serial += _charpair_to_int16(dns_query_data[read_index:read_index + 2])
+    read_index += 2
+    refresh  = _charpair_to_int16(dns_query_data[read_index:read_index + 2]) * 2 ** 16
+    read_index += 2
+    refresh += _charpair_to_int16(dns_query_data[read_index:read_index + 2])
+    read_index += 2
+    retry  = _charpair_to_int16(dns_query_data[read_index:read_index + 2]) * 2	** 16
+    read_index += 2
+    retry += _charpair_to_int16(dns_query_data[read_index:read_index + 2])
+    read_index += 2
+    expire  = _charpair_to_int16(dns_query_data[read_index:read_index + 2]) * 2	** 16
+    read_index += 2
+    expire += _charpair_to_int16(dns_query_data[read_index:read_index + 2])
+    read_index += 2
+    minimum = _charpair_to_int16(dns_query_data[read_index:read_index + 2]) * 2	** 16
+    read_index += 2
+    minimum += _charpair_to_int16(dns_query_data[read_index:read_index + 2])
+    read_index += 2
+    resource_data['serial'] = serial
+    resource_data['refresh'] = refresh
+    resource_data['retry'] = retry
+    resource_data['expire'] = expire
+    resource_data['minimum'] = minimum
+
+  answer_dict = {
+    'name' : answer_name,
+    'type' : answer_type,
+    'class' : answer_class,
+    'time_to_live' : time_to_live,
+    'answer_data' : resource_data
+                }
+
+  return read_index, answer_dict
+
+
+
+
+def _parse_answer_address(address_index, dns_query_data):
+  """
+  <Purpose>
+    This method parses a four-octet IP Address directly out of an answer 
+    section. This method is needed because answer IPs are not delimited, 
+    since their labels are not of variable length.
+  
+  <Arguments>
+    address_index
+      The integer index at which the address starts.
+    dns_query_data
+      The string containing raw query data
+
+  <Exceptions>
+    If the address is improperly formatted, this will produce an integer 
+    parsing failure.
+
+  <Side Effects>
+    None
+
+  <Returns>
+    A tuple containing the new read index and a unicode IP Address.
+  """
+  address = str(ord(dns_query_data[address_index]))
+  address += '.'
+  address_index += 1
+  address += str(ord(dns_query_data[address_index]))
+  address += '.'
+  address_index += 1
+  address += str(ord(dns_query_data[address_index]))
+  address += '.'
+  address_index += 1
+  address += str(ord(dns_query_data[address_index]))
+  address_index += 1
+  
+  return address_index, address
+
+
+
+
+def _parse_address(address_index, dns_query_data):
+  """
+  <Purpose>
+    This method parses an IP Address located at a given index in a query. 
+    This is intended to remove redundant code.
+
+  <Arguments>
+    address_index
+      The integer index at which the address starts.
+    dns_query_data
+      The string containing raw query data.
+
+  <Exceptions>
+    None
+
+  <Side Effects>
+    None
+
+  <Returns>
+    A tuple containing the new read index, and a unicode IP Address.
+  """
+    # Set the read index to what we've been instructed.
+  read_index = address_index
+
+  # Create a string to hold the question name in.
+  address_name = ""
+
+  # Construct a flag for loop conditional.
+  run_loop = True
+
+  # Addresses must terminate with a zero octet, so we don't stop iterating
+  # until we come across it.
+  while run_loop:
+    # First, let's make sure there's another label to read.
+    if ord(dns_query_data[read_index]) == 0:
+      run_loop = False
+      read_index += 1
+    else:
+      # Next, check to see whether or not we're being pointed somewhere.
+      possible_label = _charpair_to_int16(dns_query_data[read_index:read_index + 2])
+
+      if possible_label & 49152 == 49152: # We're being pointed elsewhere.
+        pointer_index = possible_label & 16383
+        # Recursion ahead! There is an attack to exploit this and create an infinite
+        # self-referencing recursion in the question section. This will not make it
+        # to this portion of the code, as it will be dealt with in a sniffer
+        # method.
+        temp_index, address_data = _parse_address(pointer_index, dns_query_data)
+        # Due to a quirk of this method, we need to add the period to the end.
+        address_data += '.'
+        address_name += address_data
+        # We used two octets for the pointer.
+        read_index += 2
+        run_loop = False # Added in inver 3.3
+      else:
+        label_length = ord(dns_query_data[read_index])
+        read_index += 1
+        address_name += dns_query_data[read_index:read_index + label_length]
+        address_name += '.'
+        # Account for the label length that we just read in.
+        read_index += label_length
+
+  # Trim off the last period.
+  address_name = address_name[:-1]
+
+  return read_index, address_name
+
+
+
+
+def _read_question_section(question_count, dns_query_data):
+  """
+  <Purpose>
+    Parses the questions in a DNS query. This is just a code relocation,
+    to avoid convert_packet_to_dictionary from becoming too cluttered.
+
+  <Arguments>
+    question_count
+      An integer describing the number of queries in the question
+      section. If this is not accurate, we can raise an error.
+    dns_query_data
+      A string containing raw network input. This should be a complete 
+      DNS query.
+
+  <Exceptions>
+    IndexError
+      Means that the question section was malformed, because we tried 
+      to parse an area which the packet claimed to have, yet did not.
+
+  <Side Effects>
+    None
+
+  <Returns>
+    A tuple containing an array of dictionaries, and the most recent 
+    index.
+
+    The  array of dictionaries contains items like this: 
+    
+    'name'           string (formatted unicode, IP Address)
+    'type'           string (formatted unicode, eg A, AAAA, MX)
+    'class'          string (formatted unicode, eg IN, HE, CH)
+  """
+  # A complete DNS query will have a zero-indexed 12 octet header, 
+  # meaning we should start reading at the 12th index of the packet.
+  read_index = 12
+
+  # Create a list for our dictionaries to be placed in as they are 
+  # constructed.
+  question_list = []
+
+  # This loop will execute once for each question in our data.
+  for question_iteration in range(question_count):
+    question, index = _parse_single_question(dns_query_data, read_index)
+    question_list.append(question)
+    read_index = index
+
+  return  question_list, read_index
+
+
+
+
+def _parse_single_question(dns_query_data, question_index):
+  """
+  <Purpose>
+    This method parses the question located at a certain index in a DNS 
+    query.
+
+  <Arguments>
+    dns_query_data
+      A string containing raw network input. This will typically be a 
+      complete DNS query, but this is not critical.
+
+    question_index
+      The location at which the question begins.
+
+  <Exceptions>
+    IndexError
+      Iteration never stopped, or data ended abruptly. Either way, this 
+      is caused by a malformed packet or misplaced index in the argument.
+
+  <Side Effects>
+    None
+
+  <Returns>
+    A tuple containing first a dictionary, and then the final read_index
+    after reading is complete.
+    
+    The dictionary contains the following elements:
+    
+    'name':     string formatted as unicode. This looks like an IP Address.
+    'type':     string formatted as unicode. A, AAAA, MX, etc.
+    'class':    string formatted as unicode. IN, CH, HE etc.
+  """
+  # Create a string to hold the question name in.
+  read_index, question_name = _parse_address(question_index, dns_query_data)
+
+  # Once that's done, we obtain the type and class values.
+  question_type = _type_lookup_table[
+                       _charpair_to_int16(dns_query_data[read_index:read_index + 2])]
+  read_index += 2
+  question_class = _class_lookup_table[
+                       _charpair_to_int16(dns_query_data[read_index:read_index + 2])]
+  read_index += 2
+
+  # Construct the data for the user.
+  question_dict =  {
+    'name' : question_name,
+    'type' : question_type,
+    'class' : question_class
+                   }
+
+  # Return it, tupled with read_index.
+  return question_dict, read_index
+
+
+
+
+def _charpair_to_int16(chars):
+  """
+  <Purpose>
+    This method converts a two-character string to int16 form.
+
+  <Arguments>
+    chars
+      A 2-character string.
+
+  <Exceptions>
+    InvalidArgumentError
+      If anything about the argument passed in is unsatisfactory, one of these 
+      will be raised.
+
+  <Side Effects>
+    None
+
+  <Returns>
+    An int16 parsed from the given string.
+  """
+  # If chars isn't a string, it has no meaning for us.
+  if type(chars) != str:
+    error_string = "Bad Argument - " + str(chars) + " - chars must be a string!"
+    raise InvalidArgumentError(error_string)
+
+  # Since we're only parsing character pairs, we need to make sure that the 
+  # caller didn't give us something else by mistake.
+  if len(chars) != 2:
+    error_string = "Bad Argument - " + str(chars) + " - chars must be length 2!"
+    raise InvalidArgumentError(error_string)
+
+  return ord(chars[0]) * (2 ** 8) + ord(chars[1])
+
+
+
+
+def _int16_to_charpair(number):
+  """
+  <Purpose>
+    This method converts a sixteen bit integer to a two octet string 
+    representation. This is very handy in constructing packets, since 
+    there are a handful of values which DNS designates two octets apiece for 
+    in DNS messages.
+
+  <Arguments>
+    number
+      An int16 to be converted
+
+  <Exceptions>
+    InvalidArgumentError
+      This is thrown if number is not an integer, or does not fall within the 
+      range [0, 32767].
+
+  <Side Effects>
+    None
+
+  <Returns>
+    A length two string.
+  """
+
+  # Non-integers are not meaningful here, so we should throw an exception if 
+  # our argument is of the wrong type. This catches the number = None case as 
+  # well, because type() does not crash when given None parameters.
+  if type(number) != int:
+    error_string = "Bad argument - " + str(number) + " - number must be an int."
+    raise InvalidArgumentError(error_string)
+  # We should never encounter a negative number where this is going to be used. 
+  # If we do, something is wrong.
+  if number < 0:
+    error_string = "Bad argument - " + str(number) + " - number must be greater than zero"
+    raise InvalidArgumentError(error_string)
+  # Since we're converting int16s, we can't do anything with a number bigger 
+  # than can fit in a int16. If we receive something that is too big, we should 
+  # crash.
+  if number > 65535:
+    error_string = "Bad argument - " + str(number) + " - number is too large."
+    raise InvalidArgumentError(error_string)
+  
+  return chr(number / 2**8) + chr(number % 2**8)
+
+
+
+
+def convert_dictionary_to_packet(dns_dictionary):
+  """
+  <Purpose>
+    This method converts a dictionary describing a DNS packet in to a valid 
+    DNS packet in string form.
+
+  <Arguments>
+    dns_dictionary
+      A formatted dictionary describing a DNS packet of the following form:
+
+  {
+    'raw_data':           <long string> (network raw)
+    'remote_ip':          string (formatted unicode, IP Address)
+    'remote_port':        integer
+    'communication_id'         string (network raw)
+    'query_response'           boolean
+    'operation_code'           integer
+    'authority_advisory'       boolean
+    'truncation'               boolean
+    'recursion_desired'        boolean
+    'recursion_accepted'       boolean
+    'z'                        boolean
+    'authentic_data'           boolean
+    'checking_disabled'        boolean
+    'error_code'               integer (4 bit)
+    'question_count'           integer (16 bit)
+    'answer_count'             integer (16 bit)
+    'authority_record_count'   integer (16 bit)
+    'additional_record_count'  integer (16 bit)   )
+    'questions': array of dictionaries containing:
+        'name'                  string (formatted unicode, IP Address)
+        'type'                  string (formatted unicode, eg A, AAAA, MX)
+        'class'                 string (formatted unicode, eg IN, HE, CH)
+    'answers': array of dictionaries containing:
+        'name'                  string (formatted unicode, IP Address)
+        'type'                  string (formatted unicode, eg A, AAAA, MX)
+        'class'                 string (formatted unicode, eg IN, HE, CH)
+        'time_to_live'          integer (seconds, 32 bit)
+        'answer_data'           string (formatted unicode, RR format)
+                                                   Note that the length and
+                                                   format of this field
+                                                   will vary based on the
+                                                   type of the answer RR.
+                                                   This will be *exactly*
+                                                   the return data from
+                                                   the DHT server.
+  }
+
+  <Exceptions>
+    None
+
+  <Side Effects>
+    None
+
+  <Returns>
+    A valid DNS packet corresponding to the dictionary, in string form.
+  """
+  # Temp variable to contain the packet as we construct it.
+  converted_packet = ""
+
+  # We can append the communication ID in a straightforward way, since it's a 
+  # string.
+  converted_packet += dns_dictionary['communication_id']
+
+  # two_byte and three_byte are a little more messy. We'll build them up by 
+  # adding the values of the bit positions if they exist.
+
+  two_byte = 0
+  
+  if dns_dictionary['query_response']:
+    two_byte += 128
+
+  two_byte += dns_dictionary['operation_code'] * (2 ** 3)
+
+  if dns_dictionary['authority_advisory']:
+    two_byte += 4
+
+  if dns_dictionary['truncation']:
+    two_byte += 2
+
+  if dns_dictionary['recursion_desired']:
+    two_byte += 1
+
+  # Now that we've determined the value of two_byte, we chr it and append it to 
+  # our packet.
+
+  converted_packet += chr(two_byte)
+
+  three_byte = 0
+
+  if dns_dictionary['recursion_accepted']:
+    three_byte += 128
+
+  if dns_dictionary['z']:
+    three_byte += 64
+
+  if dns_dictionary['authentic_data']:
+    three_byte += 32
+
+  if dns_dictionary['checking_disabled']:
+    three_byte += 16
+
+  three_byte += dns_dictionary['error_code']
+
+  converted_packet += chr(three_byte)
+
+  # We need to add the question, answer, ns, and ar counts as well.
+  converted_packet += _int16_to_charpair(dns_dictionary['question_count'])
+
+  converted_packet += _int16_to_charpair(dns_dictionary['answer_count'])
+
+  converted_packet += _int16_to_charpair(dns_dictionary['authority_record_count'])
+
+  converted_packet += _int16_to_charpair(dns_dictionary['additional_record_count'])
+
+  # Append question section
+  for question in dns_dictionary['questions']:
+    # Create a holder variable so that we can conduct length comparisons at the end 
+    # of the loop.
+    question_holder = ""
+
+    # Use compression if possible. Won't be possible if there's only one question.
+    address_name = ""
+    temp_name = question['name']
+    split_name = temp_name.split('.')
+    for element in split_name:
+      address_name += chr(len(element))
+      address_name += element
+
+    prev_location = converted_packet.find(address_name) # -1 if fails.
+    if prev_location > 0:
+      question_holder += _int16_to_charpair(49152 + prev_location)
+    else:
+      question_holder += address_name
+      question_holder += chr(0)
+
+    converted_packet += question_holder
+
+    converted_packet += _int16_to_charpair(_type_lookup_table[question['type']])
+
+    converted_packet += _int16_to_charpair(_class_lookup_table[question['class']])
+
+
+  # Next we append the answers.
+  for answer in dns_dictionary['answers']:
+    # Create a holder variable so that we can conduct length comparisons at the end 
+    # of the loop.
+    answer_holder = ""
+
+    # We have to specify the name of the answer as identical to the name of the 
+    # corresponding question for identification purposes. Implements compression 
+    # when possible.
+    address_name = ""
+    temp_name = answer['name']
+    split_name = temp_name.split('.')
+    for element in split_name:
+      address_name += chr(len(element))
+      address_name += element
+
+    prev_location = converted_packet.find(address_name) # -1 if fails.
+    if prev_location > 0:
+      answer_holder += _int16_to_charpair(49152 + prev_location)
+    else:
+      answer_holder += address_name
+      answer_holder += chr(0)
+
+    # Write the type
+    answer_holder += _int16_to_charpair(_type_lookup_table[answer['type']])
+
+    # Write the class
+    answer_holder += _int16_to_charpair(_class_lookup_table[answer['class']])
+
+    # Append time to live
+    answer_time = answer['time_to_live']
+
+    answer_holder += chr((4278190080 & answer_time) / (2 ** 24))
+    answer_holder += chr((16711680 & answer_time) / (2 ** 16))
+    answer_holder += chr((65280 & answer_time) / (2 ** 8))
+    answer_holder += chr((255 & answer_time))
+
+    # Lastly, we construct the answer data itself. We have to do a little 
+    # formatting here.
+    rdata = _format_rdata(answer)
+    answer_holder += _int16_to_charpair(len(rdata))
+    answer_holder += rdata
+
+    # When we consider the UDP header, our packet must be 512 - 128 = 384 
+    # bytes in length after all considerations. Thus, if appending this 
+    # answer would cause it to exceed that, we can't append it.
+    if len(converted_packet + answer_holder) <= 384:
+      converted_packet += answer_holder
+
+  return converted_packet
+
+
+
+
+def _format_rdata(answer):
+  """
+  <Purpose>
+    Formats a packet dictionary's RDATA section for response purposes.
+    Since we're not using inheritance, prepare for logic.
+  
+  <Arguments>
+    answer
+      A dictionary containing an answer.
+  
+  <Exceptions>
+    None
+
+  <Side Effects>
+    None
+
+  <Returns>
+    A string containing the formatted RDATA segment.
+  """
+  rdata = ""
+
+  # There are a lot of different types of queries. We can parse all of these ones
+  # in the same way, though.
+  simple_answers = ['NS', 'CNAME', 'MD', 'MB', 'MF', 'MG', 'MR', 'MX', 'PTR']
+  
+  if answer['type'] == 'A':
+    rdata = _format_hostname(answer['answer_data']['address'])
+  
+  elif answer['type'] in simple_answers:
+    rdata = ""
+    labels = answer['answer_data']['address'].split('.')
+    for label in labels:
+      rdata += chr(len(label))
+      rdata += label
+    rdata += chr(0)
+
+  elif answer['type'] == 'SOA':
+    for element in answer['answer_data']['mname'].split('.'):
+      rdata += chr(len(element))
+      rdata += element
+    rdata += chr(0)
+    for element in answer['answer_data']['rname'].split('.'):
+      rdata += chr(len(element))
+      rdata += element
+    rdata += chr(0)
+
+    rdata += chr((4278190080 & answer['answer_data']['serial']) / (2 ** 24))
+    rdata += chr((16711680 & answer['answer_data']['serial']) / (2 ** 16))
+    rdata += chr((65280 & answer['answer_data']['serial']) / (2 ** 8))
+    rdata += chr((255 & answer['answer_data']['serial']))
+
+    rdata += chr((4278190080 & answer['answer_data']['refresh']) / (2 ** 24))
+    rdata += chr((16711680 & answer['answer_data']['refresh']) / (2 ** 16))
+    rdata += chr((65280 & answer['answer_data']['refresh']) / (2 ** 8))
+    rdata += chr((255 & answer['answer_data']['refresh']))
+
+    rdata += chr((4278190080 & answer['answer_data']['retry']) / (2 ** 24))
+    rdata += chr((16711680 & answer['answer_data']['retry']) / (2 ** 16))
+    rdata += chr((65280 & answer['answer_data']['retry']) / (2 ** 8))
+    rdata += chr((255 & answer['answer_data']['retry']))
+
+    rdata += chr((4278190080 & answer['answer_data']['expire']) / (2 ** 24))
+    rdata += chr((16711680 & answer['answer_data']['expire']) / (2 ** 16))
+    rdata += chr((65280 & answer['answer_data']['expire']) / (2 ** 8))
+    rdata += chr((255 & answer['answer_data']['expire']))
+
+    rdata += chr((4278190080 & answer['answer_data']['minimum']) / (2 ** 24))
+    rdata += chr((16711680 & answer['answer_data']['minimum']) / (2 ** 16))
+    rdata += chr((65280 & answer['answer_data']['minimum']) / (2 ** 8))
+    rdata += chr((255 & answer['answer_data']['minimum']))
+
+  return rdata
+
+
+
+
+def _format_hostname(address):
+  """
+  <Purpose>
+    Formats an IP address in to something usable by DNS. We expect this 
+    data to be pre-sanitized by the caller BEFORE it is passed.
+  
+  <Arguments>
+    address
+      An IP address in string form. For now, this can only be IPv4 format.
+
+  <Exceptions>
+    None
+
+  <Side Effects>
+    None
+
+  <Returns>
+    A four character string containing the newly formatted IP address.
+  """
+  # Since we expect an IP Address, the argument should be a string. If not, we 
+  # don't know how to read it.
+  if type(address) != str:
+    raise InvalidArgumentError("Bad Argument - " + str(address) + 
+                               " - address must be a string!")
+
+  # We'll want a string to hold data in as we construct the new address.
+  formatted_address = ""
+
+  # Split up the address by periods; we only need the important bits.
+  address_bytes = address.split(".")
+
+  # If there are not four elements after the split, it means that there 
+  # were too many or too few periods in the argument. As a result, we weren't 
+  # given a valid IP address.
+  if len(address_bytes) != 4:
+    raise InvalidArgumentError("Bad Argument - " + str(address) + 
+                               " - address must be an IPv4 IP!")
+
+  # Iterate through address_bytes, adding them to formatted_address.
+  for byte in address_bytes:
+    formatted_address += chr(int(byte))
+
+  return formatted_address
+
+
+
+
+def _remove_last(data_string):
+  """
+  <Purpose>
+    Removes the last character from a string. This is handy for removing the 
+    trailing periods in hostnames.
+
+  <Arguments>
+    data_string
+      A string of length greater than zero.
+
+  <Exceptions>
+    IndexError
+      This will arise if a string of len = 0 is passed in.
+
+  <Returns>
+    A string with its last character removed.
+  """
+  return data_string[0:len(data_string) - 1]
+
+
+
+
+def generate_packet(questions, flags=default_flags):
+  """
+  <Purpose>
+    Allows the user to construct a DNS-formatted packet from scratch. 
+
+    Does not currently support including answers in queries.
+
+  <Arguments>
+    questions
+      An array of dictionaries, one dictionary per question. Format is:
+       {'name', 'type', 'class'}
+
+    flags
+      Contains all necessary data for packet construction. If you wish 
+      to alter the details in here, you can override the argument or 
+      modify default_flags.
+
+  <Exceptions>
+    A Exception will be raised if the input arguments are incorrect.
+
+    A KeyError will be raised if the flags argument is missing something.
+
+  <Returns>
+    A formatted packet in string form, ready to be sent.
+  """
+
+  # Construct dictionary.
+  packet_dict = dict({ 'questions': questions }, **flags)
+  packet_dict.update({'question_count': len(questions)})
+
+  packet_string = convert_dictionary_to_packet(packet_dict)
+
+  return packet_string

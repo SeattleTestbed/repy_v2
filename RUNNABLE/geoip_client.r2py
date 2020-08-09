@@ -1,0 +1,137 @@
+"""
+<Author>
+  Evan Meagher
+
+<Start Date>
+  Nov 26, 2009
+
+<Description>
+  XMl-RPC client for remote GeoIP server. Given an IP:port of a GeoIP
+  XML-RPC server, allows location lookup of hostnames and IP addresses.
+
+<Usage>
+  client = geoip_client(server_address)
+
+  Where server_address is the ip address of a remote GeoIP XMl-RPC server.
+"""
+
+xmlrpc_client = dy_import_module('xmlrpc_client.r2py')
+
+
+"""
+Initialize global GeoIP XML-RPC client object to None
+Note: client is stored in wrapper list to avoid using mycontext dict
+"""
+geoip_clientlist = [None]
+
+def geoip_init_client(url="http://geoipserver.poly.edu:12679"):
+  """
+  <Purpose>
+    Create a new GeoIP XML-RPC client object.
+  
+  <Arguments>
+    url:
+    URL (protocol://ip:port) of GeoIP XML-RPC server.
+
+  <Exceptions>
+    None.
+
+  <Side Effects>
+    Inserts GeoIP XML-RPC client as first element of global
+    geoip_clientlist.
+
+  <Returns>
+    None.
+      
+  """
+  # Store XML-RPC client globally in list to avoid using mycontext dict
+  geoip_clientlist[0] = xmlrpc_client.xmlrpc_client_Client(url)
+
+
+def geoip_record_by_addr(addr, timeout=5):
+  """
+  <Purpose>
+    Request location data of provided IP address from GeoIP XML-RPC server
+
+  <Arguments>
+    addr:
+      IP address of which to look up location
+    timeout
+      How long we should wait for a response.
+
+  <Exceptions>
+    None.
+
+  <Side Effects>
+    None.
+
+  <Returns>
+    Dictionary of location data of provided IP address.
+  """
+
+  return geoip_clientlist[0].send_request("record_by_addr", (addr,), timeout)
+
+
+def geoip_record_by_name(name, timeout=5):
+  """
+  <Purpose>
+    Request location data of provided hostname from GeoIP XML-RPC server
+
+  <Arguments>
+    name:
+      Hostname of which to look up location
+    timeout
+      How long we should wait for a response.
+
+  <Exceptions>
+    None.
+
+  <Side Effects>
+    None.
+
+  <Returns>
+    Dictionary of location data of provided hostname.
+  """
+
+  return geoip_clientlist[0].send_request("record_by_name", (name,), timeout)
+
+
+def geoip_location_str(location_dict):
+  """
+  <Purpose>
+    Pretty-prints a location specified by location_dict as a comma-separated
+    list. Prints location info as specifically as it can, according to the
+    format 'CITY, STATE/PROVINCE, COUNTRY'.
+
+    location_dict['city'], location_dict['region_name'], and
+    location_dict['country_name'] are added if defined, and
+    location_dict['region_name'] is added if the location is in the US or
+    Canada.
+
+  <Arguments>
+    location_dict
+      Dictionary of location information, as returned by a call to
+      geoip_record_by_addr or geoip_record_by_name.
+
+  <Exceptions>
+    None.
+
+  <Side Effects>
+    None.
+
+  <Returns>
+    A string representation of a location.
+  """
+
+  location_str = ""
+  if 'city' in location_dict and location_dict['city'] is not None:
+    location_str = location_str + location_dict['city'] + ", "
+
+  if 'country_name' in location_dict:
+    # If location is in the US or Canada, include the state/province
+    if location_dict['country_name'] in ['United States', 'Canada']:
+      if 'region_name' in location_dict and location_dict['region_name'] is not None:
+        location_str = location_str + location_dict['region_name'] + ", "
+    location_str = location_str + location_dict['country_name']
+
+  return location_str

@@ -1,0 +1,156 @@
+"""
+<Program Name>
+  argparse.r2py
+
+<Started>
+  April 27, 2009
+
+<Author>
+  n2k8000@u.washington.edu
+  Konstantin Pik
+
+<Purpose>
+  Parse command line arguments.
+  Arguments may be bool (True if the option is given),
+      int (name followed by value), or
+      str (name followed by value).
+  Option names are case-sensitive, free-form string words, e.g.
+      --gnu-option, -xoption, anoption
+
+  The default value for missing variables is False, which you may override.
+
+<Note>
+  Handling of default values and exceptions is very ad-hoc, and 
+  should rather follow the examples of Python's argparse, getopt, etc.
+
+<Sample Usage>
+  argparse_scan_bool(callargs, '--local')
+    returns False if no --local flag is set
+    returns True if --local flag is set
+  argparse_scan_str(callargs, '-ip')
+    returns False if no -ip flag
+    returns string containing ip (parameter following -ip flag)
+  argparse_scan_int(callargs, '/port')
+    returns False if no /port flag is set
+    returns the int following the flag (if any)
+"""
+
+class ArgparseError(RepyException):
+  """This is raised when we encounter logical errors while parsing"""
+
+
+
+def argparse_scan_bool(args_list, option, default_value=False):
+  """
+  <Purpose>
+    Check if an option was passed as an argument.
+
+  <Arguments>
+    args_list: List of arguments
+    option: The option we are looking for
+    default_value: The desired default value, initialized to False.
+    
+  <Exceptions>
+    None known.
+
+  <Side Effects>
+    None.
+
+  <Returns>
+    Returns True if the option was found in the list of arguments.
+    Returns default_value if it was not.
+
+  <Sample Usage>
+    if argparse_scan_bool(callargs, '--local'): # we have the argument!
+      ... your code ...
+  """
+  if option in args_list:
+    return True
+  else:
+    return default_value
+
+
+
+def argparse_scan_str(args_list, option, default_value=False):
+  """
+  <Purpose>
+    Return the value for the given option, or default_value if 
+    option is not present.
+    Note: The first occurrence of the option takes precedence!
+
+  <Arguments>
+    args_list: List of arguments
+    option: The option we are looking for
+    default_value: The default value, initialized to False.
+    
+  <Exceptions>
+    ArgparseError if the option value is missing after the option name.
+
+  <Side Effects>
+    None.
+
+  <Returns>
+    If the option exists, return the value directly following it.
+    Otherwise, return the default_value.
+
+  <Sample Usage>
+    ip = argparse_scan_str(callargs, '--ip'):
+    if ip: # we have an IP!
+      ... your code ...
+  """
+  if option not in args_list:
+    return default_value
+
+  # Find the first occurrence of option in the args list
+  position = args_list.index(option)
+
+  try:
+    return args_list[position+1]
+  except IndexError:
+    raise ArgparseError("Value missing after option '" + option + "'")
+
+
+
+def argparse_scan_int(args_list, option, default_value=False):
+  """
+  <Purpose>
+    Return the int value for the given option, or default_value if 
+    option is missing.
+
+  <Arguments>
+    args_list: List of arguments
+    option: The option we are looking for
+    default_value: The default value, initialized to False
+    
+  <Exceptions>
+    ArgparseError if the option value is missing after the option name, 
+    or cannot be parsed as an int.
+
+  <Side Effects>
+    None.
+
+  <Returns>
+    If the option exists, return the value directly following it, 
+    as an int. Otherwise, return the default_value.
+
+  <Sample Usage>
+    temp_port = argparse_scan_port(callargs, 'port'):
+    if temp_port: # we have a port!
+      port = temp_port
+      ... your code ...
+  """
+  # int options look like str options (``--OPTION VALUE''). 
+  # We'll cast VALUE to int later.
+  possible_result = argparse_scan_str(args_list, option, default_value=None)
+
+  if possible_result is None:
+    return default_value
+
+  # possible_result maybe contains an int now
+  try:
+    return int(possible_result)
+  except ValueError:
+    # Couldn't parse to int.
+    raise ArgparseError("Option '" + option + "' was followed by '" + 
+        str(possible_result) + "' which did not parse as an int.")
+

@@ -1,0 +1,259 @@
+resource cpu 1
+resource memory 150000000
+resource diskused 1000000000
+resource events 1000
+resource filewrite 10000000
+resource fileread 10000000
+resource filesopened 250
+resource insockets 500
+resource outsockets 500
+resource netsend 300000000
+resource netrecv 300000000
+resource loopsend 10000000
+resource looprecv 10000000
+resource lograte 300000
+resource random 100000
+resource messport 63100
+resource connport 63100
+resource messport 63101
+resource connport 63101
+resource messport 63102
+resource connport 63102
+resource messport 63103
+resource connport 63103
+resource messport 63104
+resource connport 63104
+resource messport 63105
+resource connport 63105
+resource messport 63106
+resource connport 63106
+resource messport 63107
+resource connport 63107
+resource messport 63108
+resource connport 63108
+resource messport 63109
+resource connport 63109
+resource messport 63110
+resource connport 63110
+resource messport 63111
+resource connport 63111
+resource messport 63112
+resource connport 63112
+resource messport 63113
+resource connport 63113
+resource messport 63114
+resource connport 63114
+resource messport 63115
+resource connport 63115
+resource messport 63116
+resource connport 63116
+resource messport 63117
+resource connport 63117
+resource messport 63118
+resource connport 63118
+resource messport 63119
+resource connport 63119
+resource messport 63120
+resource connport 63120
+resource messport 63121
+resource connport 63121
+resource messport 63122
+resource connport 63122
+resource messport 63123
+resource connport 63123
+resource messport 63124
+resource connport 63124
+resource messport 63125
+resource connport 63125
+resource messport 63126
+resource connport 63126
+resource messport 63127
+resource connport 63127
+resource messport 63128
+resource connport 63128
+resource messport 63129
+resource connport 63129
+resource messport 63130
+resource connport 63130
+resource messport 63131
+resource connport 63131
+resource messport 63132
+resource connport 63132
+resource messport 63133
+resource connport 63133
+resource messport 63134
+resource connport 63134
+resource messport 63135
+resource connport 63135
+resource messport 63136
+resource connport 63136
+resource messport 63137
+resource connport 63137
+resource messport 63138
+resource connport 63138
+resource messport 63139
+resource connport 63139
+resource messport 63140
+resource connport 63140
+resource messport 63141
+resource connport 63141
+resource messport 63142
+resource connport 63142
+resource messport 63143
+resource connport 63143
+resource messport 63144
+resource connport 63144
+resource messport 63145
+resource connport 63145
+resource messport 63146
+resource connport 63146
+resource messport 63147
+resource connport 63147
+resource messport 63148
+resource connport 63148
+resource messport 63149
+resource connport 63149
+resource messport 63150
+resource connport 63150
+resource messport 63151
+resource connport 63151
+resource messport 63152
+resource connport 63152
+resource messport 63153
+resource connport 63153
+resource messport 63154
+resource connport 63154
+resource messport 63155
+resource connport 63155
+resource messport 63156
+resource connport 63156
+resource messport 63157
+resource connport 63157
+resource messport 63158
+resource connport 63158
+resource messport 63159
+resource connport 63159
+resource messport 63160
+resource connport 63160
+resource messport 63161
+resource connport 63161
+resource messport 63162
+resource connport 63162
+resource messport 63163
+resource connport 63163
+resource messport 63164
+resource connport 63164
+resource messport 63165
+resource connport 63165
+resource messport 63166
+resource connport 63166
+resource messport 63167
+resource connport 63167
+resource messport 63168
+resource connport 63168
+resource messport 63169
+resource connport 63169
+resource messport 63170
+resource connport 63170
+resource messport 63171
+resource connport 63171
+resource messport 63172
+resource connport 63172
+resource messport 63173
+resource connport 63173
+resource messport 63174
+resource connport 63174
+resource messport 63175
+resource connport 63175
+resource messport 63176
+resource connport 63176
+resource messport 63177
+resource connport 63177
+resource messport 63178
+resource connport 63178
+resource messport 63179
+resource connport 63179
+resource messport 63180
+resource connport 63180
+resource messport 63181
+resource connport 63181
+resource messport 63182
+resource connport 63182
+resource messport 63183
+resource connport 63183
+resource messport 63184
+resource connport 63184
+resource messport 63185
+resource connport 63185
+resource messport 63186
+resource connport 63186
+resource messport 63187
+resource connport 63187
+resource messport 63188
+resource connport 63188
+resource messport 63189
+resource connport 63189
+resource messport 63190
+resource connport 63190
+resource messport 63191
+resource connport 63191
+resource messport 63192
+resource connport 63192
+resource messport 63193
+resource connport 63193
+resource messport 63194
+resource connport 63194
+resource messport 63195
+resource connport 63195
+resource messport 63196
+resource connport 63196
+resource messport 63197
+resource connport 63197
+resource messport 63198
+resource connport 63198
+resource messport 63199
+resource connport 63199
+
+call gethostbyname_ex allow
+call sendmess allow
+call stopcomm allow 			# it doesn't make sense to restrict
+call recvmess allow
+call openconn allow
+call waitforconn allow
+call socket.close allow 		# let's not restrict
+call socket.send allow 			# let's not restrict
+call socket.recv allow 			# let's not restrict
+# open and file.__init__ both have built in restrictions...
+call open arg 0 is junk_test.out allow 	# can write to junk_test.out
+call open arg 1 is r allow 		# allow an explicit read
+call open arg 1 is rb allow 		# allow an explicit read
+call open noargs is 1 allow 		# allow an implicit read 
+call file.__init__ arg 0 is junk_test.out allow # can write to junk_test.out
+call file.__init__ arg 1 is r allow 	# allow an explicit read
+call file.__init__ arg 1 is rb allow 	# allow an explicit read
+call file.__init__ noargs is 1 allow 	# allow an implicit read 
+call file.close allow 			# shouldn't restrict
+call file.flush allow 			# they are free to use
+call file.next allow 			# free to use as well...
+call file.read allow 			# allow read
+call file.readline allow 		# shouldn't restrict
+call file.readlines allow 		# shouldn't restrict
+call file.seek allow 			# seek doesn't restrict
+call file.write allow 			# shouldn't restrict (open restricts)
+call file.writelines allow 		# shouldn't restrict (open restricts)
+call sleep allow			# harmless
+call settimer allow			# we can't really do anything smart
+call canceltimer allow			# should be okay
+call exitall allow			# should be harmless 
+
+call log.write allow
+call log.writelines allow
+call getmyip allow			# They can get the external IP address
+call listdir allow			# They can list the files they created
+call removefile allow			# They can remove the files they create
+call randomfloat allow			# can get random numbers
+call getruntime allow			# can get the elapsed time
+call getlock allow			# can get a mutex
+call get_thread_name allow        # Allow getting the thread name
+call VirtualNamespace allow     # Allow using VirtualNamespace's
+

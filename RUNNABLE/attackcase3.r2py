@@ -1,0 +1,30 @@
+
+if "testfile.txt" in listfiles():
+    removefile("testfile.txt")
+if "testfile.txt.a" in listfiles():
+  removefile("testfile.txt.a")
+  #log("removed file a\n")
+if "testfile.txt.b" in listfiles():
+  removefile("testfile.txt.b")
+  #log("removed file b\n")
+
+
+try:
+  
+  myfile=ABopenfile("testfile.txt",True)  #Create an AB file
+  #mt1836 - uses length on close, short write updates lengh without checking if less than previous 
+  #can set length to char in middle of file to pass validation even though not 
+  myfile.writeat("S"+"A"*9,0)
+  myfile.writeat("SE",0)
+  myfile.close()
+  
+  myfile=ABopenfile("testfile.txt",True)
+  data = myfile.readat(None,0)
+  if len(data) > 0:
+    if data[-1]=="A":
+      log("Security Fail: Long Write then Short Write outputs invalid file\n")
+  myfile.close()
+except:
+  pass
+  #log("Error in test\n")
+

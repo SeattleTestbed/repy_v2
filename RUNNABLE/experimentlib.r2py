@@ -1,0 +1,696 @@
+"""
+<Program Name>
+  experimentlib.r2py
+
+<Purpose>
+  This is a (less feature-complete) port of SeattleTestbed/experimentmanager's 
+  experimentlib.py to Repy V2.
+
+  Currently, it only lets you look up vessel IDs by public key. 
+  I didn't port the other lookup / node query functions yet.
+
+<Usage>
+  # In your Repy V2 program
+  experimentlib = dy_import_module("experimentlib.r2py")
+  my_id = experimentlib.create_identity_from_key_files("my_id.publickey")
+  nodes_advertising_my_id = experimentlib.lookup_node_locations_by_identity(my_id)
+
+"""
+
+# Enable the use of Affixes
+affix_stack = dy_import_module('affix_stack.r2py')
+affix_obj = affix_stack.AffixStack('(CoordinationAffix)(NamingAndResolverAffix)')
+
+# Override openconnection so that nmclient will use Affixes
+openconnection = affix_obj.openconnection
+
+time = dy_import_module("time.r2py")
+advertise = dy_import_module("advertise.r2py")
+rsa = dy_import_module("rsa.r2py")
+nmclient = dy_import_module("nmclient.r2py")
+random = dy_import_module("random.r2py")
+
+
+# The maximum number of node locations to return from a call to lookup_node_locations.
+max_lookup_results = 1024 * 1024
+
+# The timeout to use for communication, both in advertisement lookups and for
+# contacting nodes directly.
+defaulttimeout = 100
+
+# Advertise services to use. A value of None indicates advertise lib's default.
+advertise_lookup_types = None
+
+
+# Some of these vessel status explanations are from:
+# https://seattle.poly.edu/wiki/NodeManagerDesign
+
+# Fresh: has never been started.
+VESSEL_STATUS_FRESH = "Fresh"
+
+# Started: has been started and is running when last checked.
+VESSEL_STATUS_STARTED = "Started"
+
+# Stopped: was running but stopped by NM command
+VESSEL_STATUS_STOPPED = "Stopped"
+
+# Stale: it last reported a start of "Started" but significant time has
+# elapsed since
+VESSEL_STATUS_STALE = "Stale"
+
+# Terminated (the vessel stopped of its own volition, possibly due to an error)
+VESSEL_STATUS_TERMINATED = "Terminated"
+
+# The node is not advertising
+VESSEL_STATUS_NO_SUCH_NODE = "NO_SUCH_NODE"
+
+# The node can be communicated with but the specified vessel doesn't exist
+# on the node. This will also be used when the vessel exists on the node but
+# the identity being used is not a user or the owner of the vessel.
+VESSEL_STATUS_NO_SUCH_VESSEL = "NO_SUCH_VESSEL"
+
+# The node can't be communicated with or communication fails.
+VESSEL_STATUS_NODE_UNREACHABLE = "NODE_UNREACHABLE"
+
+# For convenience we define two sets of vessel status constants that include
+# all possible statuses grouped by whether the status indicates the vessel is
+# usable/active or whether it is unusable/inactive.
+VESSEL_STATUS_SET_ACTIVE = set([VESSEL_STATUS_FRESH, VESSEL_STATUS_STARTED,
+    VESSEL_STATUS_STOPPED, VESSEL_STATUS_STALE, VESSEL_STATUS_TERMINATED])
+VESSEL_STATUS_SET_INACTIVE = set([VESSEL_STATUS_NO_SUCH_NODE, 
+    VESSEL_STATUS_NO_SUCH_VESSEL, VESSEL_STATUS_NODE_UNREACHABLE])
+
+
+# Whether _initialize_time() has been called. We'll append `True` if so.
+_initialize_time_called = []
+
+# Keys are node locations (a string of "host:port"), values are nmhandles.
+# Note that this method of caching nmhandles will cause problems if multiple
+# identities/keys are being used to contact the name node.
+_nmhandle_cache = {}
+
+# Keys are nodeids, values are nodelocations.
+_node_location_cache = {}
+
+
+
+
+class SeattleExperimentError(Exception):
+  """Base class for other exceptions."""
+
+
+
+class UnexpectedVesselStatusError(SeattleExperimentError):
+  """
+  When a vessel status is reported by a node and that status is something
+  we don't understand. Mostly this is something we care about because we
+  want to definitely tell users what to expect in their code in terms of
+  status, so we should be very clear about the possibly values and never
+  have to raise this exception.
+  """
+
+
+
+class NodeCommunicationError(SeattleExperimentError):
+  """Unable to perform a requested action on/communication with a node/vessel."""
+
+
+
+class NodeLocationLookupError(SeattleExperimentError):
+  """
+  Unable to determine the location of a node based on its nodeid or unable
+  to successfully perform an advertisement lookup.
+  """
+  
+  
+
+class NodeLocationNotAdvertisedError(NodeLocationLookupError):
+  """
+  A lookup was successful but no node locations are being advertised under a
+  nodeid.
+  """
+  
+  
+
+class UnableToPerformLookupError(NodeLocationLookupError):
+  """
+  Something is wrong with performing lookups. Either none of the lookup
+  services that were tried were successful or there's a bug in some underlying
+  code being used by this module.
+  """
+
+
+  
+class IdentityInformationMissingError(SeattleExperimentError):
+  """
+  The information that is part of an identity object is incomplete. For
+  example, if only the public key is in the identity but the identity is
+  used in a way that requires a private key, this exception would be
+  raised.
+  """
+
+
+
+
+
+
+def create_identity_from_key_files(publickey_fn, privatekey_fn=None):
+  """
+  <Purpose>
+    Create an identity from key files.
+  <Arguments>
+    publickey_fn
+      The full path, including filename, to the public key this identity
+      should represent. Note that the identity's username will be assumed
+      to be the part of the base filename before the first period (or the
+      entire base filename if there is no period). So, to indicate a username
+      of "joe", the filename should be, for example, "joe.publickey".
+    privatekey_fn
+      (optional) The full path, including filename, to the private key that
+      corresponds to publickey_fn. If this is not provided, then the identity
+      will not be able to be used for operations the require a private key.
+  <Exceptions>
+    IOError
+      if the files do not exist or are not readable.
+    ValueError
+      if the files do not contain valid keys.
+  <Returns>
+    An identity object to be used with other functions in this module.
+  """
+  identity = {}
+  identity["username"] = publickey_fn.split(".")[0]
+  identity["publickey_fn"] = publickey_fn
+  try:
+    identity["publickey_dict"] = rsa.rsa_file_to_publickey(publickey_fn)
+    identity["publickey_str"] = rsa.rsa_publickey_to_string(identity["publickey_dict"])
+    
+    if privatekey_fn is not None:
+      identity["privatekey_fn"] = privatekey_fn
+      identity["privatekey_dict"] = rsa.rsa_file_to_privatekey(privatekey_fn)
+      identity["privatekey_str"] = rsa.rsa_privatekey_to_string(identity["privatekey_dict"])
+  except IOError:
+    raise
+  except ValueError:
+    raise
+
+  return identity
+
+
+
+
+
+def lookup_node_locations_by_identity(identity):
+  """
+  <Purpose>
+    Lookup the locations of nodes that are advertising their location under a
+    specific identity's public key.
+  <Arguments>
+    identity
+      The identity whose public key should be used to lookup nodelocations.
+  <Exceptions>
+    UnableToPerformLookupError
+      If a failure occurs when trying lookup advertised node locations.
+  <Returns>
+    A list of nodelocations.
+  """
+  _validate_identity(identity)
+  keystring = str(identity['publickey_str'])
+  return _lookup_node_locations(keystring, lookuptype=advertise_lookup_types)
+
+
+
+def lookup_node_locations_by_nodeid(nodeid):
+  """
+  <Purpose>
+    Lookup the locations that a specific node has advertised under. There may
+    be multiple locations advertised if the node has recently changed location.
+  <Arguments>
+    nodeid
+      The nodeid of the node whose advertised locations are to be looked up.
+  <Exceptions>
+    UnableToPerformLookupError
+      If a failure occurs when trying lookup advertised node locations.
+  <Returns>
+    A list of nodelocations.
+  """
+  return _lookup_node_locations(nodeid, lookuptype=advertise_lookup_types)
+
+
+
+def get_node_location(nodeid, ignorecache=False):
+  """
+  <Purpose>
+    Determine a nodelocation given a nodeid.
+  <Arguments>
+    nodeid
+      The nodeid of the node whose location is to be determined.
+    ignorecache
+      (optional, default is False) Whether to ignore cached values for this
+      node's location, forcing an advertise lookup and possibly also
+      attempting to contact potential nodelocations.
+  <Exceptions>
+    NodeLocationLookupError
+      If no node locations are being advertised under the nodeid or if a
+    NodeCommunicationError
+      If multiple node locations are being advertised under the nodeid but
+      successful communication cannot be performed with any of the locations.
+  <Side Effects>
+    If the node location isn't already known (or if ignorecache is True),
+    then an advertise lookup of the nodeid is done. In that case, if
+    multiple nodelocations are advertised under the nodeid, then each location
+    will be contacted until one is determined to be a valid nodelocation
+    that can be communicated with.
+  <Returns>
+    A nodelocation. This nodelocation may or may not have been communicated
+    with and is instead only the most likely location of a node at the time
+    this function was called.
+  """
+  if ignorecache or nodeid not in _node_location_cache:
+    locationlist = lookup_node_locations_by_nodeid(nodeid)
+    if not locationlist:
+      raise NodeLocationLookupError("Nothing advertised under node's key.")
+    # If there is more than one advertised location, we need to figure out
+    # which one is valid. For example, if a node moves then there will be
+    # a period of time in which the old advertised location and the new
+    # one are both returned. We need to determine the correct one.
+    elif len(locationlist) > 1:
+      for possiblelocation in locationlist:
+        host, portstr = possiblelocation.split(':')
+        try:
+          # We create an nmhandle directly because we want to use it to test
+          # basic communication, which is done when an nmhandle is created.
+          nmhandle = nmclient.nmclient_createhandle(host, int(portstr))
+        except nmclient.NMClientException, e:
+          continue
+        else:
+          nmclient.nmclient_destroyhandle(nmhandle)
+          _node_location_cache[nodeid] = possiblelocation
+          break
+      else:
+        raise NodeCommunicationError("Multiple node locations advertised " +
+            "but none can be communicated with: " + str(locationlist))
+    else:
+      _node_location_cache[nodeid] = locationlist[0]
+      
+  return _node_location_cache[nodeid]
+
+
+
+
+def start_vessel(vesselhandle, identity, program_file, arg_list=None):
+  """
+  <Purpose>
+    Start a program running on a vessel. Choose the `StartVesselEx` 
+    command for program file names that end in `.r2py`; use the legacy 
+    `StartVessel` call for everything else.
+  <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel that is to be started.
+    identity
+      The identity of either the owner or a user of the vessel.
+    program_file
+      The name of the file that already exists on the vessel that is to be
+      run on the vessel.
+    arg_list
+      (optional) A list of arguments to be passed to the program when it is
+      started.
+  <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
+  <Side Effects>
+    The vessel has been started, running the specified program.
+  <Returns>
+    None
+  """
+  _validate_vesselhandle(vesselhandle)
+
+  # Demultiplex RepyV2 (`.r2py`) files and everything else, like seash_helper
+  if program_file.endswith(".r2py"):
+    arg_string = "repyV2|" + program_file
+    start_command = "StartVesselEx"
+  else:
+    arg_string = program_file
+    start_command = "StartVessel"
+
+  if arg_list is not None:
+    arg_string += " " + " ".join(arg_list)
+
+  _do_signed_vessel_request(identity, vesselhandle, start_command, arg_string)
+
+
+
+def browse_node(nodelocation, identity=None):
+  """
+  <Purpose>
+    Contact an individual node to gather detailed information about all of the
+    vessels on the node that are usable by a given identity.
+  <Arguments>
+    nodelocation
+      The nodelocation of the node that should be browsed. 
+    identity
+      (optional) The identity whose vessels we are interested in. This can be
+      the identity of either the vessel owner or a vessel user. If None,
+      then the vesseldicts for all vessels on the node will be returned.
+  <Exceptions>
+    NodeCommunicationError
+      If the communication with the node fails for any reason, including the
+      node not being reachable, timeout in communicating with the node, the
+      node rejecting the 
+  <Returns>
+    A list of vesseldicts. Each vesseldict contains the additional keys:
+      'status'
+        The status string of the vessel.
+      'ownerkey'
+        The vessel's owner key (in dict format).
+      'userkeys'
+        A list of the vessel's user keys (each in dict format).
+  """
+  try:
+    _validate_nodelocation(nodelocation)
+    if identity is not None:
+      _validate_identity(identity)
+    
+    nmhandle = _get_nmhandle(nodelocation, identity)
+    try:
+      nodeinfo = nmclient.nmclient_getvesseldict(nmhandle)
+    except nmclient.NMClientException, e:
+      raise NodeCommunicationError("Failed to communicate with node " + nodelocation + ": " + str(e))
+  
+    # We do our own looking through the nodeinfo rather than use the function
+    # nmclient_listaccessiblevessels() as we don't want to contact the node a
+    # second time.
+    usablevessels = []
+    for vesselname in nodeinfo['vessels']:
+      if identity is None:
+        usablevessels.append(vesselname)
+      elif identity['publickey_dict'] == nodeinfo['vessels'][vesselname]['ownerkey']:
+        usablevessels.append(vesselname)
+      elif 'userkeys' in nodeinfo['vessels'][vesselname] and \
+          identity['publickey_dict'] in nodeinfo['vessels'][vesselname]['userkeys']:
+        usablevessels.append(vesselname)
+  
+    nodeid = rsa.rsa_publickey_to_string(nodeinfo['nodekey'])
+    # For efficiency, let's update the _node_location_cache with this info.
+    # This can prevent individual advertise lookups of each nodeid by other
+    # functions in the experimentlib that may be called later.
+    _node_location_cache[nodeid] = nodelocation
+
+    vesseldict_list = []
+    for vesselname in usablevessels:
+      vesseldict = {}
+      # Required keys in vesseldicts (see the module comments for more info).
+      vesseldict['vesselhandle'] = nodeid + ":" + vesselname
+      vesseldict['nodelocation'] = nodelocation
+      vesseldict['vesselname'] = vesselname
+      vesseldict['nodeid'] = nodeid
+      # Additional keys that browse_node provides.
+      vesseldict['status'] = nodeinfo['vessels'][vesselname]['status']
+      vesseldict['ownerkey'] = nodeinfo['vessels'][vesselname]['ownerkey']
+      vesseldict['userkeys'] = nodeinfo['vessels'][vesselname]['userkeys']
+      vesseldict['version'] = nodeinfo['version']
+      vesseldict_list.append(vesseldict)
+  
+    return vesseldict_list
+  
+  except Exception, e:
+    # Useful for debugging during development of the experimentlib.
+    #traceback.print_exc()
+    raise
+
+
+
+
+
+def get_vessel_status(vesselhandle, identity):
+  """
+  <Purpose>
+    Determine the status of a vessel.
+  <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel whose status is to be checked.
+    identity
+      The identity of the owner or a user of the vessel.
+  <Exceptions>
+    UnexpectedVesselStatusError
+      If the status returned by the node for the vessel is not a status value
+      that this experimentlib expects.
+  <Side Effects>
+    The node the vessel is on is communicated with.
+  <Returns>
+    A string that is one of the VESSEL_STATUS_* constants.
+  """
+  _validate_vesselhandle(vesselhandle)
+  _validate_identity(identity)
+
+  nodeid, vesselname = vesselhandle.rsplit(":", 1)
+
+  # Determine the last known location of the node. 
+  nodeid, vesselname = vesselhandle.split(":")
+  try:
+    # This will get a cached node location if one exists.
+    nodelocation = get_node_location(nodeid)
+  except NodeLocationNotAdvertisedError, e:
+    return VESSEL_STATUS_NO_SUCH_NODE
+
+  try:
+    vesselinfolist = browse_node(nodelocation, identity)
+  except NodeCommunicationError:
+    # Do a non-cache lookup of the nodeid to see if the node moved.
+    try:
+      nodelocation = get_node_location(nodeid, ignorecache=True)
+    except NodeLocationNotAdvertisedError, e:
+      return VESSEL_STATUS_NO_SUCH_NODE
+
+    # Try to communicate again.
+    try:
+      vesselinfolist = browse_node(nodelocation, identity)
+    except NodeCommunicationError, e:
+      return VESSEL_STATUS_NODE_UNREACHABLE
+
+  for vesselinfo in vesselinfolist:
+    if vesselinfo['vesselhandle'] == vesselhandle:
+      # The node is up and the vessel must have the identity's key as the owner
+      # or a user, but the status returned isn't one of the statuses we
+      # expect. If this does occur, it may indicate a bug in the experiment
+      # library where it doesn't know about all possible status a nodemanager
+      # may return for a vessel.
+      if vesselinfo['status'] not in VESSEL_STATUS_SET_ACTIVE:
+        raise UnexpectedVesselStatusError(vesselinfo['status'])
+      else:
+        return vesselinfo['status']
+  else:
+    # The node is up but this vessel doesn't exist.
+    return VESSEL_STATUS_NO_SUCH_VESSEL
+
+
+
+def get_vessel_log(vesselhandle, identity):
+  """
+  <Purpose>
+    Read the vessel log.
+  <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel whose log is to be read.
+    identity
+      The identity of either the owner or a user of the vessel.
+  <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
+  <Side Effects>
+    None
+  <Returns>
+    A string containing the data in the vessel log.
+  """
+  _validate_vesselhandle(vesselhandle)
+  return _do_signed_vessel_request(identity, vesselhandle, "ReadVesselLog")
+
+
+def upload_file_to_vessel(vesselhandle, identity, local_filename, remote_filename=None):
+  """
+  <Purpose>
+    Upload a file to a vessel.
+  <Arguments>
+    vesselhandle
+      The vesselhandle of the vessel that the file is to be uploaded to.
+    identity
+      The identity of either the owner or a user of the vessel.
+    local_filename
+      The name of the local file to be uploaded. That can include a directory
+      path.
+    remote_filename
+      (optional) The filename to use when storing the file on the vessel. If
+      not provided, this will be the same as the basename of local_filename.
+      Note that the remote_filename is subject to filename restrictions imposed
+      on all vessels.
+      TODO: describe the filename restrictions.
+  <Exceptions>
+    NodeCommunicationError
+      If communication with the node failed, either because the node is down,
+      the communication timed out, the signature was invalid, or the identity
+      unauthorized for this action.
+  <Side Effects>
+    The file has been uploaded to the vessel.
+  <Returns>
+    None
+  """
+  _validate_vesselhandle(vesselhandle)
+  
+  if remote_filename is None:
+    remote_filename = local_filename
+
+  fileobj = openfile(local_filename, False)
+  filedata = fileobj.readat(None, 0)
+  fileobj.close()
+  
+  _do_signed_vessel_request(identity, vesselhandle, "AddFileToVessel", remote_filename, filedata)
+
+
+
+
+def _validate_vesselhandle(vesselhandle):
+  if not isinstance(vesselhandle, str):
+    raise TypeError("vesselhandle must be a string, not a " + str(type(vesselhandle)))
+  
+  parts = vesselhandle.split(':')
+  if len(parts) != 2:
+    raise ValueError("invalid vesselhandle '" + vesselhandle + "', should be nodeid:vesselname")
+
+
+
+def _validate_nodelocation(nodelocation):
+  if not isinstance(nodelocation, str):
+    raise TypeError("nodelocation must be a string, not a " + str(type(nodelocation)))
+  
+  parts = nodelocation.split(':')
+  if len(parts) != 2:
+    raise ValueError("nodelocation '" + nodelocation + "' invalid, should be host:port")
+
+
+
+
+
+def _validate_identity(identity, require_private_key=False, require_username=False):
+  if not isinstance(identity, dict):
+    raise TypeError("identity must be a dict, not a " + str(type(identity)))
+
+  if 'publickey_str' not in identity:
+    raise TypeError("identity dict doesn't have a 'publickey_str' key, so it's not an identity.")
+
+  if require_private_key:
+    if 'privatekey_str' not in identity:
+      raise IdentityInformationMissingError("identity must have a private key for the requested operation.")
+
+  if require_username:
+    if 'username' not in identity:
+      raise IdentityInformationMissingError("identity must have a username for the requested operation.")
+
+
+
+def _initialize_time():
+  """
+  Does its best to call time_updatetime() and raises a SeattleExperimentError
+  if it doesn't succeed after many tries.
+  """
+  
+  if not _initialize_time_called:
+    
+    max_attempts = 10
+    possible_ports = list(getresources()[0]["connport"])
+    
+    # Ports to use for UDP listening when doing a time update.
+    portlist = random.random_sample(possible_ports, max_attempts) 
+    
+    for localport in portlist:
+      try:
+        time.time_updatetime(localport)
+        _initialize_time_called.append(True)
+        return
+      except time.TimeError:
+        error_message = traceback.format_exc()
+    
+    raise SeattleExperimentError("Failed to perform time_updatetime(): " + error_message)
+
+
+
+
+
+def _lookup_node_locations(keystring, lookuptype=None):
+  """Does the actual work of an advertise lookup."""
+  
+  keydict = rsa.rsa_string_to_publickey(keystring)
+  try:
+    if lookuptype is not None:
+      nodelist = advertise.advertise_lookup(keydict, maxvals=max_lookup_results, timeout=defaulttimeout, lookuptype=lookuptype)
+    else:
+      nodelist = advertise.advertise_lookup(keydict, maxvals=max_lookup_results, timeout=defaulttimeout)
+  except advertise.AdvertiseError, e:
+    raise UnableToPerformLookupError("Failure when trying to perform advertise lookup: "+str(e)) #+ traceback.format_exc())
+
+  # If there are no vessels for a user, the lookup may return ''.
+  for nodename in nodelist[:]:
+    if nodename == '':
+      nodelist.remove(nodename)
+
+  return nodelist
+
+
+
+def _do_signed_vessel_request(identity, vesselhandle, requestname, *args):
+  _validate_identity(identity, require_private_key=True)
+  
+  nodeid, vesselname = vesselhandle.split(':')
+  nodelocation = get_node_location(nodeid)
+  nmhandle = _get_nmhandle(nodelocation, identity)
+  
+  try:
+    return nmclient.nmclient_signedsay(nmhandle, requestname, vesselname, *args)
+  except nmclient.NMClientException, e:
+    raise NodeCommunicationError(str(e))
+
+
+
+def _get_nmhandle(nodelocation, identity=None):
+  """
+  Get an nmhandle for the nodelocation and identity, if provided. This will look
+  use a cache of nmhandles and only create a new one if the requested nmhandle
+  has not previously been requested.
+  """
+  # Call _initialize_time() here because time must be updated at least once before
+  # nmhandles are used.
+  _initialize_time()
+  
+  host, port = nodelocation.split(':')
+  port = int(port)
+  
+  if identity is None:
+    identitystring = "None"
+  else:
+    identitystring = identity['publickey_str']
+    
+  if identitystring not in _nmhandle_cache:
+    _nmhandle_cache[identitystring] = {}
+
+  if nodelocation not in _nmhandle_cache[identitystring]:
+    try:
+      if identity is None:
+        nmhandle = nmclient.nmclient_createhandle(host, port, timeout=defaulttimeout)
+      elif 'privatekey_dict' in identity:
+        nmhandle = nmclient.nmclient_createhandle(host, port, 
+            privatekey=identity['privatekey_dict'], 
+            publickey=identity['publickey_dict'], timeout=defaulttimeout)
+      else:
+        nmhandle = nmclient.nmclient_createhandle(host, port, 
+            publickey=identity['publickey_dict'], timeout=defaulttimeout)
+    except nmclient.NMClientException, e:
+      raise NodeCommunicationError(str(e))
+    
+    _nmhandle_cache[identitystring][nodelocation] = nmhandle
+    
+  return _nmhandle_cache[identitystring][nodelocation]
+
+
+

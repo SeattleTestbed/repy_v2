@@ -1,0 +1,401 @@
+"""
+"""
+
+affix_exceptions = dy_import_module("affix_exceptions.r2py")
+base_affix = dy_import_module("baseaffix.r2py")
+affix_repy_network_api_wrapper = dy_import_module("affix_repy_network_api_wrapper.r2py")
+
+# This holds all the Affix component classes that have been
+# registered. This dictionary is shared globally by all Affix stacks
+# because we need to register each component only once.
+AFFIX_CLASS_DICT = {}
+
+
+# Prevent race conditions when importing Affix components from files
+affix_register_lock = createlock()
+
+
+# Object to represent the bottom of the Affix stack.
+# It almost behaves like an Affix component (safe for the 
+# stack manipulation calls which raise errors) so that higher-layer 
+# components need not perform special checks before handing 
+# calls downwards.
+bottom_of_stack = affix_repy_network_api_wrapper.RepyNetworkAPIWrapper()
+
+
+
+class AffixStack(base_affix.BaseAffix):
+  def __init__(self, affix_string):
+    self.affix_context = {}
+    top_affix = build_stack(affix_string)
+    self.affix_context['next_affix'] = top_affix
+
+    # Override this stack's network calls to use the top_affix's.
+    # NOTE: We need to rebind on push()/pop() too, as the top_affix 
+    # changes.
+    self._rebind_stack_network_calls(top_affix)
+
+
+  def get_advertisement_string(self):
+    return self.peek().get_advertisement_string()
+
+
+  def _rebind_stack_network_calls(self, affix_object):
+    """
+    Bind this stack object's network calls to the provided 
+    affix_object's calls.
+    """
+    self.getmyip = affix_object.getmyip
+    self.gethostbyname = affix_object.gethostbyname
+    self.sendmessage = affix_object.sendmessage
+    self.listenformessage = affix_object.listenformessage
+    self.openconnection = affix_object.openconnection
+    self.listenforconnection = affix_object.listenforconnection
+
+
+  def pop(self):
+    """
+    Remove the top Affix component, then refresh our network 
+    call bindings.
+    """
+    old_next_affix = BaseAffix.pop(self)
+    self._rebind_stack_network_calls(self, self.peek())
+    return old_next_affix
+
+
+  def push(self, new_affix_object):
+    """
+    Add a new top Affix component, then refresh our network 
+    call bindings.
+    """
+    BaseAffix.push(self, new_affix_object)
+    self._rebind_stack_network_calls(self, self.peek())
+
+
+
+
+
+def build_stack(affix_string):
+  """
+  <Purpose>
+    Recursively build up an Affix stack from a string describing 
+    the desired stack.
+
+  <Arguments>
+    affix_string - Affix string describing the desired stack
+
+  <Side Effects>
+    Indirectly loads, imports, registers Affix components.
+
+  <Exceptions>
+    AffixNotFoundError - Raised if one of the affixs in the 
+	affix_str is not a valid affix or the affix file could
+	not be found.
+
+    AffixConfigError - raised if affix string is not in the right
+	format.
+
+    AssersionError - may be raised if one of the arguments provided
+	is an unexpected type or value.
+
+  <Return>
+    The first (leftmost) Affix component described by the affix_string, 
+    configured using the given parameters, and linked to the next Affix 
+    component (which has also been configured and linked to its successor, 
+    etc.); or a reference to bottom_of_stack if the affix_string arg was 
+    empty.
+  """
+
+  if not affix_string:
+    # This clause is executed when we are called with an empty 
+    # string, usually by the last Affix component of the desired 
+    # stack.
+    # We pass to that component references to the actual Repy network 
+    # functions, embedded in the bottom_of_stack object.
+    return bottom_of_stack
+
+
+  # Some sanity checks.
+  assert(isinstance(affix_string, str)), "Bad arg type. affix_string must be a string."      
+
+  # Build stack recursively. Any exceptions raised will just
+  # percolate up. This may raise a AffixConfigError
+  top_affix_name, affix_args, leftover_affix_str = parse_affix_string(affix_string)
+
+
+  # Ensure the first argument is a legit string. If it is, we are going to load
+  # the affix file if we find it. We assert and register the affix before building
+  # the rest of the stack in order to fail early if we are unable to register
+  # the top affix.
+  assert(isinstance(top_affix_name, str)), "Bad arg type. First arg in affix tuple must be string."
+  find_and_register_affix(top_affix_name)
+
+  # Create a affix stack for the rest of the affixs below us, 
+  # make that our current affix stack. After we create the affix 
+  # stack with the leftover affix_str we are going to copy over
+  # the new AffixStack objects stack_object to our own stack_object.
+  # After we have copied it, we can now push on the top affix on top
+  # of it.
+  next_affix_object = build_stack(leftover_affix_str)
+
+  # Create the new affix object.
+  # The new stack will have a copy of the affixstack before this 
+  # layer is added. So if this is the first layer, then the 
+  # Underlying stack beneath it would be None.
+  new_affix = create_affix_object(top_affix_name, affix_args, next_affix_object)
+
+
+  # Link the top affix to the affix stack object. This makes top_affix
+  # the root/head of the affix stack. Even though it is called a affix
+  # stack, the internals of the stack will work like a linked list.
+  #self.push(top_affix)
+
+  # Return the top affix. Do we need to return anything? I am returning for convenience.
+  # If this is the first layer then our peek may be empty.
+  return new_affix
+
+
+
+def find_and_register_affix(affix_name):
+  """
+  <Purpose>
+    Given a affix, this function imports the affix file
+    if it exists and then registers the affix class.
+    Note that the expected naming convention of the affix
+    files is that it will be all lower-case with no space
+    or symbols in the name. 
+
+    Example:
+        If we have a affix called ExampleAffix then the file
+        name is expected to be exampleaffix.r2py
+
+        ExampleAffix.r2py, example_affix.r2py or any other 
+        forms are unaccepted.
+
+  <Arguments>
+    affix_name - The name of the affix that must be imported 
+        and registered.
+
+  <Side Effects>
+    Repy library file is imported.
+
+  <Exceptions>
+    AffixNotFoundError - raised if the requested affix_name does
+        not exist or is not in the current directory.
+
+    AssertionError - raised if arguments provided is of an 
+        unexpected type or value.
+  <Return>
+    None
+  """
+
+  assert(isinstance(affix_name, str)), "Bad arg type. affix_name must be a string."
+
+  # If the affix class has already been registered, then we don't
+  # need to do anything.
+  if affix_name in AFFIX_CLASS_DICT.keys():
+    return
+
+  affix_register_lock.acquire(True)
+  try:
+    # We have to do the import in a while loop in case we get the 
+    # FileInUseError. This error occurs when multiple affix stacks
+    # may be trying to load the affix.
+    while True:
+    # Try to import the affix file. We convert the name to 
+    # lower case before importing and add in the extension.
+      try:
+        if affix_name not in _context.keys():
+          dy_import_module_symbols(affix_name.lower() + '.r2py')
+      except FileInUseError, err:
+        sleep(0.01)
+      else:
+        break
+
+    # Register the affix.
+    AFFIX_CLASS_DICT[affix_name] = _context.copy()[affix_name]    
+  finally:
+    affix_register_lock.release()      
+
+
+
+
+def create_affix_object(affix_name, affix_args, next_affix_object):
+  """
+  <Purpose>
+    Create an affix object given a affix name and its arguments.
+
+  <Arguments>
+    affix_name - a string that defines the name of the affix.
+
+    affix_args - the arguments to use to create the affix.
+
+    next_affix_object - the affix component that will be below the new affix
+        object that we are creating in the stack.
+
+  <Side Effects>
+    None
+
+  <Exceptions>
+    AffixNotFoundError - raised if the affix has not been 
+        registered yet.
+
+    AssertionError - raised if the arguments provided is 
+        of an unexpected type or value. 
+
+  <Return>
+    A affix object.    
+  """
+
+  # Sanity check.
+  assert(isinstance(affix_name, str)), "Bad arg type. affix_name must be a string."
+  assert(isinstance(affix_args, list)), "Bad arg type. affix_args must be a list."
+  #assert(isinstance(affix_stack_object, AffixStack)), "Bad arg type. affix_stack_object must be a AffixStack."
+
+  if affix_name not in AFFIX_CLASS_DICT.keys():
+    raise affix_exceptions.AffixNotFoundError("Affix '%s' has not been registered yet." % affix_name)
+
+  # Create a new affix object from the name and arguments provided.
+  affix_object_class = AFFIX_CLASS_DICT[affix_name]
+
+  new_affix_object = affix_object_class(next_affix_object, affix_args)
+
+  return new_affix_object
+
+
+
+
+
+def parse_affix_string(affix_str):
+  """
+  <Purpose>
+    Makes sure that the affix string provided is in the
+    right format. It ensure that the parentheses all 
+    match up and the input string is valid. For example,
+    there should not be any other AFFIX underneath a
+    branching/splitter AFFIX as branching/splitter 
+    AFFIXs are considered to be at the bottom of the 
+    stack.
+
+  <Arguments>
+    affix_str - a string that has the list of affixs and their
+        arguments. A affix should be of the format:
+       
+          (AffixName,arg1,arg2,...)
+
+  <Side Effects>
+    None
+
+  <Exceptions>
+    AffixConfigError - raised if unable to parse affix string properly.
+
+  <Return>
+    A tuple that contains the first affix name, its arguments
+    and the rest of the affix string.
+    Example:
+        ("AffixA", [argA1, argA2, argA3], "(AffixB)(AffixC,argC1)") 
+  """
+
+  # Sanity check.
+  assert(isinstance(affix_str, str)), "Bad arg type. affix_str must be string."
+  assert(affix_str), "affix_str must not be empty"
+
+  open_paren_count = 0
+  cur_affix_config = ""
+  
+  while affix_str:
+    # Extract the first character of affix string.
+    chr = affix_str[0]
+    affix_str = affix_str[1:]
+
+    if chr == '(':
+      # The case where one of the arguments for the affix includes
+      # parentheses..
+      if open_paren_count != 0:
+        cur_affix_config += chr
+      open_paren_count += 1
+      
+
+    elif chr == ')':
+      open_paren_count -= 1
+
+      # If there is a closed parentheses as part of the argument.
+      if open_paren_count > 0:
+        cur_affix_config += chr
+
+      # If we have uncovered a full affix config.
+      elif open_paren_count == 0:
+        break
+
+      # For the case of an extra close parentheses.
+      if open_paren_count < 0:
+        raise affix_exceptions.AffixConfigError("Incorrect affix string format. " +
+            "Mismatched parentheses.")
+
+    else:
+      # Make sure that we have an open parentheses.
+      if open_paren_count > 0:
+        cur_affix_config += chr
+
+      # This is the case where there is a character outside the
+      # parentheses. An example would be:
+      # '(AffixA, arg_a)foo(AffixB)', where 'foo' is not in the
+      # affix config.
+      else:
+        err = "Incorrect affix string format."
+        err += " Affix string provided: " + affix_str
+        raise affix_exceptions.AffixConfigError(err)
+
+
+  # The case where we have finished parsing the affix string and 
+  # There was a mismatch of parentheses.
+  if open_paren_count > 0:
+    raise affix_exceptions.AffixConfigError("Incorrect affix string format. " +
+        "Mismatched parentheses.")
+
+
+  # Split the name and the arguments.
+  affix_name = ''
+  affix_arg_list = []
+  paren_count = 0
+  
+  # Get the name out.
+  while cur_affix_config:
+    chr = cur_affix_config[0]
+    cur_affix_config = cur_affix_config[1:]
+  
+    if chr != ',':
+      affix_name += chr
+    else:
+      break
+
+  # Split the arguments. Cant use the split command.
+  cur_argument = ''
+  while cur_affix_config:
+    chr = cur_affix_config[0]
+    cur_affix_config = cur_affix_config[1:]
+
+    if chr == '(':
+      paren_count += 1
+    elif chr == ')':
+      paren_count -= 1
+    elif chr == ',':
+      # If we are outside a affix.
+      if paren_count == 0:
+        # We have uncovered an argument. Add it to the
+        # list and clear the current argument.
+        affix_arg_list.append(cur_argument)     
+        cur_argument = ''
+        continue
+
+    # Add the character to the current argument string.
+    cur_argument += chr
+
+  # If there was a leftover last argument.
+  if cur_argument:
+    affix_arg_list.append(cur_argument)
+    
+
+  # Return format is: (affix_name, affix_args_list, rest_of_affix_string)
+  return (affix_name, affix_arg_list, affix_str)
+

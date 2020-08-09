@@ -1,0 +1,25 @@
+# New File Operation
+# Write invalid contents to new file, check to see if it was saved
+
+# Clean up of existing file
+if "testfile.txt.a" in listfiles():
+ removefile("testfile.txt.a")
+if "testfile.txt.b" in listfiles():
+ removefile("testfile.txt.b")
+
+# Open File Function Call
+myfile=ABopenfile("testfile.txt",True)  #Create an AB file
+myfile.writeat("12345", 0)
+myfile.close()
+
+myfile=ABopenfile("testfile.txt",False) # Reopen the file to read it
+
+try:
+ #File should have contents 'SE' satisfying the requirement
+ assert('SE' == myfile.readat(None,0))
+ # Close the file:
+ myfile.close()
+except:
+ myfile.close()
+ # Error Handle or Failure Condition
+ log("Invalid content file is not handled properly!")

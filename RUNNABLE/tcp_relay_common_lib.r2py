@@ -1,0 +1,22 @@
+"""
+This is a common library that keeps track of some variables.
+This library is imported by both the tcp_relay.repy and
+by tcprelayaffix.repy
+"""
+
+# Key to advertise forwarder with.
+NAT_FORWARDER_KEY = '__NAT_AFFIX_FORWARDER__'
+
+
+# Connection Tags.
+CONNECT_CLIENT_TAG = 'INITCONN_CLIENT'
+CONNECT_SERVER_TAG = 'INITCONN_SERVER'
+CONNECT_SUCCESS = 'CONNSUCCESS'
+CONNECT_FAIL = 'CONNFAIL'
+SERVER_REGISTER = 'REGISTER_NAT_SERVER'
+
+# Control sock tags. Used by server to check if there
+# is any connections to be made.
+CHECK_SERVER_CONN = 'CHECK_APPEND_CONN_REQUEST'
+CLIENT_AVAILABLE = 'CLIENT_AVAILABLE'
+CLIENT_UNAVAILABLE = 'CLIENT_UNAVAILABLE'

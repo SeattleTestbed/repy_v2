@@ -1,0 +1,251 @@
+"""
+coordinationaffix.r2py
+
+Advertises the server's string representation of its Affix stack; also, 
+set up the required Affix stack to contact a server (given that server's 
+Affix string is advertised). 
+
+When a client is about to connect to this server, the CoordinationAffix 
+looks up the string representation and constructs the same Affix stack. 
+At this point, the server's and client's Affix stacks are balanced. The
+connection is established and ready to be returned to the application.
+
+The advertisement key for a server is "host,port,protocol", where host is 
+the hostname of the server (a public IP address, a random string, a hash 
+of the nodemanager's public key), and protocol can be either UDP or TCP. The
+advertisement value is the string representation of the CoordinationAffix's
+affix stack.
+
+The CoordinationAffix should always sit on top of an application's Affix 
+stack, so that it can see the content of the rest of the stack.
+
+"""
+
+baseaffix = dy_import_module("baseaffix.r2py")
+affix_stack = dy_import_module("affix_stack.r2py")
+affix_wrapper_lib = dy_import_module("affix_wrapper_lib.r2py")
+cachedadvertise = dy_import_module("cachedadvertise.r2py")
+advertisepipe = dy_import_module("advertisepipe.r2py")
+
+# Whether we want to print debug statements.
+_COORDINATION_AFFIX_DEBUG_MODE = False
+
+
+class CoordinationAffix(baseaffix.BaseAffix):
+
+  # A dictionary that maps a server socket object to the corresponding
+  # advertisement handle. We need to save all the handles that are created as
+  # the listener starts, so that, when the server socket's close() is called, we
+  # can retrieve these handles and stop the advertisement.
+  _adv_handle_dict = {}
+
+  # Protects the dictionary above from concurrent modification.
+  _adv_handle_dict_lock = createlock()
+
+
+
+
+  def copy(self):
+    if self.affix_context['next_affix']:
+      next_affix_copy = self.affix_context['next_affix'].copy()
+    else:
+      next_affix_copy = None
+    return CoordinationAffix(next_affix_copy, 
+        self.affix_context['optional_args'])
+
+
+
+  def get_advertisement_string(self):
+    return '(CoordinationAffix)' + self.peek().get_advertisement_string()
+
+
+
+  # ===================================================================
+  # TCP
+  # ===================================================================
+
+
+
+  def listenforconnection(self, localhost, localport):
+    """
+    <Purpose>
+      Listens for incoming connections. Advertises the affix stack when the
+      listener is ready.
+
+    <Arguments>
+      Same as the network API in repy v2.
+    <Side Effects>
+      See the documentation of AdvertiseObjects.
+
+    <Exceptions>
+      Same as the network API in repy v2.    
+
+    <Returns>      
+      Same as the network API in repy v2.    
+
+    """
+    if _COORDINATION_AFFIX_DEBUG_MODE:
+      log(self, "Coordination is about to start listening on '%s:%d'\n" % (localhost, localport))
+
+    # Start listening so we have a complete view of the affix stack below us.
+    tcpserversocket = self.peek().listenforconnection(localhost, localport)
+
+    if _COORDINATION_AFFIX_DEBUG_MODE:
+      log(self, "CoordinationAffix started listening socket on '%s:%d'\n" % (localhost, localport))
+
+    # The underlying affix stack has been built completely. We can advertise the
+    # affix stack.
+
+    adv_key = str(localhost) + ',' + str(localport) + ',TCP'
+    adv_value = self.peek().get_advertisement_string()
+    if _COORDINATION_AFFIX_DEBUG_MODE:
+      log(self, 'CoordinationAffix: Advertised', adv_key, adv_value, '\n')
+    adv_handle = advertisepipe.add_to_pipe(adv_key, adv_value)
+
+    # We need to save the advertisement handle to a global dictionary, so that
+    # we can keep a reference to the handle. Later on, when we stop listening,
+    # we can conveniently remove this key value pair from the advertisement
+    # service by using this handle.
+    if isinstance(tcpserversocket, affix_wrapper_lib.AffixTCPServerSocket):
+      adv_handle_key = repr(tcpserversocket._socket)
+    else:
+      adv_handle_key = repr(tcpserversocket)
+
+    self._adv_handle_dict_lock.acquire(True)
+    self._adv_handle_dict[adv_handle_key] = adv_handle
+    self._adv_handle_dict_lock.release()
+
+    return affix_wrapper_lib.AffixTCPServerSocket(tcpserversocket, self)
+
+
+
+
+  def tcpserversocket_close(self, tcpserversocket):
+    """
+    Stops listening and stops advertising the server.
+
+    """
+    log("coord is", repr(self), self.get_advertisement_string(), "\n")
+    close_result = self.peek().tcpserversocket_close(tcpserversocket)
+
+    # Now that we have closed the listener without any exceptions, we can safely
+    # stop the advertisement.
+    self._stop_advertisement(tcpserversocket)
+
+    return close_result
+
+
+
+
+  def openconnection(self, destip, destport, localip, localport, timeout):
+    """
+    <Purpose>
+      Looks up the string representation of the server's Affix stack. 
+      Constructs the same Affix stack and connects to the server. If 
+      the server's Affix stack is nrt found or invalid, connects without 
+      using Affixes for backward
+      compatibility.
+
+    <Arguments>
+      Same as the network API in repy v2.
+
+    <Side Effects>
+      See the documentation of AdvertiseObjects.
+
+    <Exceptions>
+      Same as the network API in repy v2.    
+
+    <Returns>      
+      Same as the network API in repy v2.    
+
+    """
+
+    # Look up the server's affix stack under this key.
+    server_key = str(destip) + ',' + str(destport) + ',TCP'
+    lookup_result_list = cachedadvertise.lookup(server_key)
+
+    if _COORDINATION_AFFIX_DEBUG_MODE:
+      log(self, "Openconnection from", localip, localport, "to", server_key, 
+          " via " + str(lookup_result_list) + "\n")
+
+    # We remember all the affixs that fail to connect, so that we can piggyback
+    # this error report along with TimeoutError.
+    failed_affix_str = ''
+
+    # We go through all the possible affix stack strings advertised. The list
+    # will most likely contain only one value, but it is possible that an Affix
+    # may advertise two different values under the same key because its Affix
+    # stack had somehow changed.
+    for server_affix_stack_str in lookup_result_list:
+      # Build the Affix stack required to contact the server and store it.
+      server_affix_stack = affix_stack.AffixStack(server_affix_stack_str)
+      self.affix_context['next_affix'] = server_affix_stack.affix_context['next_affix']
+      if _COORDINATION_AFFIX_DEBUG_MODE:
+        log(self, "Using affix string: " + self.peek().get_advertisement_string() + "to connect to '" +
+            destip + ":" + str(destport) + "'\n")
+
+      try:
+        sock = self.peek().openconnection(destip, destport, localip, localport, timeout)
+        return affix_wrapper_lib.AffixSocket(sock, self.copy())
+
+      # We ignore the error here, as we may have been contacting a legacy
+      # server. Later, we're going to retry without affixs.
+      except (ConnectionRefusedError, TimeoutError), err:
+        continue
+
+    # It is possible we're contacting a server that doesn't use Affixes,
+    # doesn't advertise itself, or advertised stacks that didn't work 
+    # for us. Thus, we contact it without Affixes.
+    empty_affix_stack = affix_stack.AffixStack("")
+    sock = empty_affix_stack.openconnection(destip, destport, localip, localport, timeout)
+    return affix_wrapper_lib.AffixSocket(sock, self.copy())
+
+
+
+  # ===================================================================
+  # UDP
+  # ===================================================================
+
+
+  def listenformessage(self, localip, localport):
+    raise "CoordinationAffix.listenformessage is currently unimplemented!"
+
+
+
+  def udpserversocket_close(self, udpserversocket):
+    raise "CoordinationAffix.udpserversocket_close is currently unimplemented!"
+
+
+
+  def sendmessage(self, destip, destport, message, localip, localport):
+    raise "CoordinationAffix.sendmessage is currently unimplemented!"
+
+
+
+
+  def _stop_advertisement(self, serversocket):
+    """
+    Stops advertising on the supplied serversocket, which can be either a
+    UDPServerSocket or TCPServerSocket. Helper method for the close methods of
+    both sockets.
+
+    """
+    # Retrieve the advertisement handle associated with the current socket and
+    # stop the advertisement.
+    try:
+
+      self._adv_handle_dict_lock.acquire(True)
+      adv_handle = self._adv_handle_dict.pop(repr(serversocket))
+
+    # Cannot find the handle, so we must have removed it when the close() method
+    # was previously invoked. We quietly ignore the error.
+    except KeyError:
+      pass
+
+    # Stop advertising both our affix stack and the zenodotus name -> IP mapping.
+    else:
+      advertisepipe.remove_from_pipe(adv_handle)
+
+    finally:
+      self._adv_handle_dict_lock.release()
+

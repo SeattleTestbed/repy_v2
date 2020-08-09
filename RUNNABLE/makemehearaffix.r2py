@@ -1,0 +1,233 @@
+"""
+<Program>
+  makemehearaffix.r2py
+
+<Author>
+  Monzur Muhammad
+  monzum@cs.washington.edu
+
+  Albert Rafetseder
+  albert.rafetseder@univie.ac.at
+
+<Started>
+  2/1/2014
+
+<Purpose>
+  This Affix component checks whether the host can ``hear'' incoming 
+  connection requests from remote nodes, and instantiates one of two 
+  user-configurable Affix components depending on the result in order 
+  to make it hear (as the name implies).
+
+  The check is performed with Seattle's ``canihear'' servers: We 
+  ask them to connect in on a specific TCP port, and send a test 
+  message if the connection attempt is successful. If it is not, then 
+  it's likely that the node is behind a NAT gateway or firewall. 
+  The default Affix used in this case is TCPRelayAffix, meaning 
+  that a TCP relay will be used to listen for and forward incoming 
+  connections. If the host *can* hear incoming connections, then the 
+  default is NoopAffix, i.e. no alterations are performed on the 
+  Repy network calls.
+"""
+
+
+baseaffix = dy_import_module("baseaffix.r2py")
+affix_stack = dy_import_module("affix_stack.r2py")
+affix_exceptions = dy_import_module("affix_exceptions.r2py")
+affix_wrapper_lib = dy_import_module("affix_wrapper_lib.r2py")
+advertise = dy_import_module("advertise.r2py") # For AdvertiseError
+cachedadvertise = dy_import_module("cachedadvertise.r2py")
+canihear = dy_import_module("canihear.r2py")
+
+
+
+class MakeMeHearAffix(baseaffix.BaseAffix):
+  """
+  This Affix component lets this host ``hear'', i.e. receive 
+  incoming connections from remote nodes, even if you are behind a 
+  NAT gateway or firewall.
+  Per default, this Affix will instantiate a TCPRelayAffix if this 
+  host is diagnosed to be NATted/firewalled (so a TCP relay will 
+  listen on its behalf and forward the connections), or a NoopAffix 
+  (that passes network calls unaltered) if the host is reachable.
+
+  Optionally pass in a "cannot-hear Affix string" (and also a 
+  "can-hear Affix string" if required) in the optional_args list 
+  to override the default Affixes.
+
+  If a TCPServerSocketInvalidError is encountered, the previous 
+  state of the stack (before MakeMeHearAffix instantiated the 
+  desired Affix component below itself) will be restored. This will 
+  be done irrespective of any stack manipulation performed by 
+  the desired Affix components in the meantime.
+  """
+  def __init__(self, next_affix, optional_args):
+    self.next_affix = next_affix
+
+    # We'll keep this around for when we need to restore the 
+    # original stack (prior to our modifications)
+    self.original_next_affix = next_affix
+
+    # Work around #51, defaults for constructor parameters are overwritten
+    default_cannot_hear_affix_string = "(TCPRelayAffix)" 
+    default_can_hear_affix_string = ""
+    if optional_args == []:
+      optional_args = [default_cannot_hear_affix_string]
+
+    if len(optional_args) == 1:
+      # Only the cannot-hear Affix was set, use the default can-hear one.
+      optional_args.append(default_can_hear_affix_string)
+
+    # End work around #51.
+
+    self.cannot_hear_affix_string = optional_args[0]
+    self.can_hear_affix_string = optional_args[1]
+
+    baseaffix.BaseAffix.__init__(self, next_affix, optional_args)
+
+
+
+
+  def listenforconnection(self, localip, localport):
+    """
+    <Purpose>
+      Opens up a listening socket. Adds in an Affix component if
+      necessary.
+
+    <Arguments>
+      Same as Repy V2 API.
+
+    <Exceptions>
+      Same as the RepyV2 API. (This implies that some Affix-internal 
+      error conditions are raised as errors that are not perfect 
+      matches).
+
+    <Side Effects>
+      Modifies the Affix stack.
+
+    <Return>
+      A listening socket.
+    """
+    log("Running canihear test for local address", localip, "port", localport, "\n")
+    try:
+      (can_hear_on_localport, _, _)  = canihear.check_specific_port(localport)
+    except (AlreadyListeningError, DuplicateTupleError, RepyArgumentError, 
+        ResourceForbiddenError, AddressBindingError):
+      # check_specific_port can raise these errors when it tries to 
+      # call listenforconnection with the user's desired localport. 
+      # The user must expect these from plain listenforconnection, 
+      # so we raise them.
+      raise
+    except (advertise.AdvertiseError, canihear.CanIHearError, TimeoutError), e:
+      # XXX Can't catch AdvertiseError???
+
+      # These mean we couldn't find/contact canihear servers. 
+      # I'll treat this as an error and not try to work around. 
+      # (Another option would be to continue and assume we can't 
+      # hear on localport. This however means that an error in 
+      # the canihear/advertise services will cause all previously 
+      # non-relayed nodes to thrash our TCP relays, and possibly 
+      # knock out advertise/relay services. 
+      # Conversely, assuming we *can* hear, yields a de-facto 
+      # unusable port, see the comment below).
+      raise AddressBindingError("MakeMeHearAffix: Error looking up or contacting canihear servers. Exception encountered: " + repr(e))
+
+    # Add in an Affix (the TCPRelayAffix per default) if we cannot 
+    # hear on localport; add in a supposedly other (the NoopAffix 
+    # per default) if we can.
+    # If we are unable to either register or create the designated Affix, 
+    # are unable to push it onto the stack, or listen on it, this is 
+    # fatal and raises an exception. (Continuing without our caller 
+    # ever noticing that this listenforconnection does not use 
+    # the designated Affix and can't return incoming connections from 
+    # the public Internet *ever* is a very bad idea.)
+
+    if can_hear_on_localport:
+      designated_affix_string = self.can_hear_affix_string
+    else:
+      designated_affix_string = self.cannot_hear_affix_string
+
+    # Only manipulate the stack if there is an Affix we should add!
+    if designated_affix_string != "":
+      designated_affix_name, designated_affix_args, junk = affix_stack.parse_affix_string(designated_affix_string)
+
+      log("Can hear:", can_hear_on_localport, "Designated Affix:", designated_affix_name, "\n")
+      try:
+        affix_stack.find_and_register_affix(designated_affix_name)
+        designated_affix_object = affix_stack.create_affix_object(
+            designated_affix_name, designated_affix_args, self.next_affix)
+      except (affix_exceptions.AffixNotFoundError, affix_exceptions.AffixStackError), e:
+        raise AddressBindingError("MakeMeHearAffix problem with " + 
+            "finding, registering, or instantiating designated Affix '" + 
+            designated_affix_string + "': " + repr(e))
+      # We found, registered, and instantiated the Affix.
+      # Add it to the stack.
+      log("Designated Affix is", designated_affix_object, "\n")
+      try:
+        self.push(designated_affix_object)
+      except AffixStackError, e:
+        # Pushing didn't work.
+        raise AddressBindingError("MakeMeHearAffix problem pushing " + 
+          designated_affix_string + " on the stack: " + repr(e))
+
+    # The designated Affix is on the stack now, or there was no 
+    # Affix to push. Start listening either on the new Affix, or 
+    # whatever Affix was below us already.
+    try:
+      tcpserversocket = self.peek().listenforconnection(localip, localport)
+    except (AlreadyListeningError, DuplicateTupleError, 
+	RepyArgumentError, ResourceForbiddenError, AddressBindingError):
+      # These can be raised by listenforconnection, and should 
+      # thus reach our caller. Remove the Affix object we just 
+      # pushed so that a new call into this function doesn't stack 
+      # designated_affix_object's on top of one another.
+      self.next_affix = self.original_next_affix
+      self.affix_context['next_affix'] = self.original_next_affix
+      raise
+    except Exception, e:
+      # XXX What else could we be seeing?
+      self.next_affix = self.original_next_affix
+      self.affix_context['next_affix'] = self.original_next_affix
+      raise AddressBindingError(
+	  "MakeMeHearAffix problem calling listenforconnection() " + 
+	  "on " + designated_affix_string + ": " + repr(e))
+
+    # If we end up here, all is well, the Affix listens for 
+    # connection. Return it!
+    return affix_wrapper_lib.AffixTCPServerSocket(tcpserversocket, self)
+
+
+
+  def tcpserversocket_getconnection(self, tcpserversocket):
+    # We use the base class's method to do the actual copying.
+    # If however the Affix component below us thinks the TCP server 
+    # socket became invalid, we must remove the designated_affix we 
+    # pushed when we set the stack up (and all additional components 
+    # it might have added). We do this by restoring our old next_affix 
+    # reference from before our push().
+    try:
+      return baseaffix.BaseAffix.tcpserversocket_getconnection(self, tcpserversocket)
+    except TCPServerSocketInvalidError:
+      # Restore the stack to how it looked like before we changed it.
+      # We can't just self.pop() because the Affix component we instantiated 
+      # below us might have changed the stack too.
+      self.next_affix = self.original_next_affix
+      self.affix_context['next_affix'] = self.original_next_affix
+      raise
+
+
+
+
+  def copy(self):
+    if self.affix_context['next_affix']:
+      next_affix_copy = self.affix_context['next_affix'].copy()
+    else:
+      next_affix_copy = None
+    return MakeMeHearAffix(next_affix_copy, self.affix_context['optional_args'])
+
+
+
+
+  def get_advertisement_string(self):
+    # This is a transparent Affix, so we don't advertise ourself.
+    return self.peek().get_advertisement_string()
+

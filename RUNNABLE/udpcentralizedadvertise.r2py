@@ -1,0 +1,294 @@
+""" 
+Author: Justin Cappos
+
+Start Date: Oct 30, 2011
+
+Description:
+Advertisements to a central server (similar to openDHT)
+
+This uses UDP and is conceptually quite similar to the centralized advertise
+service
+"""
+serialize = dy_import_module('serialize.r2py')
+uniqueid = dy_import_module('uniqueid.r2py')
+random = dy_import_module('random.r2py')
+
+
+# Hmm, perhaps I should make an initialization call instead of hardcoding this?
+# I suppose it doesn't matter since one can always override these values
+udpservername = "udpadvertiseserver.poly.edu"
+udpserverport = 10102
+
+# how long to wait for timeouts...
+udpcentralizedservertimeouts = [1,2,4,8]
+
+# If a query times out or if we decide to abandon it, put the ID here. That way, 
+# the communicate function can reject it if the server responds belatedly.
+failed_querylist = []
+
+
+class UDPCentralAdvertiseError(Exception):
+  """Error when advertising a value to the central advertise service."""
+
+class UDPNoResponseError(Exception):
+  """Error when advertising a value to the central advertise service."""
+
+
+
+
+
+
+# This helper function handles communications with the server
+def _udpcentralizedadvertise_communicate(datastringtosend, timeout, queryid):
+
+  # Let's get ready to receive a response...
+  localip = getmyip()
+  # Get the ports available to our vessel (#1375)
+  # (I'll try all of the nominally available ports, not only 
+  # the ones that are currently unused, because port usage might 
+  # change while we still set up things here.)
+  available_resources, ignore, ignore = getresources()
+  portrange = list(available_resources['messport'])
+  # Shuffle the portrange to make it unlikely we reuse the 
+  # same quintuple twice in a row (#1249)
+  random.random_shuffle(portrange)
+
+  for udprequestport in portrange:
+    try:
+      udpresponsesocket = listenformessage(localip, udprequestport)
+      # We've found a port, continue outside of the loop
+      break
+    except (DuplicateTupleError, CleanupInProgressError,
+      AlreadyListeningError, AddressBindingError), e:
+      # These are "legitimate" in the sense that there is something 
+      # in our very program already using the port we just tried.
+      continue
+    except Exception:
+      # Something else went wrong, maybe we aren't connected to the Internet.
+      raise
+  else:
+    # Checked the whole port range without success
+    raise AddressBindingError, "Could not find any usable UDP listen port in the vessel's messports " + str(portrange) + " on IP address " + str(localip) + "."
+
+  starttime = getruntime()
+
+  # but always close the response socket...
+  try:
+    # send the request over UDP...
+    udpserverip = gethostbyname(udpservername)
+    sendmessage(udpserverip, udpserverport,
+      datastringtosend, localip, udprequestport)
+
+    # Don't go into infinite waiting time, if there is no response from
+    # server, wait till timeout and raise an error...
+    while getruntime() < starttime + timeout:
+      try:
+        # XXX Check if that's the server we contacted! See #1268.
+        (remoteip, remoteport, mess) = udpresponsesocket.getmessage()
+        if (remoteip, remoteport) == (udpserverip, udpserverport):
+          return serialize.serialize_deserializedata(mess)
+      except SocketWouldBlockError:
+        pass
+
+      # Already done? Let's play nice with the other threads.
+      sleep(0.01) # Strongly recommend NOT to set this any higher.
+      
+    raise UDPNoResponseError("Did not receive a response from UDP advertise server")
+
+  finally:
+    # always close the response socket...
+    udpresponsesocket.close()
+
+
+
+def udpcentralizedadvertise_announce(key, value, ttlval):
+  """
+   <Purpose>
+     Announce a key / value pair into the CHT.
+
+   <Arguments>
+     key: the key to put the value under. This will be converted to a string.
+
+     value: the value to store at the key. This is also converted to a string.
+
+     ttlval: the amount of time until the value expires.   Must be an integer
+
+   <Exceptions>
+     TypeError if ttlval is of the wrong type.
+
+     ValueError if ttlval is not positive 
+
+     UDPCentralAdvertiseError is raised the server response is corrupted
+
+     Various network and timeout exceptions are raised by udp messages
+
+   <Side Effects>
+     The CHT will store the key / value pair.
+
+   <Returns>
+     None
+  """
+  # do basic argument checking / munging
+  key = str(key)
+  value = str(value)
+
+  if not type(ttlval) is int and not type(ttlval) is long:
+    raise TypeError("Invalid type '"+str(type(ttlval))+"' for ttlval.")
+
+  if ttlval < 1:
+    raise ValueError("The argument ttlval must be positive, not '"+str(ttlval)+"'")
+
+  # myrequestport = getusableport()
+
+  unique_request_id = uniqueid.uniqueid_getid()
+
+  # We'll loop through and send a request, increasing the timeout upon failure
+  for thistimeout in udpcentralizedservertimeouts:
+
+    # build the tuple to send, then convert to a string because only strings
+    # (bytes) can be transmitted over the network...
+    datatosend = ('PUT',key,value,ttlval, unique_request_id)
+    datastringtosend = serialize.serialize_serializedata(datatosend)
+  
+    rawresponse = None
+
+    try:
+    # send the request over UDP...
+      rawresponse = _udpcentralizedadvertise_communicate(datastringtosend, 
+        thistimeout, unique_request_id)
+
+    except UDPNoResponseError:
+      # let's increase the timeout...
+      continue
+    
+    if not rawresponse == None:
+      # We should check that the response is 'OK'
+      try:
+        response = rawresponse
+      except ValueError, e:
+        raise UDPCentralAdvertiseError("Received unknown response from server '"+rawresponse+"'")
+
+      if type(response) is not tuple or len(response) != 2:
+        raise UDPCentralAdvertiseError("UDP Centralized announce received invalid response type '"+str(response)+"'")
+      if type(response[0]) is not str:
+        raise UDPCentralAdvertiseError("UDP Centralized announce received response with invalid first parameter '"+str(response)+"'")
+  
+      if response[1] != unique_request_id:
+      # This can happen if multiple announces are performed in quick 
+      # succession, see #1294. Workaround: sleep() a bit between requests.
+        raise UDPCentralAdvertiseError("udpcentralized_announce sent request id " + str(unique_request_id) + ", received different request id. Full response: '" + str(response) + "'")
+
+      if response[0] != 'OK':
+        raise UDPCentralAdvertiseError("UDP Centralized announce failed with '"+response[0]+"'")
+
+      else:
+        # else all is well!   Let's return success
+        return
+      
+  failed_querylist.append(unique_request_id)
+
+  # fell through all of the timeout values...
+  raise UDPCentralAdvertiseError("UDP Centralized announce timed out!")
+
+
+
+def udpcentralizedadvertise_lookup(key, maxvals=100):
+  """
+   <Purpose>
+     Returns a list of valid values stored under a key
+
+   <Arguments>
+     key: the key to look up. This will be converted to a string.
+
+     maxvals: the maximum number of values to return.   Must be an integer
+
+   <Exceptions>
+     TypeError if maxvals is of the wrong type.
+
+     ValueError if maxvals is not a positive number
+
+     UDPCentralAdvertiseError is raised the server response is corrupted
+
+     Various network and timeout exceptions are raised by timeout_openconn
+     and session_sendmessage / session_recvmessage
+
+   <Side Effects>
+     None
+
+   <Returns>
+     The list of values
+  """
+
+  # do basic argument checking / munging
+  key = str(key)
+
+  if not type(maxvals) is int and not type(maxvals) is long:
+    raise TypeError("Invalid type '"+str(type(maxvals))+"' for ttlval.")
+
+  if maxvals < 1:
+    raise ValueError("The argument ttlval must be positive, not '"+str(ttlval)+"'")
+
+
+  # We'll loop through and send a request, increasing the timeout upon failure
+  for thistimeout in udpcentralizedservertimeouts:
+
+    # get a unique request id
+    unique_request_id = uniqueid.uniqueid_getid()
+  
+    # build the tuple to send, then convert to a string because only strings
+    # (bytes) can be transmitted over the network...
+    messagetosend = ('GET',key,maxvals,unique_request_id)
+    messagestringtosend = serialize.serialize_serializedata(messagetosend)
+
+  
+    try:
+    # send the request over UDP...
+      responsetuple = _udpcentralizedadvertise_communicate(messagestringtosend, thistimeout, unique_request_id)
+
+    except UDPNoResponseError:
+      # let's increase the timeout...
+      continue
+  
+
+    # try:
+    #   responsetuple = serialize.serialize_deserializedata(rawreceiveddata[2])
+    # except ValueError, e:
+    #   raise UDPCentralAdvertiseError("Received unknown response from server '"+rawresponse+"'")
+
+    # For a set of values, 'a','b','c',  I should see the response: 
+    # ('OK', ['a','b','c'])    Anything else is WRONG!!!
+  
+    if not type(responsetuple) is tuple:
+      raise UDPCentralAdvertiseError("Received data is not a tuple '"+str(responsetuple)+"'")
+
+
+    if len(responsetuple) != 3:
+      raise UDPCentralAdvertiseError("Response tuple did not have exactly three elements '"+str(responsetuple)+"'")
+
+    if responsetuple[2] != unique_request_id:
+      # This can happen if multiple lookups are performed in quick 
+      # succession, see #1294. Workaround: sleep() a bit between requests.
+      raise UDPCentralAdvertiseError("udpcentralized_lookup sent request id " + str(unique_request_id) + ", received different request id. Full response: '" + str(response) + "'")
+
+    if responsetuple[0] != 'OK':
+      raise UDPCentralAdvertiseError("Central server returns error '"+str(responsetuple[:-1])+"'")
+
+
+  
+    if not type(responsetuple[1]) is list:
+      raise UDPCentralAdvertiseError("Received item is not a list '"+responsetuple+"'")
+
+    for responseitem in responsetuple[1]:
+      if not type(responseitem) is str:
+        raise UDPCentralAdvertiseError("Received item '"+str(responseitem)+"' is not a string in '"+responsetuple+"'")
+
+    # okay, we *finally* seem to have what we expect...
+
+    return responsetuple[1]
+
+  else:
+    # We are done with the for loop. There was no reply from the server.
+    raise UDPCentralAdvertiseError("udpcentralizedadvertise_lookup for " +
+      str(key) + " (" + str(maxvals) + " maxvals) generated no response " + 
+      "from server " + udpservername + ". Giving up.")
+

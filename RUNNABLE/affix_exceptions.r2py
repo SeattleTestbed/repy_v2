@@ -1,0 +1,56 @@
+"""
+<Purpose>
+  This file contains all the exceptions that can be raised
+  by affixs or affix related libraries/modules.
+"""
+
+
+
+class AffixError (Exception):
+  """
+  The base affix exception. All other exceptions
+  are derived from here.
+  """
+  pass
+ 
+
+class AffixStackError (AffixError):
+  """
+  This error will usually be raised if we are unable
+  to manipulate the affix stack. For example if we
+  are trying to do a pop() or peek() on an empty stack.
+  """
+  pass
+
+
+class AffixConfigError (AffixError):
+  """
+  This error means that the global context does
+  not match the expected context for a affix.
+  """ 
+  pass
+
+
+class AffixArgumentError (AffixError):
+  """
+  This indicates that an argument was provided
+  that does not match the expected argument for 
+  a function.
+  """
+  pass
+
+
+class AffixNotFoundError (AffixError):
+  """
+  This error would be raised if a affix name
+  is provided that is not found.
+  """ 
+  pass
+
+
+class AffixInternalError (AffixError):
+  """
+  This error is raised if an error occurs while 
+  configuring the affixs.
+  """ 
+  pass

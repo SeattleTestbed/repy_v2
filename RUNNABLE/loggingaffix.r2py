@@ -1,0 +1,162 @@
+"""
+loggingaffix.r2py
+
+An Affix component that logs every function call. Simple as that!
+
+Okay, to tell the truth, it won't be *that* simple. We need to 
+take into account what happens when .copy() is called on a stack 
+or partial stack, and come up with a way so that the user can track 
+instances of ourself across these.
+
+But let's not worry about this upfront.
+
+To customize logging, you may supply a log prefix as the (only) 
+parameter to LoggingAffix on instantiation:
+
+  (LoggingAffix,MyDesiredLoggingPrefix)
+"""
+
+baseaffix = dy_import_module("baseaffix.r2py")
+affix_wrapper_lib = dy_import_module("affix_wrapper_lib.r2py")
+
+
+
+
+class LoggingAffix(baseaffix.BaseAffix):
+
+  def __init__(self, next_affix, optional_args=None):
+    # Check that optional_args is a list, or not given. (We index it 
+    # below, so if it were a string, we'd index single chars then).
+    assert isinstance(optional_args, list) or optional_args is None, "optional_args must be a list. Did you mean to call me with optional_args=[" + str(optional_args) + "] instead?"
+
+    self.affix_context = {'optional_args' : optional_args,
+        'next_affix' : next_affix}
+
+    # Check and initialize the logging prefix we will use, or use a default.
+    try:
+      assert isinstance(optional_args[0], str), "The log prefix in optional_args[0] must be provided as a string!"
+      self.affix_context['log prefix'] = optional_args[0]
+    except (TypeError, IndexError):
+      self.affix_context["log prefix"] = "LoggingAffix"
+
+
+  def copy(self):
+    reference_to_copy_of_next_affix = self.affix_context['next_affix'].copy()
+    # To reproduce myself, create a new object that is configured 
+    # like I was at instantiation
+    reproduced_self = LoggingAffix(reference_to_copy_of_next_affix, 
+      self.affix_context['optional_args'])
+    # If you store additional state information besides affix_context, 
+    # remember to give it to my reproduced self too!
+    return reproduced_self
+
+
+  def log_call(self, *args):
+    """Function to log calls to Affix methods.
+
+    Use this in place of Repy's `log` so that it's easy to add 
+    prefixes, timestamps, etc. to the LoggingAffix's output.
+    """
+
+    log(*((self.affix_context["log prefix"] + ":",) + args + ("\n",)))
+
+
+
+  def sendmessage(self, destip, destport, message, localip, localport):
+    self.log_call("sendmessage", "destip", destip, "destport", destport, 
+        ('message """' + message + '"""'), "localip", localip, 
+        "localport", localport)
+    return self.peek().sendmessage(destip, destport, message, localip, localport)
+
+
+
+  def listenformessage(self, localip, localport):
+    self.log_call("listenformessage", localip, localport)
+    next_layer_socket = self.peek().listenformessage(localip, localport)
+    return affix_wrapper_lib.AffixUDPServerSocket(next_layer_socket, self)
+
+
+
+  def openconnection(self, destip, destport, localip, localport, timeout):
+    self.log_call("openconnection", "destip", destip, "destport", destport, 
+        "localip", localip, "localport", localport, "timeout", timeout)
+    # We make a copy of ourselves before we do anything as we may have multiple
+    # openconnection calls that return multiple real sockets.
+    #this_affix_copy = self.copy()
+    next_sockobj = self.peek().openconnection(destip, destport, localip, localport, timeout)
+    
+    return affix_wrapper_lib.AffixSocket(next_sockobj, self)
+
+
+
+  def listenforconnection(self, localip, localport):
+    self.log_call("listenforconnection", "localip", localip, "localport", localport)
+    # TODO: Not sure if we have to make a copy of self before retrieving
+    # the next layer.
+    next_layer_socket = self.peek().listenforconnection(localip, localport)
+    return affix_wrapper_lib.AffixTCPServerSocket(next_layer_socket, self)
+
+
+
+  def socket_close(self, socket):
+    self.log_call("socket.close")
+    return self.peek().socket_close(socket)
+
+
+
+  def socket_send(self, socket, msg):
+    self.log_call("socket.send", ('msg """' + msg + '"""'))
+    return self.peek().socket_send(socket, msg)
+
+
+
+  def socket_recv(self, socket, bytes):
+    self.log_call("socket.recv", "bytes", bytes)
+    return self.peek().socket_recv(socket, bytes)
+
+
+
+  def tcpserversocket_getconnection(self, tcpserversocket):
+    # XXX This can generate an excessive amount of log messages!
+    self.log_call("socket.getconnection")
+    # We make a copy of ourselves before doing a getconnection
+    # as this function may be invoked multiple times and each
+    # individual socket may each modify the affix stack 
+    # below it differently. 
+    this_affix_copy = self.copy()
+    (remote_ip, remote_port, repy_socket) = this_affix_copy.peek().tcpserversocket_getconnection(tcpserversocket)
+
+    return (remote_ip, remote_port, affix_wrapper_lib.AffixSocket(repy_socket, self))
+
+
+
+  def tcpserversocket_close(self, tcpserversocket):
+    self.log_call("socket.close")
+    return self.peek().tcpserversocket_close(tcpserversocket)
+
+
+
+  def udpserversocket_getmessage(self, udpserversocket):
+    # XXX This can generate an excessive amount of log messages!
+    self.log_call("socket.getmessage")
+    return self.copy().peek().udpserversocket_getmessage(udpserversocket)
+
+
+
+  def udpserversocket_close(self, udpserversocket):
+    self.log_call("socket.close")
+    return self.peek().udpserversocket_close(udpserversocket)
+
+
+  def getmyip(self):
+    self.log_call("getmyip")
+    return self.peek().getmyip()
+
+
+  def gethostbyname(self, name):
+    self.log_call("gethostbyname", "name", name)
+    return self.peek().gethostbyname(name)
+
+
+  def __str__(self):
+    return '(%s)' % repr(self).replace(' instance at', '') + str(self.peek())

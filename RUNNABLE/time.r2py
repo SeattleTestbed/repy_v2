@@ -1,0 +1,52 @@
+"""
+<Program Name>
+  time.r2py
+
+<Author>
+  Eric Kimbrel
+
+<Started>
+  Jul 2, 2009
+
+<Purpose>
+ replaces the previous time.r2py by use of the active interface 
+ time_interface.r2py and the implementors ntp_time.r2py and tcp_time.r2py
+
+ see time_interface.r2py for details
+
+"""
+
+
+ntp_time = dy_import_module('ntp_time.r2py')
+tcp_time = dy_import_module('tcp_time.r2py')
+time_interface = dy_import_module("time_interface.r2py")
+
+
+####################################################
+# Time public methods:
+# ---------------------
+# The functionalities defined here are implemented
+# in the time_interface.r2py file, as they are used
+# by both the ntp_time and tcp_time. We provide a 
+# similar function here, as programmers will be 
+# using the time.r2py library rather than the 
+# time_interface.r2py library.
+####################################################
+ 
+def time_updatetime(localport):
+  return time_interface.time_updatetime(localport)
+
+
+def time_settime(currenttime):
+  return time_interface.time_settime(currenttime)
+
+
+def time_gettime():
+  return time_interface.time_gettime()
+
+
+def time_getunixtime():
+  return time_interface.time_getunixtime()
+
+
+TimeError = time_interface.TimeError

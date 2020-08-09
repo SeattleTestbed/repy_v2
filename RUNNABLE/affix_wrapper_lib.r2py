@@ -1,0 +1,171 @@
+"""
+affix_wrapper_lib.r2py
+
+Provide various socket / API wrapper classes to the Affix framework, 
+including a wrapper for the Repy Network API that makes it look like 
+(i.e. mostly obey the call semantics of) an Affix component.
+
+
+Why is wrapping useful?
+
+An Affix component will want to override the methods of socket objects 
+returned by getconnection, listenforconnection, openconnection, and/or 
+listenformessage in order to add its own functionality. The AffixSocket, 
+AffixTCPServerSocket, and AffixUDPServerSocket make it so that in your 
+Affix component, you define all of the desired functions on class level, 
+and they get linked to object methods as required.
+
+For example, instead of overriding listenforconnection *and* the TCP 
+server socket object it returns (variant 1), you list all of the methods 
+you want to override (variant 2) and let the wrappers, inherited from the 
+BaseAffix, do the mapping. 
+A possible downside of variant 1 is that it is more elaborate to write 
+(though at the same time it is more verbose as to what happens without 
+having to worry you understand the wrapper lib). 
+
+(AR: I would prefer the more explicit variant 1 by the way. It's not so 
+much more to write, but requires less to be known about the framework, 
+and has the required functionality all in one place. It would obsolete 
+most of this library, except for the RepyNetworkAPIWrapper).
+
+
+# Variant 1:
+class MyAffix(BaseAffix):
+  def listenforconnection(*args):
+    # Do the actual call to the lower layer to get the socket object
+    socketobject = self.peek().listenforconnection(args)
+
+    # Keep a reference to the socket's original method. This is 
+    # required for the closure in the desired method below to 
+    # work and not recurse infinitely.
+    socketobject_getconnection = socketobject.getconnection
+
+    # Define the desired method
+    def getconnection():
+      log("This is my implementation of getconnections.\n")
+      return socketobject_getconnection()
+
+    # Override the socket's method
+    socketobject.getconnection = getconnection
+
+    # Done!
+    return socketobject
+
+
+# Variant 2:
+class MyAffix(BaseAffix):
+  # I don't need to override listenforconnection in this case. 
+  # The default behavior, inherited from BaseAffix, does the 
+  # wrapping already!
+
+  def tcpserversocket_getconnection(self, tcpserversocket):
+    # This is automatically bound to the socket object at instantiation.
+    log("This is the other possible implementation of getconnection\n")
+    return tcpserversocket.getconnection()
+
+
+Variant 2 is what's currently implemented. I don't claim to have grasped 
+yet what ramifications the use of variant 1 would have on things like 
+copying Affix components.
+"""  
+
+
+DEBUG_MODE = False
+
+
+class AffixSocketWrapper:
+  """
+  Wrapper base class for the any socket-like object. Any call to this wrapped
+  object will be directed to the corresponding public method defined in the
+  affix. Not to be used directly.
+
+  """
+  def __init__(self, socket, affix_object):
+
+    # We are always wrapping around the original socket-like object provided by
+    # repy.
+    self._socket = socket
+
+    # We keep a reference to the caller affix so that we can invoke its internal
+    # methods.
+    self._affix_object = affix_object
+
+
+  def __str__(self):
+    return '(%s, affix: %s, socket: %s)' % (repr(self).replace(' instance at', ''), self._affix_object, self._socket)
+
+
+
+
+
+class AffixUDPServerSocket(AffixSocketWrapper):
+  """ Wraps around UDPServerSocket. """
+  def __init__(self, socket, affix_object):
+    """
+    Initialize the AffixUDPServerSocket withe the passed in arguments.
+    If the affix_object is already of type AffixUDPServerSocket, then
+    we must extract the real socket from it before wrapping it up.
+    """
+    if isinstance(socket, AffixUDPServerSocket):
+      real_socket = socket._socket
+    else:
+      real_socket = socket
+    AffixSocketWrapper.__init__(self, real_socket, affix_object) 
+
+  def getmessage(self):
+    return self._affix_object.udpserversocket_getmessage(self._socket)
+
+  def close(self):
+    return self._affix_object.udpserversocket_close(self._socket)
+
+
+
+
+
+class AffixTCPServerSocket(AffixSocketWrapper):
+  """ Wraps around TCPServerSocket. """
+  def __init__(self, socket, affix_object):
+    """
+    Initialize the AffixTCPServerSocket withe the passed in arguments.
+    If the affix_object is already of type AffixTCPServerSocket, then
+    we must extract the real socket from it before wrapping it up.
+    """
+    if isinstance(socket, AffixTCPServerSocket):
+      real_socket = socket._socket
+    else:
+      real_socket = socket
+    AffixSocketWrapper.__init__(self, real_socket, affix_object)
+
+  def getconnection(self):
+    return self._affix_object.tcpserversocket_getconnection(self._socket)
+
+  def close(self):
+    return self._affix_object.tcpserversocket_close(self._socket)
+
+
+
+
+
+class AffixSocket(AffixSocketWrapper):
+  """ Wraps around the repy socket object. """
+  def __init__(self, socket, affix_object):
+    """
+    Initialize the AffixSocket withe the passed in arguments.
+    If the affix_object is already of type AffixSocket, then
+    we must extract the real socket from it before wrapping it up.
+    """
+    if isinstance(socket, AffixSocket):
+      real_socket = socket._socket
+    else:
+      real_socket = socket
+    AffixSocketWrapper.__init__(self, real_socket, affix_object)
+
+  def close(self):
+    return self._affix_object.socket_close(self._socket)
+
+  def recv(self, bytes):
+    return self._affix_object.socket_recv(self._socket, bytes)
+
+  def send(self, message):
+    return self._affix_object.socket_send(self._socket, message)
+
