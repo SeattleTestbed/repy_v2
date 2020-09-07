@@ -213,7 +213,7 @@ def getruntime():
     runtimelock.release()
     
     # Time.clock returns elapsedtime since the first call to it, so this works for us
-    return time.clock()
+    return time.pref_counter()
      
   # Who knows...  
   else:
@@ -956,7 +956,7 @@ calculate_granularity()
 
 # For Windows, we need to initialize time.clock()
 if ostype in ["Windows"]:
-  time.clock()
+  time.perf_counter()
 
 # Initialize getruntime for other platforms 
 else:

@@ -228,7 +228,7 @@ _NODE_CLASS_OK = [
     'Expr', 'Call', 'Load', 'Index', 'Str', 'Store', 'Attribute', "Num", "FunctionDef",
     "arguments", "arg", "Try", "NameConstant", "ExceptHandler", "BinOp", "Eq", "BoolOp",
     "In", "Is", "IsNot", "UnaryOp", "iter", "Iter", "ClassDef", "sorted", "Delete",
-    "Del", "NotIn", "Starred", "USub", "Gt", "GtE", "NotEq", "Lt", "LtE", "Mult",
+    "Del", "NotIn", "Starred", "USub", "Gt", "GtE", "NotEq", "Lt", "LtE", "Mult", "Constant",
 
     # Debugging
     "Import", "iter", "input",
