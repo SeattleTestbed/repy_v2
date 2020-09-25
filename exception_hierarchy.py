@@ -19,6 +19,7 @@ _EXPORTED_EXCEPTIONS = ["RepyException",
                         "TimeoutError",
                         "FileError",
                         "FileNotFoundError",
+                        "FileInUseError",
                        ]
 
 
