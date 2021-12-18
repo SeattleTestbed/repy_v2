@@ -1,0 +1,31 @@
+name: Run tests
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latex, osx]
+        python-version: [2.7, 2.6, 2.5]
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python --version;
+          cd ./scripts;
+          python initialize.py;
+          python build.py -t;
+
+      - name: Test with utf.py
+        run: |
+          cd ../RUNNABLE;
+          python utf.py -a;
