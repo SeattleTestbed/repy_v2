@@ -63,7 +63,7 @@ matrix:
     #   docs.travis-ci.com/user/multi-os/#Python-example-%28unsupported-languages%29
     # OS X Python current version (currently 2.7.11)
     - language: generic
-      os: osx
+      os: osx 
       env: Python='2.7' PythonBin="python"
       install:
           brew update;
