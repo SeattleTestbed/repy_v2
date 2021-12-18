@@ -20,12 +20,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python --version;
-          cd ./scripts/;
-          python initialize.py;
-          python build.py -t;
+          python --version
+          cd ./scripts/
+          python initialize.py
+          python build.py -t
 
       - name: Test with utf.py
         run: |
-          cd ./RUNNABLE/;
-          python utf.py -a;
+          cd ./RUNNABLE/
+          python utf.py -a
