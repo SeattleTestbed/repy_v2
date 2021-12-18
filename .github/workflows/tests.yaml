@@ -27,7 +27,5 @@ jobs:
 
       - name: Test with utf.py
         run: |
-          pwd
-          ls
-          cd ../RUNNABLE;
+          cd ./RUNNABLE/;
           python utf.py -a;
