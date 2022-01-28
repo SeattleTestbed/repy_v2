@@ -26,7 +26,7 @@ import tracebackrepy    # for os.urandom so exception can be logged internally
 import nonportable      # for getruntime
 import harshexit        # for harshexit()
 import threading        # for Lock()
-import thread           # to catch thread.error
+import _thread as thread           # to catch thread.error
 from exception_hierarchy import *
 
 ##### Public Functions
@@ -63,7 +63,7 @@ def randombytes():
   # unique from all other exit calls in repy.
   try:
     randomdata = os.urandom(1024)
-  except NotImplementedError, e:
+  except NotImplementedError as e:
     tracebackrepy.handle_internalerror("os.urandom is not implemented " + \
         "(Exception was: %s)" % e.message, 217)
 
@@ -198,8 +198,7 @@ def log(*args):
     Nothing
   """
   for arg in args:
-    print arg,
-
+    print(arg)
 
 ##### Class Declarations
 

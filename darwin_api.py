@@ -151,7 +151,7 @@ def _get_proc_info_by_pid(pid):
   
   if status == 0:
     # This means to data was written, this is an error
-    raise Exception,"Errno:"+str(get_ctypes_errno())+", Error: "+get_ctypes_error_str()
+    raise Exception("Errno:"+str(get_ctypes_errno())+", Error: "+get_ctypes_error_str())
 
 
 def get_process_cpu_time(pid):

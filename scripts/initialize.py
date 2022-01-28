@@ -74,7 +74,7 @@ for line in config_file.readlines():
     continue
 
   # If we end up here, the line contains a Git URL (+options?) for us to clone
-  print "Checking out repo from", line.split()[0], "..."
+  print("Checking out repo from" +  line.split()[0] + "...")
   git_process = subprocess.Popen("git clone " + line, cwd = os.getcwd(), shell = True, 
      stdout = subprocess.PIPE, stderr = subprocess.PIPE )
   (stdout_data, stderr_data) = git_process.communicate()
@@ -83,33 +83,33 @@ for line in config_file.readlines():
   # to see if it performed correctly, and halt the program (giving debug 
   # output) if not.
   if git_process.returncode == 0:
-    print "Done!"
+    print("Done!")
   else:
-    print "*** Error checking out repo. Git returned status code", git_process.returncode
-    print "*** Git messages on stdout: '" + stdout_data + "'."
-    print "*** Git messages on stderr: '" + stderr_data + "'."
-    print
+    print("*** Error checking out repo. Git returned status code" + str( git_process.returncode))
+    print("*** Git messages on stdout: '" + stdout_data + "'.")
+    print("*** Git messages on stderr: '" + stderr_data + "'.")
+    print()
     if not ignore_git_errors:
-      print """Since the skip-mode is off, these errors need to be fixed before the build process can proceed. In 
+      print("""Since the skip-mode is off, these errors need to be fixed before the build process can proceed. In 
 doubt, please contact the Seattle development team at 
 
    seattle-devel@googlegroups.com
 
 and supply all of the above information. Thank you!
 
-"""
-      print
+""")
+      print()
       sys.exit(1)
     else:
-      print "Continuing with the cloning of directories as skip-mode is active"
-      print
+      print("Continuing with the cloning of directories as skip-mode is active")
+      print()
       continue
 
 # If there is a readme file, show it to the user. 
 try:
   readme_file = open('README.txt', 'r')
   for line in readme_file.readlines():
-    print line
+    print(line)
   readme_file.close()
 except IOError:
   # There is no readme file, or we can't access it.

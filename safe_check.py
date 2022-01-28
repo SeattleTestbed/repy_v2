@@ -8,17 +8,14 @@ Description:
   memory used by the safe.safe_check() will be reclaimed when this process quits.
 
 """
-
 import safe
 import sys
-import encoding_header
-
 
 
 if __name__ == "__main__":
   # Get the user "code"
   usercode = sys.stdin.read()
-  
+
   # Output buffer
   output = ""
   
@@ -26,16 +23,9 @@ if __name__ == "__main__":
   try:
     value = safe.safe_check(usercode)
     output += str(value)
-  except Exception, e:
-    # Adjust traceback line numbers, see SeattleTestbed/repy_v2#95.
-    try:
-      e.lineno = e.lineno - \
-          len(encoding_header.ENCODING_DECLARATION.splitlines())
-    except (TypeError, AttributeError):
-      # Ignore exceptions with line numbers that are non-numeric (i.e.
-      # `None`), or have no `lineno` attribute altogether.
-      pass
+  except Exception as e:
     output += str(type(e)) + " " + str(e)
+
   
   # Write out
   sys.stdout.write(output)

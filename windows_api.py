@@ -52,13 +52,13 @@ THREAD_SUSPEND_RESUME = 0x0002
 THREAD_HANDLE_RIGHTS = THREAD_SET_INFORMATION | THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION
 PROCESS_TERMINATE = 0x0001
 PROCESS_QUERY_INFORMATION = 0x0400
-SYNCHRONIZE = 0x00100000L
+SYNCHRONIZE = 0x00100000
 PROCESS_SET_INFORMATION = 0x0200
 PROCESS_SET_QUERY_AND_TERMINATE = PROCESS_SET_INFORMATION | PROCESS_TERMINATE | PROCESS_QUERY_INFORMATION | SYNCHRONIZE
 ERROR_ALREADY_EXISTS = 183
 WAIT_FAILED = 0xFFFFFFFF
-WAIT_OBJECT_0 = 0x00000000L
-WAIT_ABANDONED = 0x00000080L
+WAIT_OBJECT_0 = 0x00000000
+WAIT_ABANDONED = 0x00000080
 CE_FULL_PERMISSIONS = ctypes.c_ulong(0xFFFFFFFF)
 NORMAL_PRIORITY_CLASS = ctypes.c_ulong(0x00000020)
 HIGH_PRIORITY_CLASS = ctypes.c_ulong(0x00000080)
@@ -394,7 +394,7 @@ def get_thread_handle(thread_id):
   if handle: 
     return handle
   else: # Raise exception on failure
-    raise DeadThread, "Error opening thread handle! thread_id: " + str(thread_id) + " Error Str: " + str(ctypes.WinError())  
+    raise DeadThread("Error opening thread handle! thread_id: " + str(thread_id) + " Error Str: " + str(ctypes.WinError()))
 
 
 # Closes a thread handle
@@ -602,7 +602,7 @@ def timeout_process(pid, stime):
     else:
       return False
   except DeadThread: # Escalate DeadThread to DeadProcess, because that is the underlying cause
-    raise DeadProcess, "Failed to sleep or resume a thread!"
+    raise DeadProcess("Failed to sleep or resume a thread!")
 
 
 # Sets the current threads priority level
@@ -675,7 +675,7 @@ def get_process_handle(pid):
   if handle:
     return handle
   else: # Raise exception on failure
-    raise DeadProcess, "Error opening process handle! Process ID: " + str(pid) + " Error Str: " + str(ctypes.WinError())
+    raise DeadProcess("Error opening process handle! Process ID: " + str(pid) + " Error Str: " + str(ctypes.WinError()))
 
 
 # Launches a new process
@@ -839,7 +839,7 @@ def kill_process(pid):
   # Keep hackin' away at it
   while not dead:
     if (attempt > ATTEMPT_MAX):
-      raise DeadProcess, "Failed to kill process! Process ID: " + str(pid) + " Error Str: " + str(ctypes.WinError())
+      raise DeadProcess("Failed to kill process! Process ID: " + str(pid) + " Error Str: " + str(ctypes.WinError()))
   
     # Increment attempt count
     attempt = attempt + 1 
@@ -961,7 +961,7 @@ def get_current_thread_cpu_time():
   
   # Check the result, error if result is 0
   if res == 0:
-    raise Exception,(res, _get_last_error(), "Error getting thread CPU time! Error Str: " + str(ctypes.WinError()))
+    raise Exception((res, _get_last_error(), "Error getting thread CPU time! Error Str: " + str(ctypes.WinError())))
 
   # Return the time
   return time_sum
@@ -987,7 +987,7 @@ def wait_for_process(pid):
   # Pass in code as a pointer to store the output
   status = _wait_for_single_object(handle, INFINITE)
   if status != WAIT_OBJECT_0:
-    raise EnvironmentError, "Failed to wait for Process!"
+    raise EnvironmentError("Failed to wait for Process!")
   
   # Close the Process Handle
   _close_handle(handle)
@@ -1116,7 +1116,7 @@ def create_mutex(name):
     _mutex_lock_count[handle] = 0
     return handle
   else: # Raise exception on failure
-    raise FailedMutex, (_get_last_error(), "Error creating mutex! Mutex name: " + str(name) + " Error Str: " + str(ctypes.WinError()))
+    raise FailedMutex((_get_last_error(), "Error creating mutex! Mutex name: " + str(name) + " Error Str: " + str(ctypes.WinError())))
 
 
 
@@ -1185,8 +1185,8 @@ def release_mutex(handle):
   
       # 0 return value means failure
       if release == 0:
-        raise FailedMutex, (_get_last_error(), "Error releasing mutex! Mutex id: " + str(handle) + " Error Str: " + str(ctypes.WinError()))
-    except FailedMutex, e:
+        raise FailedMutex((_get_last_error(), "Error releasing mutex! Mutex id: " + str(handle) + " Error Str: " + str(ctypes.WinError())))
+    except FailedMutex as e:
       if (e[0] == 288): # 288 is for non-owned mutex, which is ok
         pass
       else:

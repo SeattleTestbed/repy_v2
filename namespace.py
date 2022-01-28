@@ -76,11 +76,6 @@
       functions that are wrapped and inserted into the user context when
       wrap_and_insert_api_functions() is called.
     
-    FILE_OBJECT_WRAPPER_INFO
-    LOCK_OBJECT_WRAPPER_INFO
-    TCP_SOCKET_OBJECT_WRAPPER_INFO
-    TCP_SERVER_SOCKET_OBJECT_WRAPPER_INFO
-    UDP_SERVER_SOCKET_OBJECT_WRAPPER_INFO
     VIRTUAL_NAMESPACE_OBJECT_WRAPPER_INFO
     
       The above four dictionaries define the methods available on the wrapped
@@ -108,19 +103,20 @@
 
 import types
 
-# To check if objects are thread.LockType objects.
-import thread
-
-import emulcomm
-import emulfile
-import emulmisc
-import emultimer
-import nonportable
 import safe # Used to get SafeDict
 import tracebackrepy
 import virtual_namespace
 
 from exception_hierarchy import *
+import emulfile
+import emulmisc
+import emultimer
+import nonportable
+
+# KEVIN: Need to add these?
+import emulcomm
+import _thread as thread
+
 
 # Save a copy of a few functions not available at runtime.
 _saved_getattr = getattr
@@ -128,84 +124,14 @@ _saved_callable = callable
 _saved_hash = hash
 _saved_id = id
 
-
-##############################################################################
-# Public functions of this module to be called from the outside.
-##############################################################################
-
-def wrap_and_insert_api_functions(usercontext):
-  """
-  This is the main public function in this module at the current time. It will
-  wrap each function in the usercontext dict in a wrapper with custom
-  restrictions for that specific function. These custom restrictions are
-  defined in the dictionary USERCONTEXT_WRAPPER_INFO.
-  """
-
-  _init_namespace()
-
-  for function_name in USERCONTEXT_WRAPPER_INFO:
-    function_info = USERCONTEXT_WRAPPER_INFO[function_name]
-    wrapperobj = NamespaceAPIFunctionWrapper(function_info)
-    usercontext[function_name] = wrapperobj.wrapped_function
-
-
-
-
-
-##############################################################################
-# Helper functions for the above public function.
-##############################################################################
-
-# Whether _init_namespace() has already been called.
-initialized = False
-
-def _init_namespace():
-  """
-  Performs one-time initialization of the namespace module.
-  """
-  global initialized
-  if not initialized:
-    initialized = True
-    _prepare_wrapped_functions_for_object_wrappers()
-
-
-
-
-
-# These dictionaries will ultimately contain keys whose names are allowed
-# methods that can be called on the objects and values which are the wrapped
-# versions of the functions which are exposed to users. If a dictionary
-# is empty, it means no methods can be called on a wrapped object of that type.
-file_object_wrapped_functions_dict = {}
-lock_object_wrapped_functions_dict = {}
-tcp_socket_object_wrapped_functions_dict = {}
-tcp_server_socket_object_wrapped_functions_dict = {}
-udp_server_socket_object_wrapped_functions_dict = {}
-virtual_namespace_object_wrapped_functions_dict = {}
-
-def _prepare_wrapped_functions_for_object_wrappers():
-  """
-  Wraps functions that will be used whenever a wrapped object is created.
-  After this has been called, the dictionaries such as
-  file_object_wrapped_functions_dict have been populated and therefore can be
-  used by functions such as wrap_socket_obj().
-  """
-  objects_tuples = [(FILE_OBJECT_WRAPPER_INFO, file_object_wrapped_functions_dict),
-                    (LOCK_OBJECT_WRAPPER_INFO, lock_object_wrapped_functions_dict),
-                    (TCP_SOCKET_OBJECT_WRAPPER_INFO, tcp_socket_object_wrapped_functions_dict),
-                    (TCP_SERVER_SOCKET_OBJECT_WRAPPER_INFO, tcp_server_socket_object_wrapped_functions_dict),
-                    (UDP_SERVER_SOCKET_OBJECT_WRAPPER_INFO, udp_server_socket_object_wrapped_functions_dict),
-                    (VIRTUAL_NAMESPACE_OBJECT_WRAPPER_INFO, virtual_namespace_object_wrapped_functions_dict)]
-
-  for description_dict, wrapped_func_dict in objects_tuples:
-    for function_name in description_dict:
-      function_info = description_dict[function_name]
-      wrapperobj = NamespaceAPIFunctionWrapper(function_info, is_method=True)
-      wrapped_func_dict[function_name] = wrapperobj.wrapped_function
-
-
-
-
+# These are the functions in the user's name space excluding the builtins we
+# allow. Each function is a key in the dictionary. Each value is a dictionary
+# that defines the functions to be used by the wrapper when a call is
+# performed. It is the same dictionary that is passed as a constructor to
+# the NamespaceAPIFunctionWrapper class to create the actual wrappers.
+# The public function wrap_and_insert_api_functions() uses this dictionary as
+# the basis for what is populated in the user context. Anything function
+# defined here will be wrapped and made available to untrusted user code.
 
 ##############################################################################
 # Helper functions.
@@ -215,6 +141,7 @@ def _handle_internalerror(message, exitcode):
   """
   Terminate the running program. This is used rather than
   tracebackrepy.handle_internalerror directly in order to make testing easier."""
+  #print("Message: " + message)
   tracebackrepy.handle_internalerror(message, exitcode)
 
 
@@ -233,10 +160,6 @@ def _is_in(obj, sequence):
     if obj is item:
       return True
   return False
-
-
-
-
 
 ##############################################################################
 # Constants that define which functions should be wrapped and how. These are
@@ -282,10 +205,6 @@ class ObjectProcessor(BaseProcessor):
   def unwrap(self, val):
     return val._wrapped__object
 
-
-
-
-
 class Str(ValueProcessor):
   """Allows str or unicode."""
 
@@ -296,7 +215,8 @@ class Str(ValueProcessor):
 
 
   def check(self, val):
-    if not _is_in(type(val), [str, unicode]):
+    if not _is_in(type(val), [str, bytes]):
+      #print("We here bro.")
       raise RepyArgumentError("Invalid type %s" % type(val))
 
     if self.maxlen is not None:
@@ -307,10 +227,6 @@ class Str(ValueProcessor):
       if len(val) < self.minlen:
         raise RepyArgumentError("Min string length is %s" % self.minlen)
 
-
-
-
-
 class Int(ValueProcessor):
   """Allows int or long."""
 
@@ -320,7 +236,7 @@ class Int(ValueProcessor):
 
 
   def check(self, val):
-    if not _is_in(type(val), [int, long]):
+    if not _is_in(type(val), [int]):
       raise RepyArgumentError("Invalid type %s" % type(val))
 
     if val < self.min:
@@ -332,24 +248,16 @@ class NoneOrInt(ValueProcessor):
   ints."""
 
   def check(self, val):
-    if val is not None and not _is_in(type(val), [int, long]):
+    if val is not None and not _is_in(type(val), [int]):
       raise RepyArgumentError("Invalid type %s" % type(val))
-
-
-
-
-
 
 class StrOrInt(ValueProcessor):
   """Allows a string or int. This doesn't enforce max/min/length limits on the
   strings and ints."""
 
   def check(self, val):
-    if not _is_in(type(val), [int, long, str, unicode]):
+    if not _is_in(type(val), [int, str]):
       raise RepyArgumentError("Invalid type %s" % type(val))
-
-
-
 
 class StrOrNone(ValueProcessor):
   """Allows str, unicode, or None."""
@@ -371,7 +279,7 @@ class Float(ValueProcessor):
 
 
   def check(self, val):
-    if not _is_in(type(val), [int, long, float]):
+    if not _is_in(type(val), [int, float]):
       raise RepyArgumentError("Invalid type %s" % type(val))
 
     if not self.allow_neg:
@@ -388,9 +296,6 @@ class Bool(ValueProcessor):
   def check(self, val):
     if type(val) is not bool:
       raise RepyArgumentError("Invalid type %s" % type(val))
-
-
-
 
 
 class ListOfStr(ValueProcessor):
@@ -425,9 +330,6 @@ class Dict(ValueProcessor):
   def check(self, val):
     if not type(val) is dict:
       raise RepyArgumentError("Invalid type %s" % type(val))
-
-
-
 
 
 class DictOfStrOrInt(ValueProcessor):
@@ -472,9 +374,6 @@ class NonCopiedVarArgs(ValueProcessor):
     return val
 
 
-
-
-
 class File(ObjectProcessor):
   """Allows File objects."""
 
@@ -503,58 +402,6 @@ class Lock(ObjectProcessor):
   def wrap(self, val):
     return NamespaceObjectWrapper("lock", val, lock_object_wrapped_functions_dict)
 
-
-
-
-
-class UDPServerSocket(ObjectProcessor):
-  """Allows UDPServerSocket objects."""
-
-  def check(self, val):
-    if not isinstance(val, emulcomm.UDPServerSocket):
-      raise RepyArgumentError("Invalid type %s" % type(val))
-
-
-
-  def wrap(self, val):
-    return NamespaceObjectWrapper("socket", val, udp_server_socket_object_wrapped_functions_dict)
-
-
-
-
-
-class TCPServerSocket(ObjectProcessor):
-  """Allows TCPServerSocket objects."""
-
-  def check(self, val):
-    if not isinstance(val, emulcomm.TCPServerSocket):
-      raise RepyArgumentError("Invalid type %s" % type(val))
-
-
-
-  def wrap(self, val):
-    return NamespaceObjectWrapper("socket", val, tcp_server_socket_object_wrapped_functions_dict)
-
-
-
-
-
-class TCPSocket(ObjectProcessor):
-  """Allows TCPSocket objects."""
-
-  def check(self, val):
-    if not isinstance(val, emulcomm.EmulatedSocket):
-      raise RepyArgumentError("Invalid type %s" % type(val))
-
-
-
-  def wrap(self, val):
-    return NamespaceObjectWrapper("socket", val, tcp_socket_object_wrapped_functions_dict)
-
-
-
-
-
 class VirtualNamespace(ObjectProcessor):
   """Allows VirtualNamespace objects."""
 
@@ -567,9 +414,6 @@ class VirtualNamespace(ObjectProcessor):
   def wrap(self, val):
     return NamespaceObjectWrapper("VirtualNamespace", val,
                                   virtual_namespace_object_wrapped_functions_dict)
-
-
-
 
 
 class SafeDict(ValueProcessor):
@@ -595,44 +439,7 @@ class DictOrSafeDict(ValueProcessor):
       SafeDict().check(val)
 
 
-
-
-
-# These are the functions in the user's name space excluding the builtins we
-# allow. Each function is a key in the dictionary. Each value is a dictionary
-# that defines the functions to be used by the wrapper when a call is
-# performed. It is the same dictionary that is passed as a constructor to
-# the NamespaceAPIFunctionWrapper class to create the actual wrappers.
-# The public function wrap_and_insert_api_functions() uses this dictionary as
-# the basis for what is populated in the user context. Anything function
-# defined here will be wrapped and made available to untrusted user code.
 USERCONTEXT_WRAPPER_INFO = {
-  'gethostbyname' :
-      {'func' : emulcomm.gethostbyname,
-       'args' : [Str()],
-       'return' : Str()},
-  'getmyip' :
-      {'func' : emulcomm.getmyip,
-       'args' : [],
-       'return' : Str()},
-  'sendmessage' :
-      {'func' : emulcomm.sendmessage,
-       'args' : [Str(), Int(), Str(), Str(), Int()],
-       'return' : Int()},
-  'listenformessage' :
-      {'func' : emulcomm.listenformessage,
-       'args' : [Str(), Int()],
-       'return' : UDPServerSocket()},
-  'openconnection' :
-      {'func' : emulcomm.openconnection,
-       'args' : [Str(), Int(), Str(), Int(), Float()],
-#      'raise' : [AddressBindingError, PortRestrictedError, PortInUseError,
-#                 ConnectionRefusedError, TimeoutError, RepyArgumentError],
-       'return' : TCPSocket()},
-  'listenforconnection' :
-      {'func' : emulcomm.listenforconnection,
-       'args' : [Str(), Int()],
-       'return' : TCPServerSocket()},
   'openfile' :
       {'func' : emulfile.emulated_open,
        'args' : [Str(maxlen=120), Bool()],
@@ -706,44 +513,8 @@ FILE_OBJECT_WRAPPER_INFO = {
        'return' : None},
 }
 
-TCP_SOCKET_OBJECT_WRAPPER_INFO = {
-  'close' :
-      {'func' : emulcomm.EmulatedSocket.close,
-       'args' : [],
-       'return' : Bool()},
-  'recv' :
-      {'func' : emulcomm.EmulatedSocket.recv,
-       'args' : [Int(min=1)],
-       'return' : Str()},
-  'send' :
-      {'func' : emulcomm.EmulatedSocket.send,
-       'args' : [Str()],
-       'return' : Int(min=0)},
-}
-
 # TODO: Figure out which real object should be wrapped. It doesn't appear
 # to be implemented yet as there is no "getconnection" in the repy_v2 source.
-TCP_SERVER_SOCKET_OBJECT_WRAPPER_INFO = {
-  'close' :
-      {'func' : emulcomm.TCPServerSocket.close,
-       'args' : [],
-       'return' : Bool()},
-  'getconnection' :
-      {'func' : emulcomm.TCPServerSocket.getconnection,
-       'args' : [],
-       'return' : (Str(), Int(), TCPSocket())},
-}
-
-UDP_SERVER_SOCKET_OBJECT_WRAPPER_INFO = {
-  'close' :
-      {'func' : emulcomm.UDPServerSocket.close,
-       'args' : [],
-       'return' : Bool()},
-  'getmessage' :
-      {'func' : emulcomm.UDPServerSocket.getmessage,
-       'args' : [],
-       'return' : (Str(), Int(), Str())},
-}
 
 LOCK_OBJECT_WRAPPER_INFO = {
   'acquire' :
@@ -769,6 +540,76 @@ VIRTUAL_NAMESPACE_OBJECT_WRAPPER_INFO = {
        'args' : [DictOrSafeDict()],
        'return' : SafeDict()},
 }
+
+##############################################################################
+# Public functions of this module to be called from the outside.
+##############################################################################
+
+def wrap_and_insert_api_functions(usercontext):
+    """
+    This is the main public function in this module at the current time. It will
+    wrap each function in the usercontext dict in a wrapper with custom
+    restrictions for that specific function. These custom restrictions are
+    defined in the dictionary USERCONTEXT_WRAPPER_INFO.
+    """
+  
+    _init_namespace()
+  
+    for function_name in USERCONTEXT_WRAPPER_INFO:
+       function_info = USERCONTEXT_WRAPPER_INFO[function_name]
+       wrapperobj = NamespaceAPIFunctionWrapper(function_info)
+       usercontext[function_name] = wrapperobj.wrapped_function
+
+
+
+
+
+##############################################################################
+# Helper functions for the above public function.
+##############################################################################
+
+# Whether _init_namespace() has already been called.
+initialized = False
+
+def _init_namespace():
+    """
+    Performs one-time initialization of the namespace module.
+    """
+    global initialized
+    if not initialized:
+        initialized = True
+        _prepare_wrapped_functions_for_object_wrappers()
+
+
+
+
+
+# These dictionaries will ultimately contain keys whose names are allowed
+# methods that can be called on the objects and values which are the wrapped
+# versions of the functions which are exposed to users. If a dictionary
+# is empty, it means no methods can be called on a wrapped object of that type.
+file_object_wrapped_functions_dict = {}
+virtual_namespace_object_wrapped_functions_dict = {}
+lock_object_wrapped_functions_dict = {}
+
+def _prepare_wrapped_functions_for_object_wrappers():
+    """
+    Wraps functions that will be used whenever a wrapped object is created.
+    After this has been called, the dictionaries such as
+    file_object_wrapped_functions_dict have been populated and therefore can be
+    used by functions such as wrap_socket_obj().
+    """
+    #objects_tuples = [
+    # (VIRTUAL_NAMESPACE_OBJECT_WRAPPER_INFO, virtual_namespace_object_wrapped_functions_dict)]
+    objects_tuples = [(FILE_OBJECT_WRAPPER_INFO, file_object_wrapped_functions_dict),
+                    (LOCK_OBJECT_WRAPPER_INFO, lock_object_wrapped_functions_dict),
+                    (VIRTUAL_NAMESPACE_OBJECT_WRAPPER_INFO, virtual_namespace_object_wrapped_functions_dict)]
+  
+    for description_dict, wrapped_func_dict in objects_tuples:
+        for function_name in description_dict:
+            function_info = description_dict[function_name]
+            wrapperobj = NamespaceAPIFunctionWrapper(function_info, is_method=True)
+            wrapped_func_dict[function_name] = wrapperobj.wrapped_function
 
 
 ##############################################################################
@@ -811,9 +652,12 @@ def _copy(obj, objectmap=None):
 
     # types.InstanceType is included because the user can provide an instance
     # of a class of their own in the list of callback args to settimer.
-    if _is_in(type(obj), [str, unicode, int, long, float, complex, bool, frozenset,
-                          types.NoneType, types.FunctionType, types.LambdaType,
-                          types.MethodType, types.InstanceType]):
+    # KEVIN: Had to replace this with object for python3. Not sure if this works.
+    if _is_in(type(obj), [str, int, float, complex, bool, frozenset,
+                          type(None), types.FunctionType, types.LambdaType,
+                          types.MethodType, object,#]):
+                          bytes, safe.SafeDict]): # KEVIN: had to add bytes?
+                          #types.MethodType, types.InstanceType]):
       return obj
 
     elif type(obj) is list:
@@ -892,12 +736,8 @@ def _copy(obj, objectmap=None):
     else:
       raise TypeError("_copy is not implemented for objects of type " + str(type(obj)))
 
-  except Exception, e:
+  except Exception as e:
     raise NamespaceInternalError("_copy failed on " + str(obj) + " with message " + str(e))
-
-
-
-
 
 class NamespaceInternalError(Exception):
   """Something went wrong and we should terminate."""
@@ -910,7 +750,7 @@ class NamespaceObjectWrapper(object):
   """
   Instances of this class are used to wrap handles and objects returned by
   api functions to the user code.
-  
+
   The methods that can be called on these instances are mostly limited to
   what is in the allowed_functions_dict passed to the constructor. The
   exception is that a simple __repr__() is defined as well as an __iter__()
@@ -943,8 +783,6 @@ class NamespaceObjectWrapper(object):
     self._wrapped__object = wrapped_object
     self._wrapped__allowed_functions_dict = allowed_functions_dict
 
-
-
   def __getattr__(self, name):
     """
     When a method is called on an instance, we look for the method in the
@@ -963,7 +801,7 @@ class NamespaceObjectWrapper(object):
     else:
       # This is the standard way of handling "it doesn't exist as far as we
       # are concerned" in __getattr__() methods.
-      raise AttributeError, name
+      raise AttributeError(name)
 
 
 
@@ -975,8 +813,6 @@ class NamespaceObjectWrapper(object):
     object is an instance of. See the docstring for next() for more info.
     """
     return self
-
-
 
   def next(self):
     """
@@ -1021,9 +857,6 @@ class NamespaceObjectWrapper(object):
     """
     return _saved_hash(self) != _saved_hash(other)
 
-
-
-
 class NamespaceAPIFunctionWrapper(object):
   """
   Instances of this class exist solely to provide function wrapping. This is
@@ -1060,6 +893,7 @@ class NamespaceAPIFunctionWrapper(object):
     self.__args = func_dict["args"]
     self.__return = func_dict["return"]
     self.__is_method = is_method
+    #print(str(self.__func) + " " + str(self.__return))
 
     # Make sure that the __target_func really is a function or a string
     # indicating a function by that name on the underlying object should
@@ -1102,8 +936,6 @@ class NamespaceAPIFunctionWrapper(object):
 
     return args_to_return
 
-
-
   def _process_retval_helper(self, processor, retval):
     try:
       if isinstance(processor, ValueProcessor):
@@ -1120,7 +952,7 @@ class NamespaceAPIFunctionWrapper(object):
         raise InternalRepyError("Unknown retval expectation.")
       return tempretval
 
-    except RepyArgumentError, err:
+    except RepyArgumentError as err:
       raise InternalRepyError("Invalid retval type: %s" % err)
 
 
@@ -1140,15 +972,13 @@ class NamespaceAPIFunctionWrapper(object):
       else:
         tempretval = self._process_retval_helper(self.__return, retval)
 
-    except Exception, e:
+    except Exception as e:
       raise InternalRepyError(
           "Function '" + self.__func_name + "' returned with unallowed return type " +
           str(type(retval)) + " : " + str(e))
 
 
     return tempretval
-
-
 
   def wrapped_function(self, *args, **kwargs):
     """
@@ -1170,6 +1000,7 @@ class NamespaceAPIFunctionWrapper(object):
     <Returns>
       Anything that the underlying function may return.
     """
+    #print("In wrapped functions")
     try:
       # We don't allow keyword args.
       if kwargs:
@@ -1177,18 +1008,22 @@ class NamespaceAPIFunctionWrapper(object):
                                 self.__func_name)
 
       if self.__is_method:
+        #print("Is a method")
         # This is a method of an object instance rather than a standalone function.
         # The "self" argument will be passed implicitly by python in some cases, so
         # we remove it from the args we check. For the others, we'll add it back in
         # after the check.
         args_to_check = args[1:]
       else:
+        #print("Not a method")
         args_to_check = args
 
       if len(args_to_check) != len(self.__args):
+        #print("Length mixmatch")
         if not self.__args or not isinstance(self.__args[-1:][0], NonCopiedVarArgs):
-          raise RepyArgumentError("Function '" + self.__func_name + 
-              "' takes " + str(len(self.__args)) + " arguments, not " + 
+          #print("IsInstance")
+          raise RepyArgumentError("Function '" + self.__func_name +
+              "' takes " + str(len(self.__args)) + " arguments, not " +
               str(len(args_to_check)) + " as you provided.")
 
       args_copy = self._process_args(args_to_check)
@@ -1200,24 +1035,31 @@ class NamespaceAPIFunctionWrapper(object):
       # object. We use this if the function to wrap isn't available without
       # having the object around, such as with real lock objects.
       if type(self.__func) is str:
+        #print("Type of function is str")
         func_to_call = _saved_getattr(args[0], self.__func)
         args_to_use = args_copy
       else:
+        #print("Type of function not str")
         func_to_call = self.__func
         if self.__is_method:
+          #print("self.__is_method is True")
           # Sanity check the object we're adding back in as the "self" argument.
           if not isinstance(args[0], (NamespaceObjectWrapper, emulfile.emulated_file,
                                       emulcomm.EmulatedSocket, emulcomm.TCPServerSocket,
                                       emulcomm.UDPServerSocket, thread.LockType,
                                       virtual_namespace.VirtualNamespace)):
+            #print("Not an instance, raise error")
             raise NamespaceInternalError("Wrong type for 'self' argument.")
           # If it's a method but the function was not provided as a string, we
           # actually do have to add the first argument back in. Yes, this whole
           # area of code is ugly.
           args_to_use = [args[0]] + args_copy
         else:
+          #print("self.__is_method is False")
           args_to_use = args_copy
-      
+
+      #print("Here at " + str(func_to_call))
+
       retval = func_to_call(*args_to_use)
 
       return self._process_retval(retval)
@@ -1226,6 +1068,7 @@ class NamespaceAPIFunctionWrapper(object):
       # TODO: this should be changed to RepyError along with all references to
       # RepyException in the rest of the repy code.
       # We allow any RepyError to continue up to the client code.
+      #print("Got RepyException")
       raise
 
     except:
@@ -1236,10 +1079,12 @@ class NamespaceAPIFunctionWrapper(object):
       # crash the sandbox despite being wrapped in `try`/`except`,
       # see SeattleTestbed/repy_v2#132.)
       if type(args[0]) == virtual_namespace.VirtualNamespace:
+        #print("Got a VirtrualNamespace arg error thing")
         raise
 
       # Non-`RepyException`s outside of `VirtualNamespace` methods
       # are unexpected and indicative of a programming error on
       # our side, so we terminate.
+      #print("Calling _handle_internalerror")
       _handle_internalerror("Unexpected exception from within Repy API", 843)
 

@@ -14,6 +14,7 @@ import ctypes.util  # Helps to find the C library
 import portable_popen
 
 # Seattlelib text-processing library (not a Python stdlib):
+# KEVIN: Replace.
 import textops
 
 # Get the standard library
@@ -174,3 +175,4 @@ def get_available_interfaces():
   
   # Done, return the interfaces
   return interfaces_list
+

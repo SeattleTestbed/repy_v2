@@ -26,7 +26,7 @@ import os
 
 # To allow access to a real fileobject 
 # call type...
-myfile = file
+#file = file
 
 statusfilenameprefix = None
 
@@ -62,14 +62,14 @@ def write_status(status, mystatusfilenameprefix=None):
   timestamp = time.time()
 
   # write the file
-  myfile(mystatusfilenameprefix+"-"+status+"-"+str(timestamp),"w").close()
+  file(mystatusfilenameprefix+"-"+status+"-"+str(timestamp),"w").close()
 
   # remove the old files...
   for filename in existingfiles:
     if len(filename.split('-')) == 3 and filename.split('-')[0] == os.path.basename(mystatusfilenameprefix):
       try:
         os.remove(mystatusdir+filename)
-      except OSError, e:
+      except OSError as e:
         if e[0] == 2:
           # file not found, let's assume another instance removed it...
           continue
@@ -106,6 +106,7 @@ def read_status(mystatusfilenameprefix=None):
         lateststatus = thisstatus
 
   return (lateststatus, latesttime)
+
 
 
 

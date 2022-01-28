@@ -277,12 +277,12 @@ def write_resourcedict_to_file(resourcedict, filename, call_list=None):
   for resource in resourcedict:
     if type(resourcedict[resource]) == set:
       for item in resourcedict[resource]:
-        print >> outfo, "resource "+resource+" "+str(item)
+        print("resource "+resource+" "+str(item), file=outfo)
     else:
-      print >> outfo, "resource "+resource+" "+str(resourcedict[resource])
+      print("resource "+resource+" "+str(resourcedict[resource]), file=outfo)
 
   if call_list:
-    print >> outfo, '\n' + str(call_list)
+    print('\n' + str(call_list), file=outfo)
   outfo.close()
 
 

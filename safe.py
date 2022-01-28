@@ -82,31 +82,32 @@ import os           # This is for some path manipulation
 import sys          # This is to get sys.executable to launch the external process
 import time         # This is to sleep
 
-# Currently required to filter out Android-specific debug messages,
-# see SeattleTestbed/attic#1080 and safe_check() below.
 try:
-  import android
-  IS_ANDROID = True
+  import compiler     # Required for the code safety check
 except ImportError:
-  IS_ANDROID = False
+  import ast as compiler
 
-# Hide the DeprecationWarning for compiler
-import warnings
-warnings.simplefilter('ignore')
-import compiler     # Required for the code safety check
-warnings.resetwarnings()
 
-import UserDict     # This is to get DictMixin
+#import UserDict
+#class MyMixin(UserDict.DictMixin):
+#    pass
+#except ImportError:
+from collections import MutableMapping as DictMixin
+from collections import UserDict
+#  class MyMixin(UserDict, DictMixin):
+#    pass
 import platform     # This is for detecting Nokia tablets
 import threading    # This is to get a lock
-import harshexit    # This is to kill the external process on timeout
 import subprocess   # This is to start the external process
-import __builtin__
-import nonportable  # This is to get the current runtime
-import repy_constants # This is to get our start-up directory
-import exception_hierarchy # For exception classes
-import encoding_header # Subtract len(ENCODING_HEADER) from error line numbers.
+try:
+  import __builtin__ as builtins
+except ImportError:
+  import builtins
 
+import six
+
+import harshexit # This is to kill the external process on timeout
+import exception_hierarchy # For exception classes
 
 # Fix to make repy compatible with Python 2.7.2 on Ubuntu 11.10,
 # see SeattleTestbed/repy_v2#24.
@@ -189,7 +190,7 @@ def _is_string_safe(token):
   """
 
   # If it's not a string, return True
-  if type(token) is not str and type(token) is not unicode:
+  if type(token) is not str and type(token) is not str:
     return True
   
   # If the string is explicitly allowed, return True
@@ -219,48 +220,56 @@ _NODE_CLASS_OK = [
     'LeftShift', 'List', 'ListComp', 'ListCompFor', 'ListCompIf', 'Mod',
     'Module', 'Mul', 'Name', 'Node', 'Not', 'Or', 'Pass', 'Power',
     'Return', 'RightShift', 'Slice', 'Sliceobj',
-    'Stmt', 'Sub', 'Subscript', 'Tuple', 'UnaryAdd', 'UnarySub', 'While',
+    'Stmt', 'Sub', 'Subscript', 'Tuple', 'UnaryAdd', 'UnarySub', 'While', 
     # New additions
     'TryExcept', 'TryFinally', 'Raise', 'ExcepthandlerType', 'Invert',
-    ]
 
-_NODE_ATTR_OK = ['value']
+    # Python 3 additions
+    'Expr', 'Call', 'Load', 'Index', 'Str', 'Store', 'Attribute', "Num", "FunctionDef",
+    "arguments", "arg", "Try", "NameConstant", "ExceptHandler", "BinOp", "Eq", "BoolOp",
+    "In", "Is", "IsNot", "UnaryOp", "iter", "Iter", "ClassDef", "sorted", "Delete",
+    "Del", "NotIn", "Starred", "USub", "Gt", "GtE", "NotEq", "Lt", "LtE", "Mult", "Constant",
+
+    # Debugging
+    "Import", "iter", "input",
+]
+
+if os.environ.get("REPY_ALLOW_UNSAFE_PRINT"):
+# XXX: print statements in python 3 are not any of these nodes, so be careufl
+    _NODE_CLASS_OK.extend(['Printnl', 'Print'])
+
+
+_NODE_ATTR_OK = ['value', "__func"]
 
 
 def _check_node(node):
   """
   <Purpose>
-    Examines a node, its attributes, and all of its children (recursively) for
-    safety. A node is safe if it is in _NODE_CLASS_OK and an attribute is safe
-    if it is not a unicode string and either in _NODE_ATTR_OK or is safe as is 
-    defined by _is_string_safe()
+  Examines a node, its attributes, and all of its children (recursively) for
+  safety. A node is safe if it is in _NODE_CLASS_OK and an attribute is safe
+  if it is not a unicode string and either in _NODE_ATTR_OK or is safe as is 
+  defined by _is_string_safe()
   
   <Arguments>
-    node: A node in an AST
-    
+  node: A node in an AST
+  
   <Exceptions>
-    CheckNodeException if an unsafe node is used
-    CheckStrException if an attribute has an unsafe string 
+  CheckNodeException if an unsafe node is used
+  CheckStrException if an attribute has an unsafe string 
   
   <Return>
-    None
+  None
   """
-  # Subtract length of encoding header from traceback line numbers,
-  # see SeattleTestbed/repy_v2#95.
-  HEADERSIZE = len(encoding_header.ENCODING_DECLARATION.splitlines())
-
-  # Proceed with the node check.
-
   if node.__class__.__name__ not in _NODE_CLASS_OK:
     raise exception_hierarchy.CheckNodeException("Unsafe call '" +
-        str(node.__class__.__name__) + "' in line " + str(node.lineno - HEADERSIZE))
-  
-  for attribute, value in node.__dict__.iteritems():
-    # Don't allow the construction of unicode literals
-    if type(value) == unicode:
-      raise exception_hierarchy.CheckStrException("Unsafe string '" +
-          str(value) + "' in line " + str(node.lineno - HEADERSIZE) +
-          ", node attribute '" + str(attribute) + "'")
+        str(node.__class__.__name__) + "' in line " + str(node.lineno))
+
+  for attribute, value in node.__dict__.items():
+  # Don't allow the construction of unicode literals
+  # if type(value) == unicode:
+  #   raise exception_hierarchy.CheckStrException("Unsafe string '" +
+  #       str(value) + "' in line " + str(node.lineno) +
+  #       ", node attribute '" + str(attribute) + "'")
 
     if attribute in _NODE_ATTR_OK: 
       continue
@@ -274,30 +283,34 @@ def _check_node(node):
     # Check the safety of any strings
     if not _is_string_safe(value):
       raise exception_hierarchy.CheckStrException("Unsafe string '" +
-          str(value) + "' in line " + str(node.lineno - HEADERSIZE) +
-          ", node attribute '" + str(attribute) + "'")
+        str(value) + "' in line " + str(node.lineno) +
+        ", node attribute '" + str(attribute) + "'")
 
-  for child in node.getChildNodes():
-    _check_node(child)
+  if 'getChildNodes' in dir(node):
+    for child in node.getChildNodes():
+      _check_node(child)
+  else:
+    for child in compiler.iter_child_nodes(node):
+      _check_node(child)
 
 
 
 def safe_check(code):
   """
   <Purpose>
-    Takes the code as input, and parses it into an AST.
-    It then calls _check_node, which does a recursive safety check for every
-    node.
+  Takes the code as input, and parses it into an AST.
+  It then calls _check_node, which does a recursive safety check for every
+  node.
   
   <Arguments>
-    code: A string representation of python code
-    
+  code: A string representation of python code
+  
   <Exceptions>
-    CheckNodeException if an unsafe node is used
-    CheckStrException if an attribute has an unsafe string 
+  CheckNodeException if an unsafe node is used
+  CheckStrException if an attribute has an unsafe string 
   
   <Return>
-    None
+  None
   """
   parsed_ast = compiler.parse(code)
   _check_node(parsed_ast)
@@ -310,105 +323,55 @@ def safe_check(code):
 def safe_check_subprocess(code):
   """
   <Purpose>
-    Runs safe_check() in a subprocess. This is done because the AST
-    safe_check() uses a large amount of RAM. By running safe_check() in a
-    subprocess we can guarantee that the memory will be reclaimed when the
-    process ends.
+  Runs safe_check() in a subprocess. This is done because the AST
+  safe_check() uses a large amount of RAM. By running safe_check() in a
+  subprocess we can guarantee that the memory will be reclaimed when the
+  process ends.
   
   <Arguments>
-    code: See safe_check.
-    
+  code: See safe_check.
+  
   <Exceptions>
-    As with safe_check.
+  As with safe_check.
   
   <Return>
-    See safe_check.
+  See safe_check.
   """
-  
+
   # Get the path to safe_check.py by using the original start directory of python
-  path_to_safe_check = os.path.join(repy_constants.REPY_START_DIR, "safe_check.py")
-  
+  path_to_safe_check = os.path.join(os.path.dirname(__file__), "safe_check.py")
+
   # Start a safety check process, reading from the user code and outputing to a pipe we can read
-  proc = subprocess.Popen([sys.executable, path_to_safe_check],
-                          stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-  
-  # Write out the user code, close so the other end gets an EOF
-  proc.stdin.write(code)
-  proc.stdin.close()
-  
+  try:
+#print("Let's start")
+    proc = subprocess.Popen([sys.executable, path_to_safe_check],
+                      stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                      universal_newlines=True)
+
+    # Write out the user code, close so the other end gets an EOF
+    #(rawoutput, _) = proc.communicate(bytes(code, 'utf-8'))
+    #print("Command finished")
+    (output, _) = proc.communicate(code)
+    #print("Got code.")
+  except Exception as e:
+    raise
+
+
   # Wait for the process to terminate
-  starttime = nonportable.getruntime()
-
-  # Only wait up to EVALUTATION_TIMEOUT seconds before terminating
-  while nonportable.getruntime() - starttime < EVALUTATION_TIMEOUT:
-    # Did the process finish running?
-    if proc.poll() != None:
-      break;
-    time.sleep(0.02)
-  else:
-    # Kill the timed-out process
-    try:
-      harshexit.portablekill(proc.pid)
-    except:
-      pass
-    raise Exception, "Evaluation of code safety exceeded timeout threshold \
-                    ("+str(nonportable.getruntime() - starttime)+" seconds)"
-  
-  # Read the output and close the pipe
-  rawoutput = proc.stdout.read()
-  proc.stdout.close()
-
-
-  # Interim fix for SeattleTestbed/attic#1080:
-  # Get rid of stray debugging output on Android of the form
-  # `dlopen libpython2.6.so` and `dlopen /system/lib/libc.so`,
-  # yet preserve all of the other output (including empty lines).
-
-  if IS_ANDROID:
-    output = ""
-    for line in rawoutput.split("\n"):
-      # Preserve empty lines
-      if line == "":
-        output += "\n"
-        continue
-      # Suppress debug messages we know can turn up
-      wordlist = line.split()
-      if wordlist[0]=="dlopen":
-        if wordlist[-1]=="/system/lib/libc.so":
-          continue
-        if wordlist[-1].startswith("libpython") and \
-          wordlist[-1].endswith(".so"):
-          # We expect "libpython" + version number + ".so".
-          # The version number should be a string convertible to float.
-          # If it's not, raise an exception.
-          try:
-            versionstring = (wordlist[-1].replace("libpython", 
-              "")).replace(".so", "")
-            junk = float(versionstring)
-          except TypeError, ValueError:
-            raise Exception("Unexpected debug output '" + line + 
-              "' while evaluating code safety!")
-      else:
-        output += line + "\n"
-
-    # Strip off the last newline character we added
-    output = output[0:-1]
-
-  else: # We are *not* running on Android, proceed with unfiltered output
-    output = rawoutput
-
+  starttime = 0 
+  #output = rawoutput.decode("utf-8")
 
   # Check the output, None is success, else it is a failure
   if output == "None":
     return True
-  
+
   # If there is no output, this is a fatal error condition
   elif output == "":
-    raise Exception, "Fatal error while evaluating code safety!"
-    
+    raise Exception("Fatal error while evaluating code safety!")
+
   else:
     # Raise the error from the output
-    raise exception_hierarchy.SafeException, output
+    raise exception_hierarchy.SafeException(output)
 
 # Get a lock for serial_safe_check
 SAFE_CHECK_LOCK = threading.Lock()
@@ -417,18 +380,18 @@ SAFE_CHECK_LOCK = threading.Lock()
 def serial_safe_check(code):
   """
   <Purpose>
-    Serializes calls to safe_check_subprocess(). This is because safe_check_subprocess()
-    creates a new process which may take many seconds to return. This prevents us from
-    creating many new python processes.
+  Serializes calls to safe_check_subprocess(). This is because safe_check_subprocess()
+  creates a new process which may take many seconds to return. This prevents us from
+  creating many new python processes.
   
   <Arguments>
-    code: See safe_check.
-    
+  code: See safe_check.
+  
   <Exceptions>
-    As with safe_check.
+  As with safe_check.
   
   <Return>
-    See safe_check.
+  See safe_check.
   """
 
   SAFE_CHECK_LOCK.acquire()
@@ -456,14 +419,14 @@ def safe_type(*args, **kwargs):
     raise exception_hierarchy.RunBuiltinException(
       'type() may only take exactly one non-keyword argument.')
 
-  # Fix for SeattleTestbed/repy_v1#128, block access to Python's `type`.
+# Fix for SeattleTestbed/repy_v1#128, block access to Python's `type`.
 #  if _type(args[0]) is _type or _type(args[0]) is _compile_type:
 #    raise exception_hierarchy.RunBuiltinException(
 #      'unsafe type() call.')
-  # JAC: The above would be reasonable, but it is harsh.   The wrapper code for
-  # the encasement library needs to have a way to check the type of things and
-  # these might be inadvertantly be types.   It is hard to know if something
-  # is a type
+# JAC: The above would be reasonable, but it is harsh.   The wrapper code for
+# the encasement library needs to have a way to check the type of things and
+# these might be inadvertantly be types.   It is hard to know if something
+# is a type
   if args[0] == safe_type or args[0] == _type or _type(args[0]) is _type:
     return safe_type
 
@@ -475,14 +438,14 @@ def safe_type(*args, **kwargs):
 
 # This dict maps built-in functions to their replacement functions
 _BUILTIN_REPLACE = {
-  'type': safe_type
+'type': safe_type
 }
 
 # The list of built-in exceptions can be generated by running the following:
 # r = [v for v in dir(__builtin__) if v[0] != '_' and v[0] == v[0].upper()] ; r.sort() ; print r
 _BUILTIN_OK = [
   '__debug__',
-    
+  
   'ArithmeticError', 'AssertionError', 'AttributeError', 'DeprecationWarning',
   'EOFError', 'Ellipsis', 'EnvironmentError', 'Exception', 'False',
   'FloatingPointError', 'FutureWarning', 'IOError', 'ImportError',
@@ -494,16 +457,25 @@ _BUILTIN_OK = [
   'SystemExit', 'TabError', 'True', 'TypeError', 'UnboundLocalError',
   'UnicodeDecodeError', 'UnicodeEncodeError', 'UnicodeError',
   'UnicodeTranslateError', 'UserWarning', 'ValueError', 'Warning', 'ZeroDivisionError',
-    
+  
   'abs', 'bool', 'cmp', 'complex', 'dict', 'divmod', 'filter', 'float', 
   'frozenset', 'hex', 'id', 'int', 'len', 'list', 'long', 'map', 'max', 'min',
   'object', 'oct', 'pow', 'range', 'reduce', 'repr', 'round', 'set', 'slice',
-  'str', 'sum', 'tuple',  'xrange', 'zip','id',
-    
+  'str', 'sum', 'tuple', 'zip','id',
+  
   #Added for repyv2
   'isinstance', 'BaseException', 'WindowsError', 'type', 'issubclass',
-  'ord', 'chr'
-  ]
+  'ord', 'chr', 
+  
+  # added for py3 support
+  'print', 'exec', 'Attribute', 'split',
+  
+  # debugging goodies :) 
+  '__import__', 'hasattr', 'getattr', 'any',  '__build_class__', "Import",
+  
+  # Kevin:
+  'iter', 'bytes', 'open', "sorted", "bytearray", "memoryview", "super", "USub",
+]
 
     
 _BUILTIN_STR = ['copyright','credits','license','__name__','__doc__',]
@@ -512,8 +484,8 @@ _BUILTIN_STR = ['copyright','credits','license','__name__','__doc__',]
 def _replace_unsafe_builtin(unsafe_call):
   # This function will replace any unsafe built-in function
   def exceptionraiser(*vargs,**kargs):
-    raise exception_hierarchy.RunBuiltinException("Unsafe call '" + 
-        str(unsafe_call) + "' with args '" + str(vargs) + "', kwargs '" + 
+    raise exception_hierarchy.RunBuiltinException("Unsafe call '{}'".format(unsafe_call) 
+        + "' with args '" + str(vargs) + "', kwargs '" + 
         str(kargs) + "'")
   return exceptionraiser
 
@@ -537,17 +509,17 @@ def _builtin_init():
   
   # Create a backup of the built-in functions
   #TODO: Perhaps pull this out of the function -  Is there a reason to do this more then once?
-  _builtin_globals_backup = __builtin__.__dict__.copy()
+  _builtin_globals_backup = builtins.__dict__.copy()
   _builtin_globals = {}
 
-  for builtin in __builtin__.__dict__.iterkeys():
+  for builtin in builtins.__dict__.keys():
     # It's important to check _BUILTIN_REPLACE before _BUILTIN_OK because
     # even if the name is defined in both, there must be a security reason
     # why it was supposed to be replaced, and not just allowed.
     if builtin in _BUILTIN_REPLACE:
       replacewith = _BUILTIN_REPLACE[builtin]
     elif builtin in _BUILTIN_OK: 
-     replacewith = __builtin__.__dict__[builtin]
+     replacewith = builtins.__dict__[builtin]
     elif builtin in _BUILTIN_STR:
       replacewith = ''
     else:
@@ -567,13 +539,13 @@ def _builtin_init():
 # Replace every function in __builtin__ with the one from _builtin_globals.
 def _builtin_destroy():
   _builtin_init()
-  for builtin_name, builtin in _builtin_globals.iteritems():
-    __builtin__.__dict__[builtin_name] = builtin
+  for builtin_name, builtin in _builtin_globals.items():
+    builtins.__dict__[builtin_name] = builtin
 
 # Restore every function in __builtin__ with the backup from _builtin_globals_backup.
 def _builtin_restore():
-  for builtin_name, builtin in _builtin_globals_backup.iteritems():
-    __builtin__.__dict__[builtin_name] = builtin
+  for builtin_name, builtin in _builtin_globals_backup.items():
+    builtins.__dict__[builtin_name] = builtin
 
 # Have the builtins already been destroyed?
 BUILTINS_DESTROYED = False
@@ -596,9 +568,8 @@ def safe_run(code,context=None):
   <Return>
     None
   """
-  
   global BUILTINS_DESTROYED
-  
+ 
   if context == None:
     context = {}
   
@@ -606,13 +577,12 @@ def safe_run(code,context=None):
   if not BUILTINS_DESTROYED:
     BUILTINS_DESTROYED = True
     _builtin_destroy()
-    
+   
   try:
     context['__builtins__'] = _builtin_globals
-    exec code in context
+    exec(code, context)
   finally:
-    #_builtin_restore()
-    pass
+    _builtin_restore()
 
 
 # Convenience functions
@@ -636,22 +606,22 @@ def safe_exec(code, context = None):
   <Return>
     None
   """
-
   serial_safe_check(code)
   safe_run(code, context)
-
 
 
 # This portion of the code defines a SafeDict
 # A SafeDict prevents keys which are 'unsafe' strings from being added.
 
 
-# Functional constructor for SafeDict to allow us to safely map it into the repy context.
+# Functional constructor for SafeDict to allow us to safely map it into the
+# repy context.
 def get_SafeDict(*args,**kwargs):
   return SafeDict(*args,**kwargs)
 
 
-class SafeDict(UserDict.DictMixin):
+class SafeDict(DictMixin):
+#class SafeDict(MyMixin):
   """
   <Purpose>
     A dictionary implementation which prohibits "unsafe" keys from being set or
@@ -675,14 +645,14 @@ class SafeDict(UserDict.DictMixin):
       return
 
     # If we are given a dict, try to copy its keys
-    for key,value in from_dict.iteritems():
+    for key,value in from_dict.items():
       # Skip __builtins__ and __doc__ since safe_run/python inserts that
       if key in ["__builtins__","__doc__"]:
         continue
 
       # Check the key type
-      if type(key) is not str and type(key) is not unicode:
-        raise TypeError, "'SafeDict' keys must be of string type!"
+      if type(key) is not str and type(key) is not str:
+        raise TypeError("'SafeDict' keys must be of string type!")
 
       # Check if the key is safe
       if _is_string_safe(key):
@@ -690,41 +660,41 @@ class SafeDict(UserDict.DictMixin):
 
       # Throw an exception if the key is unsafe
       else:
-        raise ValueError, "Unsafe key: '"+key+"'"
+        raise ValueError("Unsafe key: '"+key+"'")
 
   # Allow getting items
   def __getitem__(self,key):
-    if type(key) is not str and type(key) is not unicode:
-      raise TypeError, "'SafeDict' keys must be of string type!"
+    if type(key) is not str and type(key) is not str:
+      raise TypeError("'SafeDict' keys must be of string type!")
     if not _is_string_safe(key):
-      raise ValueError, "Unsafe key: '"+key+"'"
+      raise ValueError("Unsafe key: '"+key+"'")
 
     return self.__under__.__getitem__(key)
 
   # Allow setting items
   def __setitem__(self,key,value):
-    if type(key) is not str and type(key) is not unicode:
-      raise TypeError, "'SafeDict' keys must be of string type!"
+    if type(key) is not str and type(key) is not str:
+      raise TypeError("'SafeDict' keys must be of string type!")
     if not _is_string_safe(key):
-      raise ValueError, "Unsafe key: '"+key+"'"
+      raise ValueError("Unsafe key: '"+key+"'")
 
     return self.__under__.__setitem__(key,value)
 
   # Allow deleting items
   def __delitem__(self,key):
-    if type(key) is not str and type(key) is not unicode:
-      raise TypeError, "'SafeDict' keys must be of string type!"
+    if type(key) is not str and type(key) is not str:
+      raise TypeError("'SafeDict' keys must be of string type!")
     if not _is_string_safe(key):
-      raise ValueError, "Unsafe key: '"+key+"'"
+      raise ValueError("Unsafe key: '"+key+"'")
 
     return self.__under__.__delitem__(key)
 
   # Allow checking if a key is set
   def __contains__(self,key):
-    if type(key) is not str and type(key) is not unicode:
-      raise TypeError, "'SafeDict' keys must be of string type!"
+    if type(key) is not str and type(key) is not str:
+      raise TypeError("'SafeDict' keys must be of string type!")
     if not _is_string_safe(key):
-      raise ValueError, "Unsafe key: '"+key+"'"
+      raise ValueError("Unsafe key: '"+key+"'")
 
     return key in self.__under__
 
@@ -734,7 +704,7 @@ class SafeDict(UserDict.DictMixin):
     # Filter out the unsafe keys from the underlying dict
     safe_keys = []
 
-    for key in self.__under__.iterkeys():
+    for key in self.__under__.keys():
       if _is_string_safe(key):
         safe_keys.append(key)
 
@@ -747,13 +717,21 @@ class SafeDict(UserDict.DictMixin):
   # It seems unlikely this is adequate for more complex cases (like safedicts
   # that refer to each other)
   def __repr__(self):
+    #return "ayylmao"
     newdict = {}
-    for safekey in self.keys():
+    for safekey in list(self.keys()):
       if self.__under__[safekey] == self:
         newdict[safekey] = newdict
       else:
         newdict[safekey] = self.__under__[safekey]
     return newdict.__repr__()
+
+  def __len__(self):
+    return len(self.__under__)
+
+  def __iter__(self):
+    for i in self.__under__:
+      yield i
 
 
   # Allow a copy of us
@@ -766,7 +744,7 @@ class SafeDict(UserDict.DictMixin):
     # https://github.com/SeattleTestbed/repy_v2/issues/97
     # Caveat: dict.copy is expected to return a shallow copy, this fix
     # introduces a partial deep copy for the contained self reference
-    for key, value in self.__under__.iteritems():
+    for key, value in self.__under__.items():
       if value is self:
         copy_inst[key] = copy_inst
 
@@ -782,8 +760,10 @@ class SafeDict(UserDict.DictMixin):
     if name == "__under__" and name not in self.__dict__:
       self.__dict__[name] = value
       return
-    raise TypeError,"'SafeDict' attributes are read-only!"
+    raise TypeError("'SafeDict' attributes are read-only! ({}, {})".format(name, value))
 
   def __delattr__(self,name):
-    raise TypeError,"'SafeDict' attributes are read-only!"
-
+    raise TypeError("'SafeDict' attributes are read-only!")
+  
+  def __copy(self):
+    return self.copy()

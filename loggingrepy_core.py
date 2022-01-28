@@ -15,7 +15,7 @@ import os
 import threading
 
 # I need to rename file so that the checker doesn't complain...
-myfile = file
+#file = file
 
 
 # used to make stdout flush as written   This is private to my code
@@ -61,7 +61,7 @@ class flush_logger_core:
 
 # helper function
 def get_size(fn):
-  fo = myfile(fn,"r")
+  fo = file(fn,"r")
   data = fo.read()
   fo.close()
   return len(data)
@@ -111,7 +111,7 @@ class circular_logger_core:
         # the old file exists too (the common case)   
 
         self.currentsize = get_size(self.newfn)
-        self.activefo = myfile(self.newfn,"a")
+        self.activefo = file(self.newfn,"a")
         self.first = False
         # now we have the fileobject and the size set up.   We're ready...
         return
@@ -121,7 +121,7 @@ class circular_logger_core:
         # copied over
         os.rename(self.newfn, self.oldfn)
         self.currentsize = 0
-        self.activefo = myfile(self.newfn,"w")
+        self.activefo = file(self.newfn,"w")
         self.first = False
         return
 
@@ -131,7 +131,7 @@ class circular_logger_core:
         # the old file name exists, so we should start from here
 
         self.currentsize = get_size(self.oldfn)
-        self.activefo = myfile(self.oldfn,"a")
+        self.activefo = file(self.oldfn,"a")
         self.first = True
         # now we have the fileobject and the size set up.   We're ready...
         return
@@ -139,7 +139,7 @@ class circular_logger_core:
       else:
         # starting from nothing...
         self.currentsize = 0
-        self.activefo = myfile(self.oldfn,"w")
+        self.activefo = file(self.oldfn,"w")
         self.first = True
         return
 
@@ -193,12 +193,12 @@ class circular_logger_core:
       os.remove(self.oldfn)
       os.rename(self.newfn, self.oldfn)
  
-    self.activefo = myfile(self.newfn,"w")
+    self.activefo = file(self.newfn,"w")
     
 
   def write_first_log(self):
     self.activefo.close()
-    self.activefo = myfile(self.newfn,"w")
+    self.activefo = file(self.newfn,"w")
     
 
 
@@ -260,14 +260,14 @@ class circular_logger_core:
       os.remove(self.oldfn)
       os.remove(self.newfn)
 
-    oldfo = myfile(self.oldfn,"w")
+    oldfo = file(self.oldfn,"w")
 
     # write the data counting backwards from the end of the file
     oldfo.write(data[-(lastchunk+self.maxbuffersize):-lastchunk])
     oldfo.close()
 
     # next...
-    self.activefo = myfile(self.newfn,"w")
+    self.activefo = file(self.newfn,"w")
 
     # now write the last bit of data...
     self.activefo.write(str(data[-lastchunk:]))

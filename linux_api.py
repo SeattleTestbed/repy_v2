@@ -136,7 +136,7 @@ def _get_proc_info_by_pid(pid):
   
   # Check the state, raise an exception if the process is a zombie
   if "Z" in last_stat_data[FIELDS["state"]]:
-    raise Exception, "Queried Process is a zombie (dead)!"
+    raise Exception("Queried Process is a zombie (dead)!")
   
   
 def get_process_cpu_time(pid):
@@ -262,7 +262,7 @@ def get_system_uptime():
     
     return uptime
   else:
-    raise Exception, "Could not find /proc/uptime!"
+    raise Exception("Could not find /proc/uptime!")
   
 def get_uptime_granularity():
   """
@@ -295,7 +295,7 @@ def get_uptime_granularity():
     # Convert granularity to a number
     return pow(10, 0-granularity)
   else:
-    raise Exception, "Could not find /proc/uptime!"  
+    raise Exception("Could not find /proc/uptime!")
 
 
 def get_system_thread_count():
@@ -357,3 +357,4 @@ def get_interface_ip_addresses(interfaceName):
 
   # Done, return the interfaces
   return ipaddressList
+

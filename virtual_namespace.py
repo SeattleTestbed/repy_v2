@@ -11,8 +11,7 @@
   specified global context.
 """
 
-import encoding_header # Subtract len(ENCODING_HEADER) from error line numbers.
-import safe # Used for safety checking
+import safe as safe
 from exception_hierarchy import *
 
 # This is to work around safe...
@@ -54,27 +53,22 @@ class VirtualNamespace(object):
     """
     # Check for the code
     # Do a type check
+    if type(code) == bytes:
+      code = code.decode()
     if type(code) is not str:
-      raise RepyArgumentError, "Code must be a string!"
+      raise RepyArgumentError("Code must be a string!")
 
     if type(name) is not str:
-      raise RepyArgumentError, "Name must be a string!"
+      raise RepyArgumentError("Name must be a string!" + str(type(name)))
 
     # Remove any windows carriage returns
     code = code.replace('\r\n','\n')
 
-    # Prepend an encoding string to protect against bugs in that code,
-    # see SeattleTestbed/repy_v1#120.
-    # This causes tracebacks to have an inaccurate line number, so we adjust
-    # them in multiple modules. See SeattleTestbed/repy_v2#95.
-    code = encoding_header.ENCODING_DECLARATION + code 
-
-
     # Do a safety check
     try:
       safe.serial_safe_check(code)
-    except Exception, e:
-      raise CodeUnsafeError, "Code failed safety check! Error: "+str(e)
+    except Exception as e:
+      raise CodeUnsafeError("Code failed safety check! Error: "+str(e))
 
     # All good, store the compiled byte code
     self.code = safe_compile(code,name,"exec")
@@ -107,12 +101,12 @@ class VirtualNamespace(object):
     if type(context) is dict:
       try:
         context = safe.SafeDict(context)
-      except Exception, e:
-        raise ContextUnsafeError, "Provided context is not safe! Exception: "+str(e)
+      except Exception as e:
+        raise ContextUnsafeError("Provided context is not safe! Exception: "+str(e))
 
     # Type check
     if not isinstance(context, safe.SafeDict):
-      raise RepyArgumentError, "Provided context is not a safe dictionary!"
+      raise RepyArgumentError("Provided context is not a safe dictionary!")
 
     # Call safe_run with the underlying dictionary
     safe.safe_run(self.code, context.__under__)

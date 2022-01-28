@@ -62,7 +62,7 @@ def init(stopfile=None, statusfile=None, freq=1):
 
   # Check for the stopfile
   if stopfile != None and os.path.exists(stopfile):
-    raise Exception, "Stop file already exists! File:"+stopfile
+    raise Exception("Stop file already exists! File:"+stopfile)
 
   # Assign the values
   stopfilename = stopfile
@@ -191,15 +191,15 @@ class nm_interface_thread(threading.Thread):
             # ThreadErr cannot be specified externally, since it has side-affects
             # such as changing global thread restrictions
             if exitcode == 56:
-              raise Exception, "ThreadErr exit code specified. Exit code not allowed."
+              raise Exception("ThreadErr exit code specified. Exit code not allowed.")
             
             # Print the message, then call harshexit with the exitcode
             if mesg != "": 
-              print mesg
+              print(mesg)
             _stopfile_exit(exitcode, self.repy_process_id)
             
           else:
-            raise Exception, "Stopfile has no content."
+            raise Exception("Stopfile has no content.")
             
         except:
           # On any issue, just do "Stopped" (44)
@@ -207,6 +207,7 @@ class nm_interface_thread(threading.Thread):
 
       # Sleep until the next loop around.
       time.sleep(frequency)
+
 
 
 
